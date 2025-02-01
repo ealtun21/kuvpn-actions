@@ -58,7 +58,7 @@ fi
 if [ -f "$HOME/.kuvpn/bin/kuvpn" ]; then
     printf "${COLOR_WARN}A KUVPN binary already exists at $HOME/.kuvpn/bin/kuvpn${COLOR_RESET}\n"
     printf "Do you want to overwrite it? [y/N] "
-    read -r OVERWRITE
+    read -r OVERWRITE < /dev/tty
     if [ "$OVERWRITE" != "y" ] && [ "$OVERWRITE" != "Y" ]; then
         printf "${COLOR_WARN}Installation aborted.${COLOR_RESET}\n"
         exit 1
