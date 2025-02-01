@@ -26,10 +26,10 @@
         # Define the default package (to fix nix run)
         packages.default = pkgs.rustPlatform.buildRustPackage {
           pname = "kuvpn";
-          version = "0.6.4";
+          version = "0.6.5";
 
           src = ./.;
-          
+
           cargoLock = {
             lockFile = ./Cargo.lock;
           };

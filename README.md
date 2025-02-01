@@ -1,4 +1,4 @@
-# KUVPN v0.6.4
+# KUVPN v0.6.5
 
 KUVPN is a simple Rust cli to retrieve the DSID cookie and execute the OpenConnect command to connect to the VPN for Koç University.
 
@@ -15,7 +15,7 @@ KUVPN is a simple Rust cli to retrieve the DSID cookie and execute the OpenConne
 # Prerequisites
 - Mandatory: OpenConnect
    - On ubuntu: `sudo apt install openconnect`
-   - Optional: when used with `--dsid` / `-d` flag. 
+   - Optional: when used with `--dsid` / `-d` flag.
 - Optional (AutoInstall: when not found): Chromium/Chrome
 
 # Binary Install (Recommended)
@@ -29,7 +29,7 @@ __Note: Always inspect scripts before running commands from the internet!__
 # Binary Install (Manual)
 
 1. Download the latest binary from the [GitHub releases page](https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/releases).
-   
+
 
 2. Move the binary to a directory in your `$PATH`, for example:
 
@@ -63,7 +63,7 @@ cargo install --git https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn
 
 # Usage
 
-You may simply run: 
+You may simply run:
 ```
 kuvpn
 ```
@@ -87,12 +87,12 @@ Usage: kuvpn [OPTIONS]
 Options:
   -u, --url <URL>
           The URL to the page where we will start logging in and looking for DSID
-          
+
           [default: https://vpn.ku.edu.tr]
 
   -l, --level <LEVEL>
           The level of logging
-          
+
           [default: error]
 
           Possible values:
@@ -111,11 +111,16 @@ Options:
 
   -a, --agent <AGENT>
           User agent for browser
-          
+
           [default: Mozilla/5.0]
 
   -r, --run-command <RUN_COMMAND>
           Command to run openconnect with (e.g., doas, sudo, pkexec, or a custom script)
+
+      --openconnect-path <OPENCONNECT_PATH>
+          Path or command name for openconnect. Defaults to 'openconnect'. Can be a relative or absolute path
+
+          [default: openconnect]
 
   -h, --help
           Print help (see a summary with '-h')
