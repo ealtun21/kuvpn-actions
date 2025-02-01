@@ -1,15 +1,15 @@
 [package]
 name = "kuvpn"
-version = "0.6.4"
+version = "0.6.5"
 edition = "2021"
 
 [dependencies]
-clap = { version = "4.5.11", features = ["derive"] }
-colored = "2.1.0"
-env_logger = "0.11.5"
-headless_chrome = { version = "1.0.14", features = ["fetch", "rustls"] }
-log = "0.4.22"
-which = "6.0.3"
+clap = { version = "4.5.27", features = ["derive"] }
+colored = "3.0.0"
+env_logger = "0.11.6"
+headless_chrome = { version = "1.0.15", features = ["fetch", "rustls"] }
+log = "0.4.25"
+which = "7.0.1"
 
 [profile.release]
 strip = true

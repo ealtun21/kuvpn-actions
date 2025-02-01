@@ -43,4 +43,9 @@ pub struct Args {
     /// Command to run openconnect with (e.g., doas, sudo, pkexec, or a custom script)
     #[arg(short, long)]
     pub run_command: Option<String>,
+
+    /// Path or command name for openconnect. Defaults to 'openconnect'.
+    /// Can be a relative or absolute path.
+    #[arg(long, default_value = "openconnect")]
+    pub openconnect_path: String,
 }
