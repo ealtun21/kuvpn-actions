@@ -125,6 +125,8 @@ fn main() -> ExitCode {
         }
     };
 
+    drop(browser);
+
     if args.dsid {
         // User only wants the DSID printed out
         info!("DSID retrieved: {}", dsid);
