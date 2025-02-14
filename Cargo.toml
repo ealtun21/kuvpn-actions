@@ -2,6 +2,9 @@
 name = "kuvpn"
 version = "0.6.6"
 edition = "2021"
+description = "A convenient tool for connecting to Koç University's VPN using OpenConnect."
+repository = "https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn"
+license = "MIT"
 
 [dependencies]
 clap = { version = "4.5.27", features = ["derive"] }
