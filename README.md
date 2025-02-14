@@ -87,7 +87,7 @@ curl --proto '=https' --tlsv1.2 -sSfL https://raw.githubusercontent.com/KUACC-VA
 2. **Install KUVPN from source:**
 
    ```bash
-   cargo install --git https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn
+   cargo install kuvpn
    ```
 
 
