@@ -93,7 +93,7 @@ curl --proto '=https' --tlsv1.2 -sSfL https://raw.githubusercontent.com/KUACC-VA
 
 ## Usage
 
-Simply run KUVPN with:
+Simply run KUVPN with: ( No arguments required )
 
 ```bash
 kuvpn
