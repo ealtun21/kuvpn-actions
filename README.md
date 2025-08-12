@@ -13,6 +13,7 @@ KUVPN is a simple CLI tool written in Rust that retrieves the DSID cookie and ex
   - [Build & Install from Source](#build--install-from-source)
 - [Usage](#usage)
   - [Command-line Options](#command-line-options)
+  - [Running on Headless](#running-on-headless)
 - [License](#license)
 - [Contributing](#contributing)
 
@@ -112,7 +113,9 @@ To get additional runtime information (for example, logging), use:
 kuvpn --level info
 ```
 
-### Running on Headless ( New on version 0.7.0, please reinstall if on older version )
+### Running on Headless 
+
+**( This is a new: added at version 0.7.0, please reinstall if on an older version )**
 
 First install KUVPN on a device (Mac / Linux ) that has GUI support. 
 
