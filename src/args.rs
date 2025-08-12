@@ -30,7 +30,11 @@ pub struct Args {
 
     /// Gives the user the dsid without running openconnect
     #[arg(short, long, default_value_t = false)]
-    pub dsid: bool,
+    pub get_dsid: bool,
+
+    /// Runs openconnect with the dsid given
+    #[arg(short, long, default_value = None)]
+    pub set_dsid: Option<String>,
 
     /// Delete session information
     #[arg(short, long, default_value_t = false)]
