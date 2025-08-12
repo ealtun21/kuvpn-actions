@@ -1,18 +1,18 @@
 [package]
 name = "kuvpn"
-version = "0.6.6"
+version = "0.7.0"
 edition = "2021"
 description = "A convenient tool for connecting to Koç University's VPN using OpenConnect."
 repository = "https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn"
 license = "MIT"
 
 [dependencies]
-clap = { version = "4.5.38", features = ["derive"] }
+clap = { version = "4.5.44", features = ["derive"] }
 colored = "3.0.0"
 env_logger = "0.11.8"
 headless_chrome = { version = "1.0.17", features = ["fetch", "rustls"] }
 log = "0.4.27"
-which = "7.0.1"
+which = "8.0.0"
 
 [profile.release]
 strip = true

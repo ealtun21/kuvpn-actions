@@ -150,6 +150,32 @@ fn main() -> ExitCode {
         }
     }
 
+
+    if let Some(dsid) = args.set_dsid.as_ref().filter(|x| !x.is_empty()) {
+        // Locate the `openconnect` executable.
+        let openconnect_path = match locate_openconnect(&args.openconnect_path) {
+            Some(path) => {
+                info!("OpenConnect located at: {}", path.display());
+                path
+            }
+            None => {
+                error!(
+                    "Cannot locate openconnect (checked path '{}', PATH, and /sbin). \
+                    Please install it or specify --openconnect-path <absolute_path>.",
+                    args.openconnect_path
+                );
+                return ExitCode::FAILURE;
+            }
+        };
+
+        if let Err(e) = execute_openconnect(dsid.to_string(), args.url, &args.run_command, &openconnect_path) {
+            error!("Error executing openconnect: {}", e);
+            return ExitCode::FAILURE;
+        }
+        return ExitCode::SUCCESS
+    }
+
+
     // Create a browser instance with the provided user agent.
     info!("Creating browser with agent: {}", args.agent);
     let browser = match create_browser(&args.agent) {
@@ -174,7 +200,7 @@ fn main() -> ExitCode {
     drop(browser);
 
     // If only the DSID is requested, print it and exit.
-    if args.dsid {
+    if args.get_dsid {
         info!("DSID retrieved: {}", dsid);
         println!("{}", dsid);
         return ExitCode::SUCCESS;

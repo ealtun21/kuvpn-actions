@@ -1,4 +1,4 @@
-# KUVPN v0.6.6
+# KUVPN v0.7.0
 
 KUVPN is a simple CLI tool written in Rust that retrieves the DSID cookie and executes the OpenConnect command to connect to the VPN for Koç University.
 
@@ -21,6 +21,7 @@ KUVPN is a simple CLI tool written in Rust that retrieves the DSID cookie and ex
 
 - ✅ **Login** to vpn.ku.edu.tr on Linux/macOS.
 - ✅ **Retrieve DSID cookie**
+- ✅ **Set DSID cookie**
 - ✅ **Execute OpenConnect command**
 - ✅ **Customizable URL**
 - ✅ **Secure session management**
@@ -35,7 +36,7 @@ KUVPN is a simple CLI tool written in Rust that retrieves the DSID cookie and ex
     ```bash
     sudo apt install openconnect
     ```
-  - *Note:* Not required when using the `--dsid` / `-d` flag.
+  - *Note:* Not required when using the `--get-dsid` / `-g` flag.
 
 - **Optional:** Chromium/Chrome  
   *(Auto-downloaded if not found when needed.)*
@@ -111,46 +112,80 @@ To get additional runtime information (for example, logging), use:
 kuvpn --level info
 ```
 
+### Running on Headless ( New on version 0.7.0, please reinstall if on older version )
+
+First install KUVPN on a device (Mac / Linux ) that has GUI support. 
+
+After, run on a GUI supported device:
+
+```bash
+kuvpn --get-dsid
+```
+
+Which will give you a dsid like: "780e27d7a3551b7fa6196f833ecfc3b6"
+
+Then, connect to the headless machine, and run 
+
+```bash
+kuvpn --set-dsid enter-dsid-here
+```
+
+Which will be for example:
+
+```bash
+kuvpn --set-dsid 780e27d7a3551b7fa6196f833ecfc3b6
+```
+
+You may also use -g and -s for get-dsid and set-dsid respectively. 
+
 ### Command-line Options
 
 Below is the help message displayed when running `kuvpn --help`:
 
 ```text
-Simple program to retrieve DSID cookie and execute OpenConnect command
+A convenient tool for connecting to Koç University's VPN using OpenConnect.
 
 Usage: kuvpn [OPTIONS]
 
 Options:
   -u, --url <URL>
           The URL to the page where we will start logging in and looking for DSID
+          
           [default: https://vpn.ku.edu.tr]
 
   -l, --level <LEVEL>
           The level of logging
-          [default: error]
-          Possible values:
-            - off:   No logs
-            - info:  Informational messages
-            - warn:  Warning messages
-            - debug: Debugging messages
-            - error: Error messages
-            - trace: Detailed stacktrace messages
 
-  -d, --dsid
-          Display the DSID without running OpenConnect
+          Possible values:
+          - off:   No logs
+          - info:  Informational messages
+          - warn:  Warning messages
+          - debug: Debugging messages
+          - error: Error messages
+          - trace: Detailed stacktrace messages
+          
+          [default: error]
+
+  -g, --get-dsid
+          Gives the user the dsid without running openconnect
+
+  -s, --set-dsid <SET_DSID>
+          Runs openconnect with the dsid given
 
   -c, --clean
           Delete session information
 
   -a, --agent <AGENT>
           User agent for browser
+          
           [default: Mozilla/5.0]
 
   -r, --run-command <RUN_COMMAND>
-          Command to run OpenConnect with (e.g., doas, sudo, pkexec, or a custom script)
+          Command to run openconnect with (e.g., doas, sudo, pkexec, or a custom script)
 
       --openconnect-path <OPENCONNECT_PATH>
-          Path or command name for OpenConnect. Defaults to 'openconnect'. Can be a relative or absolute path
+          Path or command name for openconnect. Defaults to 'openconnect'. Can be a relative or absolute path
+          
           [default: openconnect]
 
   -h, --help
@@ -159,7 +194,6 @@ Options:
   -V, --version
           Print version
 ```
-
 
 
 ## License
