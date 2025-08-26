@@ -1,4 +1,4 @@
-# KUVPN v0.7.0
+# KUVPN v1.0.0
 
 KUVPN is a simple CLI tool written in Rust that retrieves the DSID cookie and executes the OpenConnect command to connect to the VPN for Koç University.
 
@@ -22,12 +22,11 @@ KUVPN is a simple CLI tool written in Rust that retrieves the DSID cookie and ex
 
 - ✅ **Login** to vpn.ku.edu.tr on Linux/macOS.
 - ✅ **Retrieve DSID cookie**
-- ✅ **Set DSID cookie**
 - ✅ **Execute OpenConnect command**
-- ✅ **Customizable URL**
-- ✅ **Secure session management**
-- ✅ **Reliable Nix builds**
-- ✅ **Debug logging**
+- ✅ **Headless Execution**
+- ✅ **Session management**
+- ✅ **CLI Based**
+- ✅ **Openconnect Wrapper**
 
 
 ## Prerequisites
@@ -37,11 +36,6 @@ KUVPN is a simple CLI tool written in Rust that retrieves the DSID cookie and ex
     ```bash
     sudo apt install openconnect
     ```
-  - *Note:* Not required when using the `--get-dsid` / `-g` flag.
-
-- **Optional:** Chromium/Chrome  
-  *(Auto-downloaded if not found when needed.)*
-
 
 ## Installation
 
@@ -113,9 +107,7 @@ To get additional runtime information (for example, logging), use:
 kuvpn --level info
 ```
 
-### Running on Headless 
-
-**( This is a new: added at version 0.7.0, please reinstall if on an older version )**
+### Running on Headless ( New on version 0.7.0, please reinstall if on older version )
 
 First install KUVPN on a device (Mac / Linux ) that has GUI support. 
 
@@ -152,48 +144,21 @@ Usage: kuvpn [OPTIONS]
 
 Options:
   -u, --url <URL>
-          The URL to the page where we will start logging in and looking for DSID
-          
-          [default: https://vpn.ku.edu.tr]
-
-  -l, --level <LEVEL>
-          The level of logging
-
-          Possible values:
-          - off:   No logs
-          - info:  Informational messages
-          - warn:  Warning messages
-          - debug: Debugging messages
-          - error: Error messages
-          - trace: Detailed stacktrace messages
-          
-          [default: error]
-
+          The URL to the page where we will start logging in and looking for DSID [default: https://vpn.ku.edu.tr]
+      --domain <DOMAIN>
+          The Domain of the DSID found [default: vpn.ku.edu.tr]
   -g, --get-dsid
           Gives the user the dsid without running openconnect
-
-  -s, --set-dsid <SET_DSID>
-          Runs openconnect with the dsid given
-
+  -d, --disable-headless
+          Gets DSID without headless mode
   -c, --clean
           Delete session information
-
-  -a, --agent <AGENT>
-          User agent for browser
-          
-          [default: Mozilla/5.0]
-
   -r, --run-command <RUN_COMMAND>
           Command to run openconnect with (e.g., doas, sudo, pkexec, or a custom script)
-
       --openconnect-path <OPENCONNECT_PATH>
-          Path or command name for openconnect. Defaults to 'openconnect'. Can be a relative or absolute path
-          
-          [default: openconnect]
-
+          Path or command name for openconnect. Defaults to 'openconnect'. Can be a relative or absolute path [default: openconnect]
   -h, --help
-          Print help (see a summary with '-h')
-
+          Print help
   -V, --version
           Print version
 ```
