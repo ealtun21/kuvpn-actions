@@ -20,10 +20,10 @@ KUVPN is a simple CLI tool written in Rust that retrieves the DSID cookie and ex
 
 ## Features
 
-- ✅ **Login** to vpn.ku.edu.tr on Linux.
+- ✅ **Login** to vpn.ku.edu.tr on Linux/Mac.
 - ✅ **Retrieve DSID cookie**
 - ✅ **Execute OpenConnect command**
-- ✅ **Headless Execution**
+- ✅ **Headless Execution** (Linux Only)
 - ✅ **Session management**
 - ✅ **CLI Based**
 - ✅ **Openconnect Wrapper**
@@ -39,7 +39,7 @@ KUVPN is a simple CLI tool written in Rust that retrieves the DSID cookie and ex
 
 ## Installation
 
-### Binary Install (Recommended)
+### Binary Install (Recommended) ( Linux / Mac )
 
 Install KUVPN with the following command:
 
@@ -49,7 +49,7 @@ curl --proto '=https' --tlsv1.2 -sSfL https://raw.githubusercontent.com/KUACC-VA
 
 > **Note:** Always inspect scripts before running commands from the internet!
 
-### Binary Install (Manual) ( Please use KUVPN v0.7.0 for Mac OS ) 
+### Binary Install (Manual)
 
 1. **Download:** Get the latest binary from the [GitHub releases page](https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/releases).
 
@@ -82,8 +82,14 @@ curl --proto '=https' --tlsv1.2 -sSfL https://raw.githubusercontent.com/KUACC-VA
 
 2. **Install KUVPN from source:**
 
+   For mac:     
    ```bash
-   cargo install --git https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn
+   cargo install --git https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn --bin kuvpn-mac
+   ```
+
+   For linux:          
+    ```bash
+   cargo install --git https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn --bin kuvpn-linux
    ```
 
 
@@ -101,7 +107,7 @@ For help and more details:
 kuvpn --help
 ```
 
-### Command-line Options
+### Command-line Options ( Linux )
 
 Below is the help message displayed when running `kuvpn --help`:
 
@@ -127,6 +133,63 @@ Options:
           Path or command name for openconnect. Defaults to 'openconnect'. Can be a relative or absolute path [default: openconnect]
   -h, --help
           Print help
+  -V, --version
+          Print version
+```
+
+### Command-line Options ( Mac )
+
+Below is the help message displayed when running `kuvpn --help`:
+
+```text
+A convenient tool for connecting to Koç University's VPN using OpenConnect.
+
+Usage: kuvpn-mac [OPTIONS]
+
+Options:
+  -u, --url <URL>
+          The URL to the page where we will start logging in and looking for DSID
+          
+          [default: https://vpn.ku.edu.tr]
+
+  -l, --level <LEVEL>
+          The level of logging
+
+          Possible values:
+          - off:   No logs
+          - info:  Informational messages
+          - warn:  Warning messages
+          - debug: Debugging messages
+          - error: Error messages
+          - trace: Detailed stacktrace messages
+          
+          [default: error]
+
+  -g, --get-dsid
+          Gives the user the dsid without running openconnect
+
+  -s, --set-dsid <SET_DSID>
+          Runs openconnect with the dsid given
+
+  -c, --clean
+          Delete session information
+
+  -a, --agent <AGENT>
+          User agent for browser
+          
+          [default: Mozilla/5.0]
+
+  -r, --run-command <RUN_COMMAND>
+          Command to run openconnect with (e.g., doas, sudo, pkexec, or a custom script)
+
+      --openconnect-path <OPENCONNECT_PATH>
+          Path or command name for openconnect. Defaults to 'openconnect'. Can be a relative or absolute path
+          
+          [default: openconnect]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
   -V, --version
           Print version
 ```
