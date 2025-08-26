@@ -930,7 +930,7 @@ dependencies = [
 
 [[package]]
 name = "kuvpn"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "clap",
  "colored",
@@ -1166,8 +1166,7 @@ checksum = "953ec861398dccce10c670dfeaf3ec4911ca479e9c02154b3a215178c5f566f2"
 [[package]]
 name = "playwright"
 version = "0.0.20"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e45631bc049f37d0cef950da0d60ee35b211ab71180c61aee86880483cf59e28"
+source = "git+https://github.com/ealtun21/playwright-rust#d9c947cb266510a035ab9e674bb3c1d4347b0c44"
 dependencies = [
  "base64 0.13.1",
  "chrono",
