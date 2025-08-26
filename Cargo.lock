@@ -1165,8 +1165,8 @@ checksum = "953ec861398dccce10c670dfeaf3ec4911ca479e9c02154b3a215178c5f566f2"
 
 [[package]]
 name = "playwright"
-version = "0.0.20"
-source = "git+https://github.com/ealtun21/playwright-rust#d9c947cb266510a035ab9e674bb3c1d4347b0c44"
+version = "0.0.21"
+source = "git+https://github.com/ealtun21/playwright-rust#6dfbef10cf892b0d62484fd4c5d6dc5f418048ac"
 dependencies = [
  "base64 0.13.1",
  "chrono",
