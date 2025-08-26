@@ -20,7 +20,7 @@ KUVPN is a simple CLI tool written in Rust that retrieves the DSID cookie and ex
 
 ## Features
 
-- ✅ **Login** to vpn.ku.edu.tr on Linux/macOS.
+- ✅ **Login** to vpn.ku.edu.tr on Linux.
 - ✅ **Retrieve DSID cookie**
 - ✅ **Execute OpenConnect command**
 - ✅ **Headless Execution**
@@ -49,7 +49,7 @@ curl --proto '=https' --tlsv1.2 -sSfL https://raw.githubusercontent.com/KUACC-VA
 
 > **Note:** Always inspect scripts before running commands from the internet!
 
-### Binary Install (Manual)
+### Binary Install (Manual) ( Please use KUVPN v0.7.0 for Mac OS ) 
 
 1. **Download:** Get the latest binary from the [GitHub releases page](https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/releases).
 
