@@ -1,4 +1,4 @@
-# KUVPN v1.0.0
+# KUVPN v1.0.0 ( Now with true headless support! )
 
 KUVPN is a simple CLI tool written in Rust that retrieves the DSID cookie and executes the OpenConnect command to connect to the VPN for Koç University.
 
