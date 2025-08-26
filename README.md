@@ -84,12 +84,12 @@ curl --proto '=https' --tlsv1.2 -sSfL https://raw.githubusercontent.com/KUACC-VA
 
    For mac:     
    ```bash
-   cargo install --git https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn --bin kuvpn-mac
+   cargo install --git https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn kuvpn-mac
    ```
 
    For linux:          
     ```bash
-   cargo install --git https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn --bin kuvpn-linux
+   cargo install --git https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn kuvpn-linux
    ```
 
 
