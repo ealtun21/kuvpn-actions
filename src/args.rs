@@ -24,25 +24,21 @@ pub struct Args {
     #[arg(short, long, default_value = "https://vpn.ku.edu.tr")]
     pub url: String,
 
-    /// The level of logging
-    #[arg(short, long, value_enum, default_value_t = LogLevel::Error)]
-    pub level: LogLevel,
+    /// The Domain of the DSID found
+    #[arg(long, default_value = "vpn.ku.edu.tr")]
+    pub domain: String,
 
     /// Gives the user the dsid without running openconnect
     #[arg(short, long, default_value_t = false)]
     pub get_dsid: bool,
 
-    /// Runs openconnect with the dsid given
-    #[arg(short, long, default_value = None)]
-    pub set_dsid: Option<String>,
+    /// Gets DSID without headless mode
+    #[arg(short, long, default_value_t = false)]
+    pub disable_headless: bool,
 
     /// Delete session information
     #[arg(short, long, default_value_t = false)]
     pub clean: bool,
-
-    /// User agent for browser
-    #[arg(short, long, default_value = "Mozilla/5.0")]
-    pub agent: String,
 
     /// Command to run openconnect with (e.g., doas, sudo, pkexec, or a custom script)
     #[arg(short, long)]
