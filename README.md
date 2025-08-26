@@ -101,38 +101,6 @@ For help and more details:
 kuvpn --help
 ```
 
-To get additional runtime information (for example, logging), use:
-
-```bash
-kuvpn --level info
-```
-
-### Running on Headless ( New on version 0.7.0, please reinstall if on older version )
-
-First install KUVPN on a device (Mac / Linux ) that has GUI support. 
-
-After, run on a GUI supported device:
-
-```bash
-kuvpn --get-dsid
-```
-
-Which will give you a dsid like: "780e27d7a3551b7fa6196f833ecfc3b6"
-
-Then, connect to the headless machine, and run 
-
-```bash
-kuvpn --set-dsid enter-dsid-here
-```
-
-Which will be for example:
-
-```bash
-kuvpn --set-dsid 780e27d7a3551b7fa6196f833ecfc3b6
-```
-
-You may also use -g and -s for get-dsid and set-dsid respectively. 
-
 ### Command-line Options
 
 Below is the help message displayed when running `kuvpn --help`:
