@@ -1,0 +1,55 @@
+use clap::{Parser, ValueEnum};
+
+#[derive(Debug, ValueEnum, Clone)]
+pub enum LogLevel {
+    /// No logs
+    Off,
+    /// Informational messages
+    Info,
+    /// Warning messages
+    Warn,
+    /// Debugging messages
+    Debug,
+    /// Error messages
+    Error,
+    /// Detailed stacktrace messages
+    Trace,
+}
+
+/// Simple program to retrieve DSID cookie and execute OpenConnect command
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+pub struct Args {
+    /// The URL to the page where we will start logging in and looking for DSID
+    #[arg(short, long, default_value = "https://vpn.ku.edu.tr")]
+    pub url: String,
+
+    /// The level of logging
+    #[arg(short, long, value_enum, default_value_t = LogLevel::Error)]
+    pub level: LogLevel,
+
+    /// Gives the user the dsid without running openconnect
+    #[arg(short, long, default_value_t = false)]
+    pub get_dsid: bool,
+
+    /// Runs openconnect with the dsid given
+    #[arg(short, long, default_value = None)]
+    pub set_dsid: Option<String>,
+
+    /// Delete session information
+    #[arg(short, long, default_value_t = false)]
+    pub clean: bool,
+
+    /// User agent for browser
+    #[arg(short, long, default_value = "Mozilla/5.0")]
+    pub agent: String,
+
+    /// Command to run openconnect with (e.g., doas, sudo, pkexec, or a custom script)
+    #[arg(short, long)]
+    pub run_command: Option<String>,
+
+    /// Path or command name for openconnect. Defaults to 'openconnect'.
+    /// Can be a relative or absolute path.
+    #[arg(long, default_value = "openconnect")]
+    pub openconnect_path: String,
+}
