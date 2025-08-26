@@ -131,6 +131,19 @@ Options:
           Print version
 ```
 
+### Troubleshooting: Cookie Rejection
+
+If you get this error, the easiest fix is to clear your session:
+```
+Unexpected 302 result from server
+Creating SSL connection failed
+Cookie was rejected by server; exiting.
+```
+
+You can clear your session like this:
+```
+kuvpn -c
+```
 
 ## License
 
