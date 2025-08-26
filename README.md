@@ -92,6 +92,9 @@ curl --proto '=https' --tlsv1.2 -sSfL https://raw.githubusercontent.com/KUACC-VA
    cargo install --git https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn kuvpn-linux
    ```
 
+3. **Special note:**
+When installed via cargo-install, the binaries are called 'kuvpn-linux' and 'kuvpn-mac' respectively. 
+
 
 ## Usage
 
