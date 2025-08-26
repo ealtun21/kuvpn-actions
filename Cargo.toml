@@ -1,6 +1,6 @@
 [package]
 name = "kuvpn"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 description = "A convenient tool for connecting to Koç University's VPN using OpenConnect."
 repository = "https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn"

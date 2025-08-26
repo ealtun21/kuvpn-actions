@@ -43,8 +43,8 @@ async fn is_input_visible(page: &Page, selector: &str) -> Result<bool, Arc<Error
 }
 
 /// Returns the full path to the `auth_state.json` inside the user data dir.
-pub fn get_auth_state_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let mut dir = get_user_data_dir()?;
+pub fn get_auth_state_path() -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    let mut dir = get_user_data_dir().expect("Unable to get path, do you have file perms?");
     dir.push("auth_state.json");
     Ok(dir)
 }
@@ -347,7 +347,8 @@ async fn poll_dsid(context: &BrowserContext, url: &String, domain: &String) -> R
 
 // ================= Library Entry Point =================
 
-pub async fn run_login_and_get_dsid(headless: bool, url: &String, domain: &String) -> Result<String, Error> {
+pub async fn run_login_and_get_dsid(headless: bool, url: &String, domain: &String) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    const MAX_RETRIES: usize = 10;
     let playwright = Playwright::initialize().await?;
     playwright.prepare()?;
     let chromium = playwright.chromium();
@@ -359,7 +360,7 @@ pub async fn run_login_and_get_dsid(headless: bool, url: &String, domain: &Strin
         .launch()
         .await?;
 
-    let auth_path = get_auth_state_path().unwrap();
+    let auth_path = get_auth_state_path()?;
 
     // Try loading the saved session, properly deserialize to StorageState
     let session_data = tokio::fs::read(&auth_path).await.ok();
@@ -376,8 +377,53 @@ pub async fn run_login_and_get_dsid(headless: bool, url: &String, domain: &Strin
 
     println!("[+] Starting at: {}", url);
     page.goto_builder(url).goto().await?;
+    
+    // A helper function to try all handlers and return if any was successful.
+    async fn try_handle_page(page: &Page, handled: &mut HashSet<&'static str>) -> Result<bool, Arc<Error>> {
+        if !handled.contains("session_conflict") && handle_session_conflict(page).await? {
+            handled.insert("session_conflict");
+            return Ok(true);
+        }
+        if !handled.contains("username") && is_input_visible(page, "input[name=\"loginfmt\"]").await? {
+            fill_on_screen_and_click(page, "input[name=\"loginfmt\"]", "Username (email): ", "#idSIButton9", false).await?;
+            handled.insert("username");
+            return Ok(true);
+        }
+        if !handled.contains("ngc_error_use_password") && handle_ngc_error_use_password(page, handled).await? {
+            handled.insert("ngc_error_use_password");
+            return Ok(true);
+        }
+        if !handled.contains("use_app_instead") && handle_use_app_instead(page).await? {
+            handled.insert("use_app_instead");
+            return Ok(true);
+        }
+        if !handled.contains("ngc_push") && handle_authenticator_ngc_push(page).await? {
+            handled.insert("ngc_push");
+            return Ok(true);
+        }
+        if !handled.contains("password") && is_input_visible(page, "input[name=\"passwd\"]").await? {
+            fill_on_screen_and_click(page, "input[name=\"passwd\"]", "Password: ", "#idSIButton9", true).await?;
+            handled.insert("password");
+            return Ok(true);
+        }
+        if !handled.contains("kmsi") && click_kmsi_if_present(page).await? {
+            handled.insert("kmsi");
+            return Ok(true);
+        }
+        if !handled.contains("push") && handle_authenticator_push_approval(page).await? {
+            handled.insert("push");
+            return Ok(true);
+        }
+        if !handled.contains("verification_code") && handle_verification_code_choice(page).await? {
+            handled.insert("verification_code");
+            return Ok(true);
+        }
+        Ok(false)
+    }
 
     let mut handled: HashSet<&'static str> = HashSet::new();
+    let mut last_url = page.url()?;
+    let mut retries = 0;
 
     loop {
         // Try to obtain DSID from existing (possibly loaded) cookies
@@ -390,64 +436,25 @@ pub async fn run_login_and_get_dsid(headless: bool, url: &String, domain: &Strin
             return Ok(dsid);
         }
 
-        // -- Your full login flow handlers here --
-        if !handled.contains("session_conflict") && handle_session_conflict(&page).await? {
-            handled.insert("session_conflict");
-            continue;
+        let current_url = page.url()?;
+        if current_url != last_url {
+            println!("[*] Page navigated to: {}", current_url);
+            last_url = current_url;
+            retries = 0; // Reset retries on navigation
         }
-        if !handled.contains("username")
-            && is_input_visible(&page, "input[name=\"loginfmt\"]").await?
-        {
-            fill_on_screen_and_click(
-                &page,
-                "input[name=\"loginfmt\"]",
-                "Username (email): ",
-                "#idSIButton9",
-                false,
-            )
-            .await?;
-            handled.insert("username");
-            continue;
+
+        // Try to handle one of the login steps.
+        let handled_something = try_handle_page(&page, &mut handled).await?;
+
+        if handled_something {
+            retries = 0; // Reset retries if something was handled.
+        } else {
+            retries += 1;
         }
-        if !handled.contains("ngc_error_use_password")
-            && handle_ngc_error_use_password(&page, &mut handled).await?
-        {
-            handled.insert("ngc_error_use_password");
-            continue;
-        }
-        if !handled.contains("use_app_instead") && handle_use_app_instead(&page).await? {
-            handled.insert("use_app_instead");
-            continue;
-        }
-        if !handled.contains("ngc_push") && handle_authenticator_ngc_push(&page).await? {
-            handled.insert("ngc_push");
-            continue;
-        }
-        if !handled.contains("password")
-            && is_input_visible(&page, "input[name=\"passwd\"]").await?
-        {
-            fill_on_screen_and_click(
-                &page,
-                "input[name=\"passwd\"]",
-                "Password: ",
-                "#idSIButton9",
-                true,
-            )
-            .await?;
-            handled.insert("password");
-            continue;
-        }
-        if !handled.contains("kmsi") && click_kmsi_if_present(&page).await? {
-            handled.insert("kmsi");
-            continue;
-        }
-        if !handled.contains("push") && handle_authenticator_push_approval(&page).await? {
-            handled.insert("push");
-            continue;
-        }
-        if !handled.contains("verification_code") && handle_verification_code_choice(&page).await? {
-            handled.insert("verification_code");
-            continue;
+
+        if retries > MAX_RETRIES {
+            browser.close().await?;
+            return Err(Box::new(io::Error::new(io::ErrorKind::Other, format!("Max retries reached. Could not find a handler for the current page: {}", last_url))));
         }
 
         tokio::time::sleep(Duration::from_millis(400)).await;
