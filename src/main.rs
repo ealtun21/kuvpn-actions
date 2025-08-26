@@ -143,9 +143,13 @@ async fn main() -> ExitCode {
         }
     }
 
-    let dsid = run_login_and_get_dsid(!args.disable_headless, &args.url, &args.domain)
-        .await
-        .unwrap();
+    let dsid = match run_login_and_get_dsid(!args.disable_headless, &args.url, &args.domain).await {
+        Ok(dsid) => dsid,
+        Err(e) => {
+            error!("Login process failed: {}", e);
+            return ExitCode::FAILURE;
+        }
+    };
 
     if args.get_dsid == true {
         println!("{}", dsid);
