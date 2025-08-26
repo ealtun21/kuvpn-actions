@@ -23,11 +23,11 @@ jobs:
 
       - name: Build CLI
         run: |
-          cargo build --release -p kuvpn
+          cargo build --release --bin kuvpn-mac
 
       - name: Upload
         uses: actions/upload-artifact@v4.3.1
         with:
           name: kuvpn-aarch64-apple-darwin
           path: |
-            ./target/release/kuvpn
+            ./target/release/kuvpn-mac
