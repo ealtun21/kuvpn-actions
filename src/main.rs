@@ -146,7 +146,12 @@ fn main() -> ExitCode {
         }
     }
 
-    let dsid = match run_login_and_get_dsid(!args.disable_headless, &args.url, &args.domain) {
+    let dsid = match run_login_and_get_dsid(
+        !args.disable_headless,
+        &args.url,
+        &args.domain,
+        "Mozilla/5.0",
+    ) {
         Ok(dsid) => dsid,
         Err(e) => {
             error!("Login process failed: {}", e);
