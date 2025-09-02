@@ -1,4 +1,4 @@
-# KUVPN v1.0.2
+# KUVPN v2.0.0
 
 KUVPN is a simple CLI tool written in Rust that retrieves the DSID cookie and executes the OpenConnect command to connect to the VPN for Koç University.
 
@@ -13,7 +13,6 @@ KUVPN is a simple CLI tool written in Rust that retrieves the DSID cookie and ex
   - [Build & Install from Source](#build--install-from-source)
 - [Usage](#usage)
   - [Command-line Options](#command-line-options)
-  - [Running on Headless](#running-on-headless)
 - [License](#license)
 - [Contributing](#contributing)
 
@@ -23,7 +22,7 @@ KUVPN is a simple CLI tool written in Rust that retrieves the DSID cookie and ex
 - ✅ **Login** to vpn.ku.edu.tr on Linux/Mac.
 - ✅ **Retrieve DSID cookie**
 - ✅ **Execute OpenConnect command**
-- ✅ **Headless Execution** (Linux Only)
+- ✅ **Headless Execution**
 - ✅ **Session management**
 - ✅ **CLI Based**
 - ✅ **Openconnect Wrapper**
@@ -39,7 +38,7 @@ KUVPN is a simple CLI tool written in Rust that retrieves the DSID cookie and ex
 
 ## Installation
 
-### Binary Install (Recommended) ( Linux / Mac )
+### Binary Install (Recommended)
 
 Install KUVPN with the following command:
 
@@ -82,19 +81,9 @@ curl --proto '=https' --tlsv1.2 -sSfL https://raw.githubusercontent.com/KUACC-VA
 
 2. **Install KUVPN from source:**
 
-   For mac:     
    ```bash
-   cargo install --git https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn kuvpn-mac
+   cargo install --git https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn
    ```
-
-   For linux:          
-    ```bash
-   cargo install --git https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn kuvpn-linux
-   ```
-
-3. **Special note:**
-When installed via cargo-install, the binaries are called 'kuvpn-linux' and 'kuvpn-mac' respectively. 
-
 
 ## Usage
 
@@ -110,7 +99,7 @@ For help and more details:
 kuvpn --help
 ```
 
-### Command-line Options ( Linux )
+### Command-line Options 
 
 Below is the help message displayed when running `kuvpn --help`:
 
@@ -118,36 +107,6 @@ Below is the help message displayed when running `kuvpn --help`:
 A convenient tool for connecting to Koç University's VPN using OpenConnect.
 
 Usage: kuvpn [OPTIONS]
-
-Options:
-  -u, --url <URL>
-          The URL to the page where we will start logging in and looking for DSID [default: https://vpn.ku.edu.tr]
-      --domain <DOMAIN>
-          The Domain of the DSID found [default: vpn.ku.edu.tr]
-  -g, --get-dsid
-          Gives the user the dsid without running openconnect
-  -d, --disable-headless
-          Gets DSID without headless mode
-  -c, --clean
-          Delete session information
-  -r, --run-command <RUN_COMMAND>
-          Command to run openconnect with (e.g., doas, sudo, pkexec, or a custom script)
-      --openconnect-path <OPENCONNECT_PATH>
-          Path or command name for openconnect. Defaults to 'openconnect'. Can be a relative or absolute path [default: openconnect]
-  -h, --help
-          Print help
-  -V, --version
-          Print version
-```
-
-### Command-line Options ( Mac )
-
-Below is the help message displayed when running `kuvpn --help`:
-
-```text
-A convenient tool for connecting to Koç University's VPN using OpenConnect.
-
-Usage: kuvpn-mac [OPTIONS]
 
 Options:
   -u, --url <URL>
@@ -168,19 +127,19 @@ Options:
           
           [default: error]
 
+      --domain <DOMAIN>
+          The Domain of the DSID found
+          
+          [default: vpn.ku.edu.tr]
+
   -g, --get-dsid
           Gives the user the dsid without running openconnect
 
-  -s, --set-dsid <SET_DSID>
-          Runs openconnect with the dsid given
+  -d, --disable-headless
+          Gets DSID without headless mode
 
   -c, --clean
           Delete session information
-
-  -a, --agent <AGENT>
-          User agent for browser
-          
-          [default: Mozilla/5.0]
 
   -r, --run-command <RUN_COMMAND>
           Command to run openconnect with (e.g., doas, sudo, pkexec, or a custom script)
