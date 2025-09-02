@@ -1,8 +1,9 @@
 use headless_chrome::browser::default_executable;
-use headless_chrome::{Browser, LaunchOptionsBuilder, Tab};
+use headless_chrome::{Browser, LaunchOptions, Tab};
 use rpassword::read_password;
 use std::env;
 use std::error::Error;
+use std::ffi::OsString;
 use std::fs;
 use std::{
     collections::HashSet,
@@ -30,6 +31,56 @@ fn prompt_password(msg: &str) -> String {
     print!("{}", msg);
     io::stdout().flush().unwrap();
     read_password().unwrap()
+}
+
+/// Creates a non-headless browser instance configured with a blank page, a custom user agent,
+/// and a dedicated user data directory.
+///
+/// The browser is launched with the following settings:
+/// - **Non-headless mode** to allow for potential UI interactions.
+/// - **A blank app window** containing a minimal HTML page.
+/// - **Custom user agent** as specified by the `agent` parameter.
+/// - **Custom user data directory** for isolated session data.
+/// - **Custom window size** of 800x800 pixels.
+/// - **Sandbox disabled** and an infinite idle timeout.
+///
+/// # Arguments
+///
+/// * `agent` - A string slice representing the desired user agent.
+///
+/// # Returns
+///
+/// A `Result` containing the configured `Browser` instance on success, or an error on failure.
+fn create_browser(agent: &str, headless: bool) -> Result<Browser, Box<dyn Error>> {
+    // Retrieve the user data directory.
+    let user_data_dir = get_user_data_dir()?;
+
+    // Build the command-line arguments for launching the browser.
+    let user_agent = OsString::from(format!("--user-agent={agent}"));
+    let body = OsString::from("--app=data:text/html,<html><body></body></html>");
+    let window = OsString::from("--new-window");
+
+    // Configure the browser launch options.
+    let mut options = LaunchOptions::default_builder();
+    let mut launch_options = options
+        .headless(headless)
+        .sandbox(false)
+        .idle_browser_timeout(Duration::MAX)
+        .window_size(Some((800, 800)))
+        .args(vec![
+            body.as_os_str(),
+            window.as_os_str(),
+            user_agent.as_os_str(),
+        ])
+        .user_data_dir(Some(user_data_dir));
+
+    // If the default Chrome executable is available, specify its path.
+    if let Ok(executable_path) = default_executable() {
+        launch_options = launch_options.path(Some(executable_path));
+    }
+
+    // Build and return the Browser instance.
+    Ok(Browser::new(launch_options.build()?)?)
 }
 
 /// Returns a platform-appropriate user data directory for the Chrome instance.
@@ -469,37 +520,22 @@ pub fn run_login_and_get_dsid(
 ) -> anyhow::Result<String> {
     const MAX_RETRIES: usize = 10;
 
-    // Prepare persistent user data directory for browser state/session.
-    let user_data_dir = match get_user_data_dir() {
-        Ok(data_path) => data_path,
-        Err(er) => {
+    let browser = match create_browser(user_agent, headless) {
+        Ok(b) => b,
+        Err(e) => {
             return Err(anyhow::anyhow!(
-                format!("Erorr during user data dir: {er}",)
+                format!("Failed to create browser: {e}",)
             ))
         }
     };
 
-    // Build launch options with custom user agent and session directory.
-    let agent = std::ffi::OsString::from(format!("--user-agent={}", user_agent));
-    let mut binding = LaunchOptionsBuilder::default();
-    let mut launch_options = binding
-        .headless(headless)
-        .sandbox(false)
-        .user_data_dir(Some(user_data_dir))
-        .idle_browser_timeout(Duration::MAX)
-        .args(vec![&agent]);
+    // Use the initial tab provided by the browser.
+    #[allow(deprecated)]
+    let tab = browser.wait_for_initial_tab()?;
 
-    // If the default Chrome executable is available, specify its path.
-    if let Ok(executable_path) = default_executable() {
-        launch_options = launch_options.path(Some(executable_path));
-    }
-
-    // Build and return the Browser instance.
-    let browser = Browser::new(launch_options.build()?)?;
-
-    let tab = browser.new_tab()?;
-
+    // Navigate to the target URL and wait for the page to load.
     tab.navigate_to(url)?;
+    tab.wait_until_navigated()?;
 
     let mut handled: HashSet<&'static str> = HashSet::new();
     let mut last_url = tab.get_url();
