@@ -18,10 +18,10 @@ jobs:
     - name: Build-musl
       uses: gmiam/rust-musl-action@master
       with:
-        args: cargo build --target $BUILD_TARGET --release --bin kuvpn-linux
+        args: cargo build --target $BUILD_TARGET --release -p kuvpn
     - name: Upload
       uses: actions/upload-artifact@v4.3.1
       with:
         name: kuvpn-x86_64-unknown-linux-musl
         path: |
-          ./target/x86_64-unknown-linux-musl/release/kuvpn-linux
+          ./target/x86_64-unknown-linux-musl/release/kuvpn
