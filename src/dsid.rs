@@ -69,7 +69,6 @@ fn get_user_data_dir() -> Result<PathBuf, Box<dyn Error>> {
     Ok(user_data_dir)
 }
 
-
 // ================= Page Interaction Helpers =================
 
 fn is_input_visible(tab: &Tab, selector: &str) -> anyhow::Result<bool> {
@@ -473,9 +472,11 @@ pub fn run_login_and_get_dsid(
     // Prepare persistent user data directory for browser state/session.
     let user_data_dir = match get_user_data_dir() {
         Ok(data_path) => data_path,
-        Err(er) => return Err(anyhow::anyhow!(format!(
-                "Erorr during user data dir: {er}",
-            )))
+        Err(er) => {
+            return Err(anyhow::anyhow!(
+                format!("Erorr during user data dir: {er}",)
+            ))
+        }
     };
 
     // Build launch options with custom user agent and session directory.
@@ -484,8 +485,8 @@ pub fn run_login_and_get_dsid(
     let mut launch_options = binding
         .headless(headless)
         .sandbox(false)
-        .idle_browser_timeout(Duration::MAX)
         .user_data_dir(Some(user_data_dir))
+        .idle_browser_timeout(Duration::MAX)
         .args(vec![&agent]);
 
     // If the default Chrome executable is available, specify its path.
