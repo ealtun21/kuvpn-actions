@@ -1,11 +1,17 @@
-[workspace]
-members = [
-    "kuvpn-linux",
-    "kuvpn-mac"
-]
-resolver = "2"
+[package]
+name = "kuvpn"
+version = "2.0.0"
+edition = "2021"
+description = "A convenient tool for connecting to Koç University's VPN using OpenConnect."
+repository = "https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn"
+license = "MIT"
 
-[profile.release]
-strip = true
-lto = true
-codegen-units = 1
+[dependencies]
+anyhow = "1.0.99"
+clap = { version = "4.5.46", features = ["derive"] }
+colored = "3.0.0"
+env_logger = "0.11.8"
+headless_chrome = { version = "1.0.17", features = ["fetch", "rustls"] }
+log = "0.4.27"
+rpassword = "7.4.0"
+which = "8.0.0"
