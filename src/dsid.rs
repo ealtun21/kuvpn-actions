@@ -1,4 +1,5 @@
 use crate::browser::create_browser;
+use crate::handlers::page_detection::is_invalid_username_visible;
 use crate::handlers::{auth_handlers::*, mfa_handlers::*, page_detection::is_input_visible};
 use headless_chrome::Tab;
 use std::collections::HashSet;
@@ -24,6 +25,11 @@ fn try_handle_page(tab: &Tab, handled: &mut HashSet<&'static str>) -> anyhow::Re
         handled.insert("session_conflict");
         return Ok(true);
     }
+    
+    if !handled.contains("invalid_username") && is_invalid_username_visible(tab)? {
+        handled.insert("invalid_username");
+        return Err(anyhow::anyhow!("Invalid username or account not found"));
+    }
 
     if !handled.contains("username") && is_input_visible(tab, "input[name=\"loginfmt\"]")? {
         fill_on_screen_and_click(
@@ -36,7 +42,7 @@ fn try_handle_page(tab: &Tab, handled: &mut HashSet<&'static str>) -> anyhow::Re
         handled.insert("username");
         return Ok(true);
     }
-
+    
     if !handled.contains("ngc_error_use_password") && handle_ngc_error_use_password(tab, handled)? {
         handled.insert("ngc_error_use_password");
         return Ok(true);
