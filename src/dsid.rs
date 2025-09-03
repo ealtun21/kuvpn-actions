@@ -94,6 +94,7 @@ pub fn run_login_and_get_dsid(
     url: &str,
     domain: &str,
     user_agent: &str,
+    no_auto_login: bool,
 ) -> anyhow::Result<String> {
     const MAX_RETRIES: usize = 10;
 
@@ -127,22 +128,24 @@ pub fn run_login_and_get_dsid(
             last_url = current_url;
             retries = 0;
         }
+        
+        if !no_auto_login {
+            let handled_something = try_handle_page(&tab, &mut handled)?;
+            if handled_something {
+                retries = 0;
+            } else {
+                retries += 1;
+            }
 
-        let handled_something = try_handle_page(&tab, &mut handled)?;
-        if handled_something {
-            retries = 0;
-        } else {
-            retries += 1;
+            if retries > MAX_RETRIES {
+                tab.close(true)?;
+                return Err(anyhow::anyhow!(format!(
+                    "Max retries reached. Could not find a handler for the current page: {}",
+                    last_url
+                )));
+            }
         }
-
-        if retries > MAX_RETRIES {
-            tab.close(true)?;
-            return Err(anyhow::anyhow!(format!(
-                "Max retries reached. Could not find a handler for the current page: {}",
-                last_url
-            )));
-        }
-
+        
         sleep(Duration::from_millis(400));
     }
 }
