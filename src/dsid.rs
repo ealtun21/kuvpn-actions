@@ -21,21 +21,31 @@ fn poll_dsid(tab: &Tab, domain: &str) -> anyhow::Result<Option<String>> {
 
 /// Attempts to handle the current page state.
 fn try_handle_page(tab: &Tab, handled: &mut HashSet<&'static str>) -> anyhow::Result<bool> {
+    if !handled.contains("pick_account") && handle_pick_account(tab)? {
+        handled.insert("pick_account");
+        return Ok(true);
+    }
+
     if !handled.contains("session_conflict") && handle_session_conflict(tab)? {
         handled.insert("session_conflict");
         return Ok(true);
     }
 
-    if !handled.contains("invalid_username") && is_invalid_username_visible(tab)? {
+    if is_invalid_username_visible(tab)? {
         handled.insert("invalid_username");
-        return Err(anyhow::anyhow!("Invalid username or account not found, Please re-run the program and try again."));
+        return Err(anyhow::anyhow!(
+            "Invalid username or account not found, Please re-run the program and try again."
+        ));
     }
 
-    if !handled.contains("incorrect_password") && is_incorrect_password_visible(tab)? {
-        handled.insert("incorrect_password");
-        return Err(anyhow::anyhow!(
-            "Incorrect password provided. Please re-run the program and try again."
-        ));
+    if is_incorrect_password_visible(tab)? {
+        handled.remove("password");
+        return Ok(true);
+    }
+
+    if handle_remote_ngc_denied_next(tab)? {
+        handled.remove("ngc_push");
+        return Ok(true);
     }
 
     if !handled.contains("username") && is_input_visible(tab, "input[name=\"loginfmt\"]")? {
