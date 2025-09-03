@@ -78,7 +78,7 @@ fn main() -> ExitCode {
         }
     };
 
-    if args.get_dsid == true {
+    if args.get_dsid {
         println!("{}", dsid);
         return ExitCode::SUCCESS;
     }
