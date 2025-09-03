@@ -52,4 +52,8 @@ pub struct Args {
     /// Can be a relative or absolute path.
     #[arg(long, default_value = "openconnect")]
     pub openconnect_path: String,
+
+    /// Disable automatic login handlers and only poll for DSID in a headful browser
+    #[arg(long, default_value_t = false)]
+    pub no_auto_login: bool,
 }
