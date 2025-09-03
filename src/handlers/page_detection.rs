@@ -9,9 +9,18 @@ pub fn is_input_visible(tab: &Tab, selector: &str) -> anyhow::Result<bool> {
     Ok(tab.evaluate(&js, false)?.value.unwrap().as_bool().unwrap())
 }
 
-/// Checks if the invalid username error message is visible.
+/// Checks if *any* invalid username error is visible (broader Microsoft error set).
 pub fn is_invalid_username_visible(tab: &Tab) -> anyhow::Result<bool> {
-    let js = "!!(document.getElementById('usernameError') && document.getElementById('usernameError').innerText.includes('We couldn\\'t find an account with that username.'))";
+    let js = r#"
+        !!(document.getElementById('usernameError')
+            && (
+                document.getElementById('usernameError').innerText.includes("We couldn't find an account with that username.")
+                || document.getElementById('usernameError').innerText.toLowerCase().includes("enter a valid email address")
+                || document.getElementById('usernameError').innerText.toLowerCase().includes("enter a valid phone number")
+                || document.getElementById('usernameError').innerText.toLowerCase().includes("enter a valid skype name")
+            )
+        )
+    "#;
     Ok(tab.evaluate(js, false)?.value.unwrap().as_bool().unwrap())
 }
 

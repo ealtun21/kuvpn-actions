@@ -104,3 +104,73 @@ pub fn handle_session_conflict(tab: &Tab) -> anyhow::Result<bool> {
 
     Ok(false)
 }
+
+/// Detects the "Request denied" Authenticator page and presses Next.
+pub fn handle_remote_ngc_denied_next(tab: &headless_chrome::Tab) -> anyhow::Result<bool> {
+    let is_denied_page = tab
+        .evaluate(
+            r#"(function() {
+            var header = document.getElementById('loginHeader');
+            var desc = document.getElementById('idDiv_RemoteNGC_PageDescription');
+            var form = document.getElementById('i0281');
+            var btn = document.getElementById('idSIButton9');
+            // Check for specific header and error text
+            return !!(
+                form && btn &&
+                header &&
+                header.innerText.trim().toLowerCase() === "request denied" &&
+                desc && desc.innerText.toLowerCase().includes("but you denied it")
+            );
+        })()"#,
+            false,
+        )?
+        .value
+        .unwrap()
+        .as_bool()
+        .unwrap_or(false);
+
+    if is_denied_page {
+        println!("[*] Authenticator denied page detected. Pressing Next...");
+        tab.evaluate(
+            "var btn=document.getElementById('idSIButton9'); if(btn){btn.focus();btn.click();}",
+            false,
+        )?;
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+/// Detects the "Pick an account" account picker and selects the first account.
+pub fn handle_pick_account(tab: &headless_chrome::Tab) -> anyhow::Result<bool> {
+    let is_picker = tab.evaluate(
+        r#"(function() {
+            var header = document.getElementById('loginHeader');
+            var form = document.getElementById('i0281');
+            var tiles = document.querySelectorAll('#tilesHolder .tile[role="listitem"], #tilesHolder .tile-container .table[role="button"]');
+            // Check for specific header and presence of account tiles
+            return !!(
+                form &&
+                header &&
+                header.innerText.trim().toLowerCase() === "pick an account" &&
+                tiles.length > 0
+            );
+        })()"#,
+        false,
+    )?.value.unwrap().as_bool().unwrap_or(false);
+
+    if is_picker {
+        println!("[*] 'Pick an account' page detected. Selecting the first account...");
+        // Click the first available tile button
+        tab.evaluate(
+            r#"(function() {
+                var btn = document.querySelector('#tilesHolder .tile-container .table[role="button"], #tilesHolder .tile[role="listitem"] .table[role="button"]');
+                if (btn) { btn.focus(); btn.click(); }
+            })()"#,
+            false,
+        )?;
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        return Ok(true);
+    }
+    Ok(false)
+}
