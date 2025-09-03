@@ -1,5 +1,5 @@
 use crate::browser::create_browser;
-use crate::handlers::page_detection::is_invalid_username_visible;
+use crate::handlers::page_detection::{is_incorrect_password_visible, is_invalid_username_visible};
 use crate::handlers::{auth_handlers::*, mfa_handlers::*, page_detection::is_input_visible};
 use headless_chrome::Tab;
 use std::collections::HashSet;
@@ -25,10 +25,17 @@ fn try_handle_page(tab: &Tab, handled: &mut HashSet<&'static str>) -> anyhow::Re
         handled.insert("session_conflict");
         return Ok(true);
     }
-    
+
     if !handled.contains("invalid_username") && is_invalid_username_visible(tab)? {
         handled.insert("invalid_username");
-        return Err(anyhow::anyhow!("Invalid username or account not found"));
+        return Err(anyhow::anyhow!("Invalid username or account not found, Please re-run the program and try again."));
+    }
+
+    if !handled.contains("incorrect_password") && is_incorrect_password_visible(tab)? {
+        handled.insert("incorrect_password");
+        return Err(anyhow::anyhow!(
+            "Incorrect password provided. Please re-run the program and try again."
+        ));
     }
 
     if !handled.contains("username") && is_input_visible(tab, "input[name=\"loginfmt\"]")? {
@@ -42,7 +49,7 @@ fn try_handle_page(tab: &Tab, handled: &mut HashSet<&'static str>) -> anyhow::Re
         handled.insert("username");
         return Ok(true);
     }
-    
+
     if !handled.contains("ngc_error_use_password") && handle_ngc_error_use_password(tab, handled)? {
         handled.insert("ngc_error_use_password");
         return Ok(true);
@@ -128,7 +135,7 @@ pub fn run_login_and_get_dsid(
             last_url = current_url;
             retries = 0;
         }
-        
+
         if !no_auto_login {
             let handled_something = try_handle_page(&tab, &mut handled)?;
             if handled_something {
@@ -145,7 +152,7 @@ pub fn run_login_and_get_dsid(
                 )));
             }
         }
-        
+
         sleep(Duration::from_millis(400));
     }
 }
