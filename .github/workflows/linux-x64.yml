@@ -19,7 +19,7 @@ env:
 jobs:
   # ------------------------------------------------
   # JOB 1: Build the static MUSL binary
-  # ------------------------------------------------
+  #------------------------------------------------
   build:
     runs-on: ubuntu-latest
     steps:
@@ -134,14 +134,8 @@ jobs:
         mkdir -p AppDir/usr/bin
         cp ./${{ env.BINARY_NAME }} AppDir/usr/bin/
 
-        # Create a basic desktop file required by AppImageTool
-        echo "[Desktop Entry]
-Name=KUVPN
-Exec=kuvpn
-Icon=application-x-executable
-Terminal=true
-Type=Application
-Categories=Network;VPN;" > AppDir/kuvpn.desktop
+        # Create a basic desktop file required by AppImageTool (FIXED: using echo -e with newlines)
+        echo -e "[Desktop Entry]\nName=KUVPN\nExec=kuvpn\nIcon=application-x-executable\nTerminal=true\nType=Application\nCategories=Network;VPN;" > AppDir/kuvpn.desktop
 
         # Run linuxdeploy to generate the AppImage
         # Note: AppImage is created, but the user must still have 'openconnect' installed on the host OS.
