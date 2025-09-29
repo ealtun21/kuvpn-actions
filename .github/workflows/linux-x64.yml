@@ -59,7 +59,7 @@ jobs:
     - name: Prepare Binary and Extract Version
       id: extract_version
       run: |
-        chmod +x ./${{ env.BINARY_NAME }}
+        chmod +x ./${{ env.BINARY_NAME }}/${{ env.BINARY_NAME }}
         
         # Execute the binary to get the version (Expected output: "kuvpn 2.0.1")
         VERSION_OUTPUT=$(./${{ env.BINARY_NAME }} --version)
