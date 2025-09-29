@@ -29,7 +29,7 @@ jobs:
       uses: gmiam/rust-musl-action@master
       with:
         args: cargo build --target ${{ env.BUILD_TARGET }} --release -p kuvpn
-        
+
     - name: Rename and Prepare Binary
       # Rename the binary so the artifact name is cleaner and ready for packaging
       run: |
@@ -41,7 +41,7 @@ jobs:
       with:
         name: ${{ env.BINARY_NAME }}-musl-${{ env.BUILD_TARGET }}
         path: ./artifacts/${{ env.BINARY_NAME }}
-        
+
   # ------------------------------------------------
   # JOB 2: Create .deb, .rpm, .tar.gz, and AppImage
   # ------------------------------------------------
@@ -50,16 +50,17 @@ jobs:
     needs: build
     steps:
     - name: Download Binary Artifact
-      # Download artifact to the root of the runner's workspace
+      # FIX: Download artifact contents directly into the current directory (path: .)
       uses: actions/download-artifact@v4.1.4
       with:
         name: ${{ env.BINARY_NAME }}-musl-${{ env.BUILD_TARGET }}
-        path: ./${{ env.BINARY_NAME }} # Downloads artifact contents into a folder named 'kuvpn'
+        path: . # Binary will now be located at ./${{ env.BINARY_NAME }}
 
     - name: Prepare Binary and Extract Version
       id: extract_version
       run: |
-        chmod +x ./${{ env.BINARY_NAME }}/${{ env.BINARY_NAME }}
+        # FIX: Remove the redundant directory name since the binary is now at the root of the workspace.
+        chmod +x ./${{ env.BINARY_NAME }}
         
         # Execute the binary to get the version (Expected output: "kuvpn 2.0.1")
         VERSION_OUTPUT=$(./${{ env.BINARY_NAME }} --version)
@@ -130,13 +131,13 @@ jobs:
       run: |
         # Setup minimal AppDir structure
         mkdir -p AppDir/usr/bin
+        # Copy the binary from the correct root path
         cp ./${{ env.BINARY_NAME }} AppDir/usr/bin/
 
-        # Create a basic desktop file required by AppImageTool (FIXED: using echo -e with newlines)
+        # Create a basic desktop file required by AppImageTool
         echo -e "[Desktop Entry]\nName=KUVPN\nExec=kuvpn\nIcon=application-x-executable\nTerminal=true\nType=Application\nCategories=Network;VPN;" > AppDir/kuvpn.desktop
 
         # Run linuxdeploy to generate the AppImage
-        # Note: AppImage is created, but the user must still have 'openconnect' installed on the host OS.
         ./linuxdeploy-x86_64.AppImage \
           --appdir AppDir \
           --output appimage \
