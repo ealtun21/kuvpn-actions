@@ -111,7 +111,7 @@ jobs:
           --depends ${{ env.DEPENDENCY }} \
           ./${{ env.BINARY_NAME }}=/usr/bin/${{ env.BINARY_NAME }}
 
-    # --- Generic TAR.GZ Binary Archive (for manual install, Arch) ---
+# --- Generic TAR.GZ Binary Archive (for manual install, Arch) ---
     - name: Create .TAR.GZ Archive
       run: |
         fpm -s dir -t tar \
@@ -122,6 +122,7 @@ jobs:
           --maintainer "${{ env.MAINTAINER_INFO }}" \
           --description "Generic KUVPN binary tarball" \
           --prefix /usr/bin \
+          --compress gzip \
           ./${{ env.BINARY_NAME }}=/usr/bin/${{ env.BINARY_NAME }}
         # Rename the resulting archive for a clean download name
         mv *.tar.gz ${{ env.BINARY_NAME }}-${{ env.PACKAGE_VERSION }}-linux-x86_64.tar.gz
