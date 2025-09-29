@@ -1,4 +1,5 @@
-name: Linux x86_64 Build
+name: Linux x86_64 Build and Package
+
 on:
   workflow_dispatch:
   push:
@@ -6,22 +7,158 @@ on:
       - v*
   pull_request:
     branches: ["main"]
+
 env:
   CARGO_TERM_COLOR: always
   BUILD_TARGET: x86_64-unknown-linux-musl
-  BINARY_NAME: kuvpn-x86_64-unknown-linux-musl
+  BINARY_NAME: kuvpn
+  MAINTAINER_INFO: Eray Altun <ealtun21@ku.edu.tr>
+  DESCRIPTION_INFO: KUVPN client for Koç University (requires system-installed openconnect)
+  DEPENDENCY: openconnect
+
 jobs:
+  # ------------------------------------------------
+  # JOB 1: Build the static MUSL binary
+  # ------------------------------------------------
   build:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Build-musl
+    - name: Build static MUSL binary
+      # Use the musl target to create a statically linked binary (kuvpn)
       uses: gmiam/rust-musl-action@master
       with:
-        args: cargo build --target $BUILD_TARGET --release -p kuvpn
-    - name: Upload
+        args: cargo build --target ${{ env.BUILD_TARGET }} --release -p kuvpn
+        
+    - name: Rename and Prepare Binary
+      # Rename the binary so the artifact name is cleaner and ready for packaging
+      run: |
+        mkdir -p ./artifacts
+        cp ./target/${{ env.BUILD_TARGET }}/release/kuvpn ./artifacts/${{ env.BINARY_NAME }}
+
+    - name: Upload Binary Artifact
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: kuvpn-x86_64-unknown-linux-musl
+        name: ${{ env.BINARY_NAME }}-musl-${{ env.BUILD_TARGET }}
+        path: ./artifacts/${{ env.BINARY_NAME }}
+        
+  # ------------------------------------------------
+  # JOB 2: Create .deb, .rpm, .tar.gz, and AppImage
+  # ------------------------------------------------
+  package:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+    - name: Download Binary Artifact
+      # Download artifact to the root of the runner's workspace
+      uses: actions/download-artifact@v4.1.4
+      with:
+        name: ${{ env.BINARY_NAME }}-musl-${{ env.BUILD_TARGET }}
+        path: ./${{ env.BINARY_NAME }} # Downloads artifact contents into a folder named 'kuvpn'
+
+    - name: Prepare Binary and Extract Version
+      id: extract_version
+      run: |
+        # Move the binary out of the intermediate folder and make it executable
+        mv ./${{ env.BINARY_NAME }}/${{ env.BINARY_NAME }} ./${{ env.BINARY_NAME }}
+        chmod +x ./${{ env.BINARY_NAME }}
+        
+        # Execute the binary to get the version (Expected output: "kuvpn 2.0.1")
+        VERSION_OUTPUT=$(./${{ env.BINARY_NAME }} --version)
+        VERSION=$(echo "$VERSION_OUTPUT" | awk '{print $2}')
+        
+        if [ -z "$VERSION" ]; then
+          echo "::error::Could not extract version from binary output: $VERSION_OUTPUT"
+          VERSION="0.0.0-dev"
+        fi
+        
+        echo "Extracted Version: $VERSION"
+        echo "PACKAGE_VERSION=$VERSION" >> $GITHUB_ENV
+
+    - name: Setup Packaging Tools (FPM and AppImage)
+      run: |
+        # Install FPM dependencies (Ruby)
+        sudo apt-get update
+        sudo apt-get install -y ruby ruby-dev
+        gem install fpm
+
+        # Install AppImage tools (linuxdeploy)
+        wget -q -O linuxdeploy-x86_64.AppImage https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+        chmod +x linuxdeploy-x86_64.AppImage
+    
+    # --- DEB Package ---
+    - name: Create .DEB Package (Debian/Ubuntu)
+      run: |
+        fpm -s dir -t deb \
+          -n ${{ env.BINARY_NAME }} \
+          -v ${{ env.PACKAGE_VERSION }} \
+          --iteration 1 \
+          --architecture amd64 \
+          --maintainer "${{ env.MAINTAINER_INFO }}" \
+          --description "${{ env.DESCRIPTION_INFO }}" \
+          --depends ${{ env.DEPENDENCY }} \
+          ./${{ env.BINARY_NAME }}=/usr/bin/${{ env.BINARY_NAME }}
+          
+    # --- RPM Package ---
+    - name: Create .RPM Package (Fedora/RHEL)
+      run: |
+        fpm -s dir -t rpm \
+          -n ${{ env.BINARY_NAME }} \
+          -v ${{ env.PACKAGE_VERSION }} \
+          --iteration 1 \
+          --architecture x86_64 \
+          --maintainer "${{ env.MAINTAINER_INFO }}" \
+          --description "${{ env.DESCRIPTION_INFO }}" \
+          --depends ${{ env.DEPENDENCY }} \
+          ./${{ env.BINARY_NAME }}=/usr/bin/${{ env.BINARY_NAME }}
+
+    # --- Generic TAR.GZ Binary Archive (for manual install, Arch) ---
+    - name: Create .TAR.GZ Archive
+      run: |
+        fpm -s dir -t tar \
+          -n ${{ env.BINARY_NAME }} \
+          -v ${{ env.PACKAGE_VERSION }} \
+          --iteration 1 \
+          --architecture x86_64 \
+          --maintainer "${{ env.MAINTAINER_INFO }}" \
+          --description "Generic KUVPN binary tarball" \
+          --prefix /usr/bin \
+          ./${{ env.BINARY_NAME }}=/usr/bin/${{ env.BINARY_NAME }}
+        # Rename the resulting archive for a clean download name
+        mv *.tar.gz ${{ env.BINARY_NAME }}-${{ env.PACKAGE_VERSION }}-linux-x86_64.tar.gz
+
+    # --- AppImage ---
+    - name: Create AppImage Package
+      run: |
+        # Setup minimal AppDir structure
+        mkdir -p AppDir/usr/bin
+        cp ./${{ env.BINARY_NAME }} AppDir/usr/bin/
+
+        # Create a basic desktop file required by AppImageTool
+        echo "[Desktop Entry]
+Name=KUVPN
+Exec=kuvpn
+Icon=application-x-executable
+Terminal=true
+Type=Application
+Categories=Network;VPN;" > AppDir/kuvpn.desktop
+
+        # Run linuxdeploy to generate the AppImage
+        # Note: AppImage is created, but the user must still have 'openconnect' installed on the host OS.
+        ./linuxdeploy-x86_64.AppImage \
+          --appdir AppDir \
+          --output appimage \
+          -e AppDir/usr/bin/${{ env.BINARY_NAME }}
+          
+        # Rename the AppImage to a clean name
+        mv *.AppImage ${{ env.BINARY_NAME }}-${{ env.PACKAGE_VERSION }}-x86_64.AppImage
+
+    - name: Upload Package Artifacts
+      uses: actions/upload-artifact@v4.3.1
+      with:
+        name: linux-packages-${{ env.BUILD_TARGET }}
         path: |
-          ./target/x86_64-unknown-linux-musl/release/kuvpn
+          ./*.deb
+          ./*.rpm
+          ./*.tar.gz
+          ./*.AppImage
