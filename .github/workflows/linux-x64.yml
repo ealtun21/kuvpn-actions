@@ -111,42 +111,6 @@ jobs:
           --depends ${{ env.DEPENDENCY }} \
           ./${{ env.BINARY_NAME }}=/usr/bin/${{ env.BINARY_NAME }}
 
-# --- Generic TAR.GZ Binary Archive (for manual install, Arch) ---
-    - name: Create .TAR.GZ Archive
-      run: |
-        fpm -s dir -t tar \
-          -n ${{ env.BINARY_NAME }} \
-          -v ${{ env.PACKAGE_VERSION }} \
-          --iteration 1 \
-          --architecture x86_64 \
-          --maintainer "${{ env.MAINTAINER_INFO }}" \
-          --description "Generic KUVPN binary tarball" \
-          --prefix /usr/bin \
-          --compress gzip \
-          ./${{ env.BINARY_NAME }}=/usr/bin/${{ env.BINARY_NAME }}
-        # Rename the resulting archive for a clean download name
-        mv *.tar.gz ${{ env.BINARY_NAME }}-${{ env.PACKAGE_VERSION }}-linux-x86_64.tar.gz
-
-    # --- AppImage ---
-    - name: Create AppImage Package
-      run: |
-        # Setup minimal AppDir structure
-        mkdir -p AppDir/usr/bin
-        # Copy the binary from the correct root path
-        cp ./${{ env.BINARY_NAME }} AppDir/usr/bin/
-
-        # Create a basic desktop file required by AppImageTool
-        echo -e "[Desktop Entry]\nName=KUVPN\nExec=kuvpn\nIcon=application-x-executable\nTerminal=true\nType=Application\nCategories=Network;VPN;" > AppDir/kuvpn.desktop
-
-        # Run linuxdeploy to generate the AppImage
-        ./linuxdeploy-x86_64.AppImage \
-          --appdir AppDir \
-          --output appimage \
-          -e AppDir/usr/bin/${{ env.BINARY_NAME }}
-          
-        # Rename the AppImage to a clean name
-        mv *.AppImage ${{ env.BINARY_NAME }}-${{ env.PACKAGE_VERSION }}-x86_64.AppImage
-
     - name: Upload Package Artifacts
       uses: actions/upload-artifact@v4.3.1
       with:
