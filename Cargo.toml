@@ -7,12 +7,12 @@ repository = "https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn"
 license = "MIT"
 
 [dependencies]
-anyhow = "1.0.99"
-clap = { version = "4.5.47", features = ["derive"] }
+anyhow = "1.0.100"
+clap = { version = "4.5.52", features = ["derive"] }
 colored = "3.0.0"
 env_logger = "0.11.8"
 headless_chrome = { version = "1.0.18", features = ["fetch", "rustls"] }
-log = "0.4.27"
+log = "0.4.28"
 rpassword = "7.4.0"
 which = "8.0.0"
 
