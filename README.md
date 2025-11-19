@@ -184,6 +184,9 @@ kuvpn --no-auto-login --disable-headless
 
 Later, once you login, it will remember your session so you can login without the need for this, on the next logins.
 
+### Waiting forever: seeminly doing nothing?
+In this case, kuvpn may be trying to download a static chrome to run, you can check logs using `-l debug`, if after a long time it still fails to download & run chrome, you can install chrome/chromium by hand to the machine, to bypass this issue.
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
