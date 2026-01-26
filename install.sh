@@ -1,183 +1,239 @@
 #!/bin/bash
-# Installation script for KUVPN
-# This script will download KUVPN and install it in $HOME/.kuvpn/bin
-# It will also add $HOME/.kuvpn/bin to PATH for common shells.
+# KUVPN Installer
 
-COLOR_PRIMARY="\033[0;34m"
-COLOR_WARN="\033[1;33m"
-COLOR_SUCCESS="\033[0;32m"
-COLOR_FAILURE="\033[0;31m"
-COLOR_RESET="\033[0m"
+set -e
 
-TAG="v2.0.1"
+# --- Configuration ---
+REPO="KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn"
+INSTALL_DIR="$HOME/.kuvpn/bin"
+BINARY_NAME="kuvpn"
+VERSION="${VERSION:-latest}"
 
-echo ""
-printf "${COLOR_PRIMARY}Installing KUVPN${COLOR_RESET}\n\n"
-printf "This script will download KUVPN and install it in \$HOME/.kuvpn/bin\n\n"
-
-CLI_DOWNLOAD_URL=""
-
-# Detect OS and architecture
-OS="$(uname -s)"
-ARCH="$(uname -m)"
-
-case "$OS" in
-    Darwin)
-        if [ "$ARCH" = "x86_64" ]; then
-            CLI_DOWNLOAD_URL="https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/releases/download/${TAG}/kuvpn-x86_64-apple-darwin"
-        elif [ "$ARCH" = "arm64" ]; then
-            CLI_DOWNLOAD_URL="https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/releases/download/${TAG}/kuvpn-aarch64-apple-darwin"
-        else
-            printf "${COLOR_FAILURE}Unsupported architecture: $ARCH${COLOR_RESET}\n"
-            exit 1
-        fi
-        ;;
-    Linux)
-        if [ "$ARCH" = "x86_64" ]; then
-            CLI_DOWNLOAD_URL="https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/releases/download/${TAG}/kuvpn-x86_64-unknown-linux-musl"
-        else
-            printf "${COLOR_FAILURE}Unsupported architecture: $ARCH${COLOR_RESET}\n"
-            exit 1
-        fi
-        ;;
-    *)
-        printf "${COLOR_FAILURE}Unsupported OS: $OS${COLOR_RESET}\n"
-        exit 1
-        ;;
-esac
-
-# Create the directory if it doesn't exist
-if [ ! -d "$HOME/.kuvpn/bin" ]; then
-    mkdir -p "$HOME/.kuvpn/bin" || {
-        printf "${COLOR_FAILURE}Failed to create directory: $HOME/.kuvpn/bin${COLOR_RESET}\n"
-        exit 1
-    }
+# --- Colors ---
+if [ -t 1 ]; then
+    COLOR_PRIMARY="\033[0;34m"
+    COLOR_WARN="\033[1;33m"
+    COLOR_SUCCESS="\033[0;32m"
+    COLOR_FAILURE="\033[0;31m"
+    COLOR_RESET="\033[0m"
+else
+    COLOR_PRIMARY=""
+    COLOR_WARN=""
+    COLOR_SUCCESS=""
+    COLOR_FAILURE=""
+    COLOR_RESET=""
 fi
 
-# If there's already a kuvpn binary, ask before overwriting
-if [ -f "$HOME/.kuvpn/bin/kuvpn" ]; then
-    printf "${COLOR_WARN}A KUVPN binary already exists at $HOME/.kuvpn/bin/kuvpn${COLOR_RESET}\n"
-    printf "Do you want to overwrite it? [y/N] "
-    read -r OVERWRITE < /dev/tty
-    if [ "$OVERWRITE" != "y" ] && [ "$OVERWRITE" != "Y" ]; then
-        printf "${COLOR_WARN}Installation aborted.${COLOR_RESET}\n"
-        exit 1
-    fi
-fi
+log_info() { printf "${COLOR_PRIMARY}[INFO]${COLOR_RESET} %s\n" "$1"; }
+log_warn() { printf "${COLOR_WARN}[WARN]${COLOR_RESET} %s\n" "$1"; }
+log_success() { printf "${COLOR_SUCCESS}[OK]${COLOR_RESET} %s\n" "$1"; }
+log_fail() { printf "${COLOR_FAILURE}[FAIL]${COLOR_RESET} %s\n" "$1"; exit 1; }
 
-# Download function with fallback
-download_kuvpn() {
-    # Attempt curl first
-    if command -v curl >/dev/null 2>&1; then
-        curl --proto '=https' --tlsv1.2 -sSfL "$CLI_DOWNLOAD_URL" -o "$HOME/.kuvpn/bin/kuvpn"
-    # Fallback to wget if curl doesn't exist
-    elif command -v wget >/dev/null 2>&1; then
-        wget -qO "$HOME/.kuvpn/bin/kuvpn" "$CLI_DOWNLOAD_URL"
+# --- Architecture Detection ---
+detect_platform() {
+    OS="$(uname -s)"
+    ARCH="$(uname -m)"
+
+    case "$OS" in
+        Darwin)
+            if [ "$ARCH" = "x86_64" ]; then
+                PLATFORM="x86_64-apple-darwin"
+            elif [ "$ARCH" = "arm64" ]; then
+                PLATFORM="aarch64-apple-darwin"
+            else
+                log_fail "Unsupported macOS architecture: $ARCH"
+            fi
+            ;;
+        Linux)
+            if [ "$ARCH" = "x86_64" ]; then
+                PLATFORM="x86_64-unknown-linux-musl"
+            else
+                log_fail "Unsupported Linux architecture: $ARCH"
+            fi
+            ;;
+        *)
+            log_fail "Unsupported OS: $OS"
+            ;;
+    esac
+}
+
+# --- Version Resolution ---
+resolve_version() {
+    if [ "$VERSION" = "latest" ]; then
+        log_info "Resolving latest version..."
+        LATEST_URL="https://github.com/$REPO/releases/latest"
+        
+        if command -v curl >/dev/null 2>&1; then
+            TAG=$(curl -sL -o /dev/null -w %{url_effective} "$LATEST_URL" | rev | cut -d/ -f1 | rev)
+        else
+            log_fail "curl is required to resolve the latest version."
+        fi
     else
-        printf "${COLOR_FAILURE}Neither curl nor wget is installed. Please install one and retry.${COLOR_RESET}\n"
-        exit 1
+        TAG="$VERSION"
     fi
+
+    if [ -z "$TAG" ]; then
+        log_fail "Unable to resolve version."
+    fi
+    
+    log_info "Selected version: $TAG"
 }
 
-# Download the CLI
-printf "${COLOR_PRIMARY}Downloading KUVPN from:${COLOR_RESET} $CLI_DOWNLOAD_URL\n\n"
-download_kuvpn || {
-    printf "${COLOR_FAILURE}Download failed!${COLOR_RESET}\n\n"
-    exit 1
-}
-
-chmod +x "$HOME/.kuvpn/bin/kuvpn"
-
-################################################################################
-# Shell config updates
-################################################################################
-
-# Detect the user's shell (basename of $SHELL)
-USER_SHELL="$(basename "$SHELL")"
-
-# We’ll define the lines that we might need to add depending on shell
-BASH_EXPORT_LINE='export PATH="$PATH:$HOME/.kuvpn/bin"'
-ZSH_EXPORT_LINE='export PATH="$PATH:$HOME/.kuvpn/bin"'
-FISH_EXPORT_LINE='set -gx PATH $PATH $HOME/.kuvpn/bin'
-
-# A helper function to safely append lines
-safe_append_line() {
-    local config_file="$1"
-    local line_to_add="$2"
-    # Use grep with -Fxq to do an exact line match
-    if [ -f "$config_file" ] && [ -w "$config_file" ] && ! grep -Fxq "$line_to_add" "$config_file"; then
-        echo "$line_to_add" >> "$config_file"
+# --- Pre-Install Check ---
+# Returns 0 if we should proceed, 1 if we should abort
+check_existing_installation() {
+    local BIN_PATH="$INSTALL_DIR/$BINARY_NAME"
+    
+    # If binary doesn't exist, proceed automatically
+    if [ ! -f "$BIN_PATH" ]; then
         return 0
     fi
-    return 1
-}
 
-# Keep track of whether we successfully updated any shell config
-UPDATED_SHELL_CONFIG=false
+    # Check if force flag is on
+    if [ "$FORCE_INSTALL" == "1" ]; then
+        log_info "Force mode enabled. Overwriting existing installation."
+        return 0
+    fi
 
-case "$USER_SHELL" in
-    bash)
-        # Try appending to .bashrc, .bash_profile
-        if safe_append_line "$HOME/.bashrc" "$BASH_EXPORT_LINE"; then
-            UPDATED_SHELL_CONFIG=true
-        fi
-        if safe_append_line "$HOME/.bash_profile" "$BASH_EXPORT_LINE"; then
-            UPDATED_SHELL_CONFIG=true
-        fi
-        ;;
-    zsh)
-        if safe_append_line "$HOME/.zshrc" "$ZSH_EXPORT_LINE"; then
-            UPDATED_SHELL_CONFIG=true
-        fi
-        ;;
-    fish)
-        # fish typically uses ~/.config/fish/config.fish
-        FISH_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"
-        if [ ! -d "$(dirname "$FISH_CONFIG")" ]; then
-            mkdir -p "$(dirname "$FISH_CONFIG")"
-        fi
-        if safe_append_line "$FISH_CONFIG" "$FISH_EXPORT_LINE"; then
-            UPDATED_SHELL_CONFIG=true
-        fi
-        ;;
-    *)
-        # If the shell is something else, try updating .bashrc, .zshrc, etc. anyway
-        if safe_append_line "$HOME/.bashrc" "$BASH_EXPORT_LINE"; then
-            UPDATED_SHELL_CONFIG=true
-        fi
-        if safe_append_line "$HOME/.bash_profile" "$BASH_EXPORT_LINE"; then
-            UPDATED_SHELL_CONFIG=true
-        fi
-        if safe_append_line "$HOME/.zshrc" "$ZSH_EXPORT_LINE"; then
-            UPDATED_SHELL_CONFIG=true
-        fi
+    # Try to extract current version
+    # Output format expected: "kuvpn 2.0.0" -> awk prints "2.0.0"
+    local CURRENT_VER_RAW=$("$BIN_PATH" --version 2>/dev/null || echo "unknown unknown")
+    local CURRENT_VER=$(echo "$CURRENT_VER_RAW" | awk '{print $2}')
+    
+    # Clean 'v' from tag for comparison (v2.0.1 -> 2.0.1)
+    local TARGET_VER=${TAG#v} 
 
-        # If fish is installed, try that too
-        FISH_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"
-        if [ -d "$(dirname "$FISH_CONFIG")" ]; then
-            if safe_append_line "$FISH_CONFIG" "$FISH_EXPORT_LINE"; then
-                UPDATED_SHELL_CONFIG=true
+    if [ "$CURRENT_VER" == "$TARGET_VER" ]; then
+        # SAME VERSION
+        log_warn "Version $TAG is already installed."
+        if [ -t 0 ]; then
+            printf "Re-install anyway? [y/N] "
+            read -r REPLY
+            if [[ ! "$REPLY" =~ ^[Yy]$ ]]; then
+                log_warn "Aborted by user."
+                return 1
             fi
         fi
-
-        if [ "$UPDATED_SHELL_CONFIG" = false ]; then
-            printf "${COLOR_WARN}Unsupported or unknown shell: $USER_SHELL. You may need to manually add $HOME/.kuvpn/bin to your PATH.${COLOR_RESET}\n"
+    else
+        # DIFFERENT VERSION
+        log_warn "Existing installation found."
+        printf "  Current: ${COLOR_PRIMARY}%s${COLOR_RESET}\n" "$CURRENT_VER"
+        printf "  Target:  ${COLOR_PRIMARY}%s${COLOR_RESET}\n" "$TARGET_VER"
+        
+        if [ -t 0 ]; then
+            printf "Do you want to update/replace? [Y/n] "
+            read -r REPLY
+            # Default to Yes if empty
+            if [[ -n "$REPLY" && ! "$REPLY" =~ ^[Yy]$ ]]; then
+                log_warn "Aborted by user."
+                return 1
+            fi
         fi
-        ;;
-esac
+    fi
 
-if [ "$UPDATED_SHELL_CONFIG" = false ]; then
-    printf "${COLOR_WARN}We couldn't automatically update your shell config, or it was already configured.${COLOR_RESET}\n"
-    printf "${COLOR_WARN}You may need to manually ensure $HOME/.kuvpn/bin is in your PATH.${COLOR_RESET}\n"
+    return 0
+}
+
+# --- Download Logic ---
+install_binary() {
+    DOWNLOAD_URL="https://github.com/$REPO/releases/download/${TAG}/${BINARY_NAME}-${PLATFORM}"
+    TMP_DIR=$(mktemp -d)
+    TMP_FILE="$TMP_DIR/$BINARY_NAME"
+
+    log_info "Downloading from: $DOWNLOAD_URL"
+    
+    if command -v curl >/dev/null 2>&1; then
+        if ! curl --proto '=https' --tlsv1.2 -sSfL "$DOWNLOAD_URL" -o "$TMP_FILE"; then
+            rm -rf "$TMP_DIR"
+            log_fail "Download failed."
+        fi
+    elif command -v wget >/dev/null 2>&1; then
+        if ! wget -qO "$TMP_FILE" "$DOWNLOAD_URL"; then
+            rm -rf "$TMP_DIR"
+            log_fail "Download failed."
+        fi
+    else
+        rm -rf "$TMP_DIR"
+        log_fail "Neither curl nor wget found."
+    fi
+
+    mkdir -p "$INSTALL_DIR"
+    mv "$TMP_FILE" "$INSTALL_DIR/$BINARY_NAME"
+    chmod +x "$INSTALL_DIR/$BINARY_NAME"
+    rm -rf "$TMP_DIR"
+    
+    log_success "Installed at $INSTALL_DIR/$BINARY_NAME"
+}
+
+# --- Shell Configuration ---
+update_shell_config() {
+    local PATH_STR="\$HOME/.kuvpn/bin"
+    local SH_CMD="export PATH=\"\$PATH:$PATH_STR\""
+    local FISH_CMD="set -gx PATH \$PATH $PATH_STR"
+    local UPDATED=0
+
+    # 1. Update Standard Shells
+    local FILES=("$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.zshrc" "$HOME/.profile")
+
+    for config_file in "${FILES[@]}"; do
+        if [ -f "$config_file" ]; then
+            if ! grep -q ".kuvpn/bin" "$config_file"; then
+                echo "" >> "$config_file"
+                echo "# KUVPN PATH" >> "$config_file"
+                echo "$SH_CMD" >> "$config_file"
+                log_success "Added to PATH in $config_file"
+                UPDATED=1
+            else
+                log_info "Already in PATH: $config_file"
+            fi
+        fi
+    done
+
+    # 2. Update Fish Shell
+    local FISH_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"
+    if [ -d "$(dirname "$FISH_CONFIG")" ]; then
+        touch "$FISH_CONFIG"
+        if ! grep -q ".kuvpn/bin" "$FISH_CONFIG"; then
+            echo "" >> "$FISH_CONFIG"
+            echo "# KUVPN PATH" >> "$FISH_CONFIG"
+            echo "$FISH_CMD" >> "$FISH_CONFIG"
+            log_success "Added to PATH in $FISH_CONFIG"
+            UPDATED=1
+        else
+            log_info "Already in PATH: $FISH_CONFIG"
+        fi
+    fi
+
+    echo ""
+    if [ $UPDATED -eq 1 ]; then
+        log_info "Please restart your terminal or run: source <your_shell_config>"
+    fi
+}
+
+# --- Main Execution ---
+
+echo ""
+log_info "Starting KUVPN Installer..."
+
+FORCE_INSTALL=0
+for arg in "$@"; do
+    case $arg in
+        -y|--yes|--force) FORCE_INSTALL=1 ;;
+        --version=*) VERSION="${arg#*=}" ;;
+    esac
+done
+
+detect_platform
+resolve_version
+
+# Check if we should proceed (version check happens here)
+if check_existing_installation; then
+    install_binary
+    update_shell_config
+    echo ""
+    log_success "Installation Complete! Run 'kuvpn --help' to start."
+    echo ""
+else
+    # We exit gracefully if check_existing_installation returns 1
+    exit 0
 fi
-
-################################################################################
-# Done
-################################################################################
-
-printf "\n${COLOR_SUCCESS}Installation complete!${COLOR_RESET}\n"
-printf "KUVPN was installed to: $HOME/.kuvpn/bin/kuvpn\n\n"
-
-printf "${COLOR_PRIMARY}Next Steps:${COLOR_RESET}\n"
-printf "  1) Close and reopen your terminal, OR source your shell config (e.g. 'source ~/.bashrc')\n"
-printf "  2) Run 'kuvpn --help' to get started.\n\n"
