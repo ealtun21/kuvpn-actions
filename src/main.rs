@@ -71,6 +71,7 @@ fn main() -> ExitCode {
         &args.domain,
         "Mozilla/5.0",
         args.no_auto_login,
+        args.email
     ) {
         Ok(dsid) => dsid,
         Err(e) => {

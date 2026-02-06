@@ -56,4 +56,8 @@ pub struct Args {
     /// Disable automatic login handlers and only poll for DSID in a headful browser
     #[arg(long, default_value_t = false)]
     pub no_auto_login: bool,
+
+    /// Email for login (optional)
+    #[arg(long, default_value = None)]
+    pub email: Option<String>,
 }
