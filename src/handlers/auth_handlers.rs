@@ -11,9 +11,12 @@ pub fn fill_on_screen_and_click(
     msg: &str,
     button_selector: &str,
     is_password: bool,
+    value: Option<&String>,
 ) -> anyhow::Result<()> {
     if is_input_visible(tab, input_selector)? {
-        let value = if is_password {
+        let value = if value.is_some() {
+            value.unwrap().to_owned()
+        } else if is_password {
             prompt_password(msg)
         } else {
             prompt_text(msg)

@@ -20,7 +20,7 @@ fn poll_dsid(tab: &Tab, domain: &str) -> anyhow::Result<Option<String>> {
 }
 
 /// Attempts to handle the current page state.
-fn try_handle_page(tab: &Tab, handled: &mut HashSet<&'static str>) -> anyhow::Result<bool> {
+fn try_handle_page(tab: &Tab, handled: &mut HashSet<&'static str>, email: Option<&String>) -> anyhow::Result<bool> {
     if !handled.contains("pick_account") && handle_pick_account(tab)? {
         handled.insert("pick_account");
         return Ok(true);
@@ -55,6 +55,7 @@ fn try_handle_page(tab: &Tab, handled: &mut HashSet<&'static str>) -> anyhow::Re
             "Username (email): ",
             "#idSIButton9",
             false,
+            email,
         )?;
         handled.insert("username");
         return Ok(true);
@@ -82,6 +83,7 @@ fn try_handle_page(tab: &Tab, handled: &mut HashSet<&'static str>) -> anyhow::Re
             "Password: ",
             "#idSIButton9",
             true,
+            None,
         )?;
         handled.insert("password");
         return Ok(true);
@@ -112,6 +114,7 @@ pub fn run_login_and_get_dsid(
     domain: &str,
     user_agent: &str,
     no_auto_login: bool,
+    email: Option<String>,
 ) -> anyhow::Result<String> {
     const MAX_RETRIES: usize = 10;
 
@@ -147,7 +150,7 @@ pub fn run_login_and_get_dsid(
         }
 
         if !no_auto_login {
-            let handled_something = try_handle_page(&tab, &mut handled)?;
+            let handled_something = try_handle_page(&tab, &mut handled, email.as_ref())?;
             if handled_something {
                 retries = 0;
             } else {
