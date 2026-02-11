@@ -4,6 +4,25 @@ use std::error::Error;
 use std::io::{self, Write};
 use std::path::PathBuf;
 
+/// Trait for providing credentials and user input.
+pub trait CredentialsProvider {
+    fn request_text(&self, msg: &str) -> String;
+    fn request_password(&self, msg: &str) -> String;
+}
+
+/// A implementation of `CredentialsProvider` for terminal input.
+pub struct TerminalCredentialsProvider;
+
+impl CredentialsProvider for TerminalCredentialsProvider {
+    fn request_text(&self, msg: &str) -> String {
+        prompt_text(msg)
+    }
+
+    fn request_password(&self, msg: &str) -> String {
+        prompt_password(msg)
+    }
+}
+
 /// Returns a platform-appropriate user data directory for the Chrome instance.
 ///
 /// The directory path is constructed based on the operating system:

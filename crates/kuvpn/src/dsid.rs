@@ -1,6 +1,7 @@
 use crate::browser::create_browser;
 use crate::handlers::page_detection::{is_incorrect_password_visible, is_invalid_username_visible};
 use crate::handlers::{auth_handlers::*, mfa_handlers::*, page_detection::is_input_visible};
+use crate::utils::CredentialsProvider;
 use headless_chrome::Tab;
 use std::collections::HashSet;
 use std::thread::sleep;
@@ -20,7 +21,12 @@ fn poll_dsid(tab: &Tab, domain: &str) -> anyhow::Result<Option<String>> {
 }
 
 /// Attempts to handle the current page state.
-fn try_handle_page(tab: &Tab, handled: &mut HashSet<&'static str>, email: Option<&String>) -> anyhow::Result<bool> {
+fn try_handle_page(
+    tab: &Tab,
+    handled: &mut HashSet<&'static str>,
+    email: Option<&String>,
+    provider: &dyn CredentialsProvider,
+) -> anyhow::Result<bool> {
     if !handled.contains("pick_account") && handle_pick_account(tab)? {
         handled.insert("pick_account");
         return Ok(true);
@@ -56,6 +62,7 @@ fn try_handle_page(tab: &Tab, handled: &mut HashSet<&'static str>, email: Option
             "#idSIButton9",
             false,
             email,
+            provider,
         )?;
         handled.insert("username");
         return Ok(true);
@@ -84,6 +91,7 @@ fn try_handle_page(tab: &Tab, handled: &mut HashSet<&'static str>, email: Option
             "#idSIButton9",
             true,
             None,
+            provider,
         )?;
         handled.insert("password");
         return Ok(true);
@@ -115,6 +123,7 @@ pub fn run_login_and_get_dsid(
     user_agent: &str,
     no_auto_login: bool,
     email: Option<String>,
+    provider: &dyn CredentialsProvider,
 ) -> anyhow::Result<String> {
     const MAX_RETRIES: usize = 10;
 
@@ -150,7 +159,7 @@ pub fn run_login_and_get_dsid(
         }
 
         if !no_auto_login {
-            let handled_something = try_handle_page(&tab, &mut handled, email.as_ref())?;
+            let handled_something = try_handle_page(&tab, &mut handled, email.as_ref(), provider)?;
             if handled_something {
                 retries = 0;
             } else {

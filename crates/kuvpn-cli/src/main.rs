@@ -11,7 +11,7 @@ use kuvpn::run_login_and_get_dsid;
 use log::{error, info};
 use kuvpn::init_logger;
 use kuvpn::{execute_openconnect, locate_openconnect};
-use std::process::ExitCode;
+use std::process::{ExitCode, Stdio};
 use kuvpn::get_user_data_dir;
 
 /// The main entry point of the application.
@@ -65,7 +65,8 @@ fn main() -> ExitCode {
         &args.domain,
         "Mozilla/5.0",
         args.no_auto_login,
-        args.email
+        args.email,
+        &kuvpn::utils::TerminalCredentialsProvider,
     ) {
         Ok(dsid) => dsid,
         Err(e) => {
@@ -96,9 +97,17 @@ fn main() -> ExitCode {
     };
 
     // Execute `openconnect` with the retrieved DSID and specified URL.
-    if let Err(e) = execute_openconnect(dsid, args.url, &args.run_command, &openconnect_path) {
-        error!("Error executing openconnect: {}", e);
-        return ExitCode::FAILURE;
+    match execute_openconnect(dsid, args.url, &args.run_command, &openconnect_path, Stdio::inherit(), Stdio::inherit()) {
+        Ok(mut child) => {
+            // Wait for the child process to finish.
+            // Since we piped stdout/stderr, we might want to display them.
+            // For now, let's just wait and see.
+            let _ = child.wait();
+        }
+        Err(e) => {
+            error!("Error executing openconnect: {}", e);
+            return ExitCode::FAILURE;
+        }
     }
 
     ExitCode::SUCCESS
