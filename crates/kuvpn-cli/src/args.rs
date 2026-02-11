@@ -16,6 +16,19 @@ pub enum LogLevel {
     Trace,
 }
 
+impl From<LogLevel> for log::LevelFilter {
+    fn from(level: LogLevel) -> Self {
+        match level {
+            LogLevel::Off => log::LevelFilter::Off,
+            LogLevel::Info => log::LevelFilter::Info,
+            LogLevel::Warn => log::LevelFilter::Warn,
+            LogLevel::Debug => log::LevelFilter::Debug,
+            LogLevel::Error => log::LevelFilter::Error,
+            LogLevel::Trace => log::LevelFilter::Trace,
+        }
+    }
+}
+
 /// Simple program to retrieve DSID cookie and execute OpenConnect command
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
