@@ -1,7 +1,6 @@
 use log::info;
-use std::error::Error;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Child, Command, Stdio};
 use which::which;
 
 /// Attempts to locate the `openconnect` executable.
@@ -65,7 +64,9 @@ pub fn execute_openconnect(
     url: String,
     run_command: &Option<String>,
     openconnect_path: &Path,
-) -> Result<(), Box<dyn Error>> {
+    stdout: Stdio,
+    stderr: Stdio,
+) -> anyhow::Result<Child> {
     // Default list of privilege escalation tools.
     let mut default_tools = vec!["doas", "sudo", "pkexec"];
 
@@ -94,7 +95,7 @@ pub fn execute_openconnect(
     let command_to_run = default_tools
         .iter()
         .find_map(|&tool| which(tool).ok().map(|_| tool))
-        .ok_or("No available tool for running openconnect (sudo/doas/pkexec not found)")?;
+        .ok_or(anyhow::anyhow!("No available tool for running openconnect (sudo/doas/pkexec not found)"))?;
 
     println!(
         "Running openconnect using {} for elevated privileges or execution",
@@ -110,14 +111,16 @@ pub fn execute_openconnect(
 
     // Execute the command with the constructed arguments.
     // Example: sudo /path/to/openconnect --protocol nc -C DSID=abcd https://vpn.ku.edu.tr
-    Command::new(command_to_run)
+    let child = Command::new(command_to_run)
         .arg(openconnect_path)
         .arg("--protocol")
         .arg("nc")
         .arg("-C")
         .arg(format!("DSID={}", cookie_value))
         .arg(url)
-        .status()?;
+        .stdout(stdout)
+        .stderr(stderr)
+        .spawn()?;
 
-    Ok(())
+    Ok(child)
 }

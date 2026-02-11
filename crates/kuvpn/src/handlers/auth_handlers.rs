@@ -1,5 +1,5 @@
 use crate::handlers::page_detection::is_input_visible;
-use crate::utils::{js_escape, prompt_password, prompt_text};
+use crate::utils::{js_escape, CredentialsProvider};
 use headless_chrome::Tab;
 use std::thread::sleep;
 use std::time::Duration;
@@ -12,14 +12,15 @@ pub fn fill_on_screen_and_click(
     button_selector: &str,
     is_password: bool,
     value: Option<&String>,
+    provider: &dyn CredentialsProvider,
 ) -> anyhow::Result<()> {
     if is_input_visible(tab, input_selector)? {
-        let value = if value.is_some() {
-            value.unwrap().to_owned()
+        let value = if let Some(v) = value {
+            v.to_owned()
         } else if is_password {
-            prompt_password(msg)
+            provider.request_password(msg)
         } else {
-            prompt_text(msg)
+            provider.request_text(msg)
         };
 
         let value_escaped = js_escape(&value);
