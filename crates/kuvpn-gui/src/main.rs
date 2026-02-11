@@ -239,7 +239,10 @@ impl KuVpnGui {
                             tokio::select! {
                                 res = log_rx.recv() => {
                                     if let Some(log) = res {
-                                        if log.contains("Established") || log.contains("Connected as") {
+                                        if log.contains("Established") || 
+                                           log.contains("Connected as") || 
+                                           log.contains("Connected to HTTPS") ||
+                                           log.contains("Session established") {
                                             let _ = output.send(Message::StatusChanged(ConnectionStatus::Connected)).await;
                                         }
                                         let _ = output.send(Message::LogAppended(log)).await;
