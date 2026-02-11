@@ -4,21 +4,15 @@
 //! and then uses that DSID to establish a VPN connection via the `openconnect` command.
 
 mod args;
-mod browser;
-mod dsid;
-mod handlers;
-mod logger;
-mod openconnect;
-mod utils;
 
 use args::Args;
 use clap::Parser;
-use dsid::run_login_and_get_dsid;
+use kuvpn::run_login_and_get_dsid;
 use log::{error, info};
-use logger::init_logger;
-use openconnect::{execute_openconnect, locate_openconnect};
+use kuvpn::init_logger;
+use kuvpn::{execute_openconnect, locate_openconnect};
 use std::process::ExitCode;
-use utils::get_user_data_dir;
+use kuvpn::get_user_data_dir;
 
 /// The main entry point of the application.
 ///
@@ -35,7 +29,7 @@ use utils::get_user_data_dir;
 fn main() -> ExitCode {
     // Parse command-line arguments.
     let args = Args::parse();
-    init_logger(&args.level);
+    init_logger(args.level.clone().into());
 
     // Handle the clean session option.
     if args.clean {

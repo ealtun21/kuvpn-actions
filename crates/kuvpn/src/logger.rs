@@ -1,18 +1,8 @@
-use crate::args::LogLevel;
-
 use colored::Colorize;
 use log::{Level, LevelFilter};
 use std::io::Write;
 
-pub fn init_logger(mode: &LogLevel) {
-    let level = match mode {
-        LogLevel::Info => LevelFilter::Info,
-        LogLevel::Off => LevelFilter::Off,
-        LogLevel::Error => LevelFilter::Error,
-        LogLevel::Debug => LevelFilter::Debug,
-        LogLevel::Warn => LevelFilter::Warn,
-        LogLevel::Trace => LevelFilter::Trace,
-    };
+pub fn init_logger(level: LevelFilter) {
     env_logger::Builder::new()
         .filter(None, level)
         .format(|buf, record| {
