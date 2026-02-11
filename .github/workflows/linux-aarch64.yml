@@ -1,0 +1,27 @@
+name: Linux aarch64 Build
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - v*
+  pull_request:
+    branches: ["main"]
+env:
+  CARGO_TERM_COLOR: always
+  BUILD_TARGET: aarch64-unknown-linux-musl
+  BINARY_NAME: kuvpn-aarch64-unknown-linux-musl
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build-musl
+      uses: gmiam/rust-musl-action@master
+      with:
+        args: cargo build --target $BUILD_TARGET --release -p kuvpn
+    - name: Upload
+      uses: actions/upload-artifact@v4.3.1
+      with:
+        name: kuvpn-aarch64-unknown-linux-musl
+        path: |
+          ./target/aarch64-unknown-linux-musl/release/kuvpn
