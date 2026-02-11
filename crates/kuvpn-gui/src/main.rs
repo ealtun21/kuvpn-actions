@@ -386,7 +386,7 @@ impl KuVpnGui {
             container(iced::widget::Space::with_height(0))
         };
 
-        let action_button = match self.status {
+        let action_button: Element<Message> = match self.status {
             ConnectionStatus::Disconnected => button(
                 text("Connect")
                     .size(24)
@@ -395,7 +395,8 @@ impl KuVpnGui {
             .width(Length::Fill)
             .padding(15)
             .on_press(Message::ConnectPressed)
-            .style(button::primary),
+            .style(button::primary)
+            .into(),
             ConnectionStatus::Connecting => button(
                 text("Cancel")
                     .size(24)
@@ -404,16 +405,9 @@ impl KuVpnGui {
             .width(Length::Fill)
             .padding(15)
             .on_press(Message::DisconnectPressed)
-            .style(button::secondary),
-            ConnectionStatus::Connected => button(
-                text("Disconnect")
-                    .size(24)
-                    .align_x(iced::alignment::Horizontal::Center),
-            )
-            .width(Length::Fill)
-            .padding(15)
-            .on_press(Message::DisconnectPressed)
-            .style(button::success),
+            .style(button::secondary)
+            .into(),
+            ConnectionStatus::Connected => container(iced::widget::Space::with_height(0)).into(),
         };
 
         let advanced_content = if self.show_advanced {

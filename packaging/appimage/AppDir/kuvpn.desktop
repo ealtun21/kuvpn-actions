@@ -1,8 +1,1 @@
-[Desktop Entry]
-Type=Application
-Name=KUVPN GUI
-Exec=kuvpn-gui
-Icon=kuvpn
-Categories=Network;
-Comment=Connect to Koç University VPN
-Terminal=false
+usr/share/applications/kuvpn.desktop
