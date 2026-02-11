@@ -5,7 +5,7 @@ set -e
 
 # --- Configuration ---
 REPO="KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn"
-INSTALL_DIR="$HOME/.kuvpn/bin"
+INSTALL_DIR="$HOME/.local/bin"
 BINARY_NAME="kuvpn"
 VERSION="${VERSION:-latest}"
 
@@ -167,9 +167,17 @@ install_binary() {
 
 # --- Shell Configuration ---
 update_shell_config() {
-    local PATH_STR="\$HOME/.kuvpn/bin"
-    local SH_CMD="export PATH=\"\$PATH:$PATH_STR\""
-    local FISH_CMD="set -gx PATH \$PATH $PATH_STR"
+    # Check if ~/.local/bin is already in PATH
+    if echo "$PATH" | grep -q "$HOME/.local/bin"; then
+        return 0
+    fi
+    
+    # Not in PATH, add it to shell configs
+    log_warn "~/.local/bin is not in your PATH. Adding to shell configuration..."
+    
+    local PATH_STR="\$HOME/.local/bin"
+    local SH_CMD="export PATH=\"$PATH_STR:\$PATH\""
+    local FISH_CMD="set -gx PATH $PATH_STR \$PATH"
     local UPDATED=0
 
     # 1. Update Standard Shells
@@ -177,9 +185,9 @@ update_shell_config() {
 
     for config_file in "${FILES[@]}"; do
         if [ -f "$config_file" ]; then
-            if ! grep -q ".kuvpn/bin" "$config_file"; then
+            if ! grep -q ".local/bin" "$config_file"; then
                 echo "" >> "$config_file"
-                echo "# KUVPN PATH" >> "$config_file"
+                echo "# User binaries" >> "$config_file"
                 echo "$SH_CMD" >> "$config_file"
                 log_success "Added to PATH in $config_file"
                 UPDATED=1
@@ -193,9 +201,9 @@ update_shell_config() {
     local FISH_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"
     if [ -d "$(dirname "$FISH_CONFIG")" ]; then
         touch "$FISH_CONFIG"
-        if ! grep -q ".kuvpn/bin" "$FISH_CONFIG"; then
+        if ! grep -q ".local/bin" "$FISH_CONFIG"; then
             echo "" >> "$FISH_CONFIG"
-            echo "# KUVPN PATH" >> "$FISH_CONFIG"
+            echo "# User binaries" >> "$FISH_CONFIG"
             echo "$FISH_CMD" >> "$FISH_CONFIG"
             log_success "Added to PATH in $FISH_CONFIG"
             UPDATED=1
