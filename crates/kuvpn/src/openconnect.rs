@@ -77,27 +77,23 @@ pub fn execute_openconnect(
             info!("Custom command found: {}", custom_command);
             default_tools.insert(0, custom_command.as_str());
         } else {
-            println!(
+            log::info!(
                 "Custom command '{}' not found, falling back to default tools.",
-                custom_command
-            );
-            info!(
-                "Custom command '{}' not found, using default tools.",
                 custom_command
             );
         }
     } else {
-        info!("No custom run command provided, defaulting to built-in tools.");
+        log::info!("No custom run command provided, defaulting to built-in tools.");
     }
 
     // Identify the first available escalation tool from the list.
-    info!("Checking for available tools/commands: {:?}", default_tools);
+    log::info!("Checking for available tools/commands: {:?}", default_tools);
     let command_to_run = default_tools
         .iter()
         .find_map(|&tool| which(tool).ok().map(|_| tool))
         .ok_or(anyhow::anyhow!("No available tool for running openconnect (sudo/doas/pkexec not found)"))?;
 
-    println!(
+    log::info!(
         "Running openconnect using {} for elevated privileges or execution",
         command_to_run
     );

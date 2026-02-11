@@ -47,8 +47,10 @@ pub fn create_browser(agent: &str, headless: bool) -> Result<Browser, Box<dyn Er
         ])
         .user_data_dir(Some(user_data_dir));
 
-    // If the default Chrome executable is available, specify its path.
-    if let Ok(executable_path) = default_executable() {
+    // If KUVPN_CHROME_PATH is set, use it. Otherwise, use default.
+    if let Ok(path) = std::env::var("KUVPN_CHROME_PATH") {
+        launch_options = launch_options.path(Some(path.into()));
+    } else if let Ok(executable_path) = default_executable() {
         launch_options = launch_options.path(Some(executable_path));
     }
 

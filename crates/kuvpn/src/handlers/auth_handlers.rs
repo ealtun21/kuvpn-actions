@@ -64,7 +64,7 @@ pub fn click_kmsi_if_present(tab: &Tab) -> anyhow::Result<bool> {
 
     let visible = tab.evaluate(js, false)?.value.unwrap().as_bool().unwrap();
     if visible {
-        println!("[*] Detected KMSI – pressing Yes...");
+        log::info!("[*] Detected KMSI – pressing Yes...");
         tab.evaluate(
             "var chk=document.querySelector('#KmsiCheckboxField'); if(chk && !chk.checked){chk.click();}",
             false
@@ -97,7 +97,7 @@ pub fn handle_session_conflict(tab: &Tab) -> anyhow::Result<bool> {
         .unwrap();
 
     if is_conflict_page {
-        println!("[*] Detected existing VPN session. Continuing...");
+        log::info!("[*] Detected existing VPN session. Continuing...");
         tab.evaluate(
             r#"var btn=document.getElementById('btnContinue'); if(btn){btn.click();}"#,
             false,
@@ -134,7 +134,7 @@ pub fn handle_remote_ngc_denied_next(tab: &headless_chrome::Tab) -> anyhow::Resu
         .unwrap_or(false);
 
     if is_denied_page {
-        println!("[*] Authenticator denied page detected. Pressing Next...");
+        log::info!("[*] Authenticator denied page detected. Pressing Next...");
         tab.evaluate(
             "var btn=document.getElementById('idSIButton9'); if(btn){btn.focus();btn.click();}",
             false,
@@ -164,7 +164,7 @@ pub fn handle_pick_account(tab: &headless_chrome::Tab) -> anyhow::Result<bool> {
     )?.value.unwrap().as_bool().unwrap_or(false);
 
     if is_picker {
-        println!("[*] 'Pick an account' page detected. Selecting the first account...");
+        log::info!("[*] 'Pick an account' page detected. Selecting the first account...");
         // Click the first available tile button
         tab.evaluate(
             r#"(function() {
