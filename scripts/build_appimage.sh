@@ -58,6 +58,7 @@ if [ -n "$OPENCONNECT_HOST" ]; then
 fi
 
 # Build Minimal AppImage
+export NO_STRIP=1
 ./packaging/appimage/linuxdeploy --appdir "$APPDIR" \
     --executable "$APPDIR/usr/bin/kuvpn-gui" \
     $( [ -f "$APPDIR/usr/bin/openconnect" ] && echo "--executable $APPDIR/usr/bin/openconnect" ) \
