@@ -47,6 +47,8 @@ detect_platform() {
         Linux)
             if [ "$ARCH" = "x86_64" ]; then
                 PLATFORM="x86_64-unknown-linux-musl"
+            elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+                PLATFORM="aarch64-unknown-linux-musl"
             else
                 log_fail "Unsupported Linux architecture: $ARCH"
             fi
