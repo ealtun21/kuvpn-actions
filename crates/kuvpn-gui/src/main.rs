@@ -1,4 +1,4 @@
-use iced::widget::{button, column, container, row, scrollable, text, text_input, checkbox};
+use iced::widget::{button, column, container, row, scrollable, text, text_input, checkbox, pick_list};
 use iced::{Alignment, Element, Length, Task, Font, stream, Theme};
 use std::sync::{Arc, Mutex};
 use tokio::sync::{mpsc, oneshot};
@@ -8,7 +8,7 @@ use kuvpn::utils::CredentialsProvider;
 use futures::SinkExt;
 
 pub fn main() -> iced::Result {
-    iced::run("KUVPN GUI", KuVpnGui::update, KuVpnGui::view)
+    iced::run("KUVPN", KuVpnGui::update, KuVpnGui::view)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -22,7 +22,9 @@ struct KuVpnGui {
     url: String,
     domain: String,
     email: String,
-    headless: bool,
+    show_browser: bool,
+    show_advanced: bool,
+    show_console: bool,
     logs: Vec<String>,
     status: ConnectionStatus,
     pending_request: Option<InputRequest>,
@@ -45,7 +47,9 @@ enum Message {
     DomainChanged(String),
     EmailChanged(String),
     EscalationToolChanged(String),
-    HeadlessToggled(bool),
+    ShowBrowserToggled(bool),
+    ToggleAdvanced,
+    ToggleConsole,
     ConnectPressed,
     DisconnectPressed,
     ClearSessionPressed,
@@ -90,7 +94,7 @@ impl GuiProvider {
 }
 
 struct GuiLogger {
-    tx: Mutex<Option<mpsc::Sender<String>>>,
+    tx: Mutex<Option<mpsc::Sender<String>>>
 }
 
 impl log::Log for GuiLogger {
@@ -110,21 +114,13 @@ static GUI_LOGGER: GuiLogger = GuiLogger { tx: Mutex::new(None) };
 impl KuVpnGui {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::UrlChanged(url) => {
-                self.url = url;
-            }
-            Message::DomainChanged(domain) => {
-                self.domain = domain;
-            }
-            Message::EmailChanged(email) => {
-                self.email = email;
-            }
-            Message::EscalationToolChanged(tool) => {
-                self.escalation_tool = tool;
-            }
-            Message::HeadlessToggled(headless) => {
-                self.headless = headless;
-            }
+            Message::UrlChanged(url) => self.url = url,
+            Message::DomainChanged(domain) => self.domain = domain,
+            Message::EmailChanged(email) => self.email = email,
+            Message::EscalationToolChanged(tool) => self.escalation_tool = tool,
+            Message::ShowBrowserToggled(show) => self.show_browser = show,
+            Message::ToggleAdvanced => self.show_advanced = !self.show_advanced,
+            Message::ToggleConsole => self.show_console = !self.show_console,
             Message::ConnectPressed => {
                 if self.status == ConnectionStatus::Disconnected {
                     self.status = ConnectionStatus::Connecting;
@@ -134,7 +130,7 @@ impl KuVpnGui {
                     let url = self.url.clone();
                     let domain = self.domain.clone();
                     let email = if self.email.is_empty() { None } else { Some(self.email.clone()) };
-                    let headless = self.headless;
+                    let headless = !self.show_browser;
                     let escalation_tool = self.escalation_tool.clone();
                     let (cancel_tx, mut cancel_rx) = oneshot::channel();
                     self.cancel_tx = Some(cancel_tx);
@@ -142,13 +138,12 @@ impl KuVpnGui {
                     return Task::stream(stream::channel(100, move |mut output| async move {
                         let (log_tx, mut log_rx) = mpsc::channel(100);
                         let (req_tx, mut req_rx) = mpsc::channel(1);
+                        let (child_tx, mut child_rx) = mpsc::channel::<Arc<Mutex<Option<std::process::Child>>>>(1);
                         
-                        // Update logger sender
                         if let Ok(mut guard) = GUI_LOGGER.tx.lock() {
                             *guard = Some(log_tx.clone());
                         }
 
-                        // Set up logger once
                         LOGGER_INIT.call_once(|| {
                             let _ = log::set_logger(&GUI_LOGGER);
                             log::set_max_level(log::LevelFilter::Info);
@@ -157,15 +152,12 @@ impl KuVpnGui {
                         let url_c = url.clone();
                         let domain_c = domain.clone();
                         let email_c = email.clone();
-                        let headless_c = headless;
                         let log_tx_c = log_tx.clone();
-
-                        let (child_tx, mut child_rx) = mpsc::channel::<Arc<Mutex<Option<std::process::Child>>>>(1);
 
                         std::thread::spawn(move || {
                             let provider = GuiProvider { request_tx: req_tx };
                             let dsid_res = kuvpn::run_login_and_get_dsid(
-                                !headless_c,
+                                headless,
                                 &url_c,
                                 &domain_c,
                                 "Mozilla/5.0",
@@ -191,7 +183,7 @@ impl KuVpnGui {
                                 }
                             };
 
-                            let _ = log_tx_c.blocking_send("[*] Executing openconnect...".to_string());
+                            let _ = log_tx_c.blocking_send(format!("[*] Executing openconnect (escalation: {})...", escalation_tool));
                             match kuvpn::execute_openconnect(dsid, url_c, &Some(escalation_tool), &openconnect_path, Stdio::piped(), Stdio::piped()) {
                                 Ok(mut child) => {
                                     let stdout = child.stdout.take().unwrap();
@@ -273,7 +265,6 @@ impl KuVpnGui {
                                 }
                             }
                         }
-                        
                         let _ = output.send(Message::ConnectionFinished(None)).await;
                     }));
                 }
@@ -345,11 +336,29 @@ impl KuVpnGui {
 
     fn view(&self) -> Element<Message> {
         let title = text("KUVPN")
-            .size(40)
+            .size(50)
             .width(Length::Fill)
             .align_x(iced::alignment::Horizontal::Center);
 
-        let inputs = column![
+        let status_text = match self.status {
+            ConnectionStatus::Disconnected => text("Disconnected").color(iced::Color::from_rgb(0.7, 0.7, 0.7)),
+            ConnectionStatus::Connecting => text("Connecting...").color(iced::Color::from_rgb(1.0, 0.8, 0.0)),
+            ConnectionStatus::Connected => text("Connected").color(iced::Color::from_rgb(0.0, 0.8, 0.0)),
+        };
+
+        let header = column![
+            title,
+            container(status_text).width(Length::Fill).center_x(Length::Fill)
+        ].spacing(10);
+
+        let email_input = row![
+            text("Email:").width(Length::Fixed(80.0)),
+            text_input("user@ku.edu.tr (optional)", &self.email)
+                .on_input(Message::EmailChanged)
+                .padding(10),
+        ].spacing(10).align_y(Alignment::Center);
+
+        let advanced_content = column![
             row![
                 text("VPN URL:").width(Length::Fixed(120.0)),
                 text_input("https://vpn.ku.edu.tr", &self.url)
@@ -367,22 +376,8 @@ impl KuVpnGui {
             .spacing(10)
             .align_y(Alignment::Center),
             row![
-                text("Email:").width(Length::Fixed(120.0)),
-                text_input("user@ku.edu.tr (optional)", &self.email)
-                    .on_input(Message::EmailChanged)
-                    .padding(10),
-            ]
-            .spacing(10)
-            .align_y(Alignment::Center),
-            row![
-                text("Headless Mode:").width(Length::Fixed(120.0)),
-                checkbox("Use headless browser for login", self.headless).on_toggle(Message::HeadlessToggled),
-            ]
-            .spacing(10)
-            .align_y(Alignment::Center),
-            row![
-                text("Escalation Tool:").width(Length::Fixed(120.0)),
-                iced::widget::pick_list(
+                text("Escalation:").width(Length::Fixed(120.0)),
+                pick_list(
                     vec!["pkexec".to_string(), "sudo".to_string(), "doas".to_string()],
                     Some(self.escalation_tool.clone()),
                     Message::EscalationToolChanged
@@ -390,24 +385,31 @@ impl KuVpnGui {
             ]
             .spacing(10)
             .align_y(Alignment::Center),
-        ]
-        .spacing(15);
+            row![
+                checkbox("Show Hidden Browser", self.show_browser).on_toggle(Message::ShowBrowserToggled),
+            ].spacing(10),
+            button(text("Clear Session Data")).on_press(Message::ClearSessionPressed).style(button::secondary),
+        ].spacing(10).padding(10);
+
+        let advanced_toggle = button(text(if self.show_advanced { "Hide Advanced Settings" } else { "Show Advanced Settings" }))
+            .on_press(Message::ToggleAdvanced)
+            .style(button::text);
 
         let mfa_notice = if let Some(mfa) = &self.mfa_info {
             container(
                 text(mfa)
-                    .size(20)
+                    .size(24)
                     .color(iced::Color::from_rgb(1.0, 1.0, 0.0))
                     .align_x(iced::alignment::Horizontal::Center)
                     .width(Length::Fill),
             )
-            .padding(10)
-            .style(|_theme: &Theme| container::Style::default()
+            .padding(20)
+            .style(|_theme: &Theme| container::Style::default() 
                 .background(iced::Color::from_rgb(0.2, 0.2, 0.0))
                 .border(iced::Border {
                     color: iced::Color::from_rgb(1.0, 1.0, 0.0),
                     width: 2.0,
-                    radius: 8.0.into(),
+                    radius: 12.0.into(),
                 })
             )
         } else {
@@ -416,66 +418,74 @@ impl KuVpnGui {
 
         let connect_button = match self.status {
             ConnectionStatus::Disconnected => button(
-                text("Connect to VPN")
-                    .size(18)
+                text("Connect")
+                    .size(24)
                     .align_x(iced::alignment::Horizontal::Center),
             )
             .width(Length::Fill)
-            .padding(15)
-            .on_press(Message::ConnectPressed),
+            .padding(20)
+            .on_press(Message::ConnectPressed)
+            .style(button::primary),
             ConnectionStatus::Connecting => button(
-                text("Establishing Connection...")
-                    .size(18)
+                text("Connecting...")
+                    .size(24)
                     .align_x(iced::alignment::Horizontal::Center),
             )
             .width(Length::Fill)
-            .padding(15),
+            .padding(20),
             ConnectionStatus::Connected => button(
-                text("Connected - Disconnect")
-                    .size(18)
+                text("Disconnect")
+                    .size(24)
                     .align_x(iced::alignment::Horizontal::Center),
             )
             .width(Length::Fill)
-            .padding(15)
+            .padding(20)
             .on_press(Message::DisconnectPressed)
-            .style(button::danger),
+            .style(button::success),
         };
 
-        let clear_button = button(
-            text("Clear Session")
-                .align_x(iced::alignment::Horizontal::Center),
-        )
-        .padding(10)
-        .on_press(Message::ClearSessionPressed)
-        .style(button::secondary);
-
-        let actions = column![connect_button, clear_button].spacing(10).align_x(Alignment::Center);
-
-        let console_content = self.logs.join("\n");
-        let console = container(
-            scrollable(
-                text(console_content)
-                    .font(Font::MONOSPACE)
-                    .size(13)
-                    .color(iced::Color::from_rgb(0.0, 1.0, 0.0)), // Green terminal text
+        let console = if self.show_console {
+            container(
+                scrollable(
+                    text(self.logs.join("\n"))
+                        .font(Font::MONOSPACE)
+                        .size(12)
+                        .color(iced::Color::from_rgb(0.0, 0.9, 0.0)),
+                )
+                .height(Length::Fill),
             )
-            .height(Length::Fill),
-        )
-        .padding(10)
-        .height(Length::Fill)
-        .width(Length::Fill)
-        .style(|_theme: &Theme| container::Style::default()
-            .background(iced::Color::from_rgb(0.05, 0.05, 0.05)) // Dark background
-            .border(iced::Border {
-                color: iced::Color::from_rgb(0.2, 0.2, 0.2),
-                width: 1.0,
-                radius: 4.0.into(),
-            })
-        );
+            .padding(10)
+            .height(Length::Fixed(200.0))
+            .width(Length::Fill)
+            .style(|_theme: &Theme| container::Style::default() 
+                .background(iced::Color::from_rgb(0.02, 0.02, 0.02))
+                .border(iced::Border {
+                    color: iced::Color::from_rgb(0.2, 0.2, 0.2),
+                    width: 1.0,
+                    radius: 4.0.into(),
+                })
+            )
+        } else {
+            container(iced::widget::Space::with_height(0))
+        };
 
-        let main_content = column![title, inputs, mfa_notice, actions, console]
-            .spacing(20)
-            .padding(20);
+        let console_toggle = button(text(if self.show_console { "Hide Console" } else { "Show Console" }))
+            .on_press(Message::ToggleConsole)
+            .style(button::text);
+
+        let mut content = column![
+            header,
+            email_input,
+            mfa_notice,
+            connect_button,
+            row![advanced_toggle, console_toggle].spacing(20),
+        ].spacing(20).padding(30).align_x(Alignment::Center);
+
+        if self.show_advanced {
+            content = content.push(advanced_content);
+        }
+
+        content = content.push(console);
 
         if let Some(req) = &self.pending_request {
             let modal_content = container(
@@ -511,15 +521,16 @@ impl KuVpnGui {
                 .center_y(Length::Fill)
                 .style(|_theme: &Theme| container::Style::default().background(iced::Color::from_rgba(0.0, 0.0, 0.0, 0.8)));
             
-            return container(iced::widget::stack![main_content, modal])
+            return container(iced::widget::stack![content, modal])
                 .width(Length::Fill)
                 .height(Length::Fill)
                 .into();
         }
 
-        container(main_content)
+        container(content)
             .width(Length::Fill)
             .height(Length::Fill)
+            .center_x(Length::Fill)
             .into()
     }
 }
@@ -530,8 +541,10 @@ impl Default for KuVpnGui {
             url: "https://vpn.ku.edu.tr".to_string(),
             domain: "vpn.ku.edu.tr".to_string(),
             email: "".to_string(),
-            headless: true,
-            logs: vec!["Welcome to KUVPN GUI".to_string()],
+            show_browser: false,
+            show_advanced: false,
+            show_console: true,
+            logs: vec!["Welcome to KUVPN".to_string()],
             status: ConnectionStatus::Disconnected,
             pending_request: None,
             current_input: String::new(),
