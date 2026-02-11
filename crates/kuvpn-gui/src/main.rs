@@ -11,15 +11,25 @@ pub fn main() -> iced::Result {
     iced::run("KUVPN GUI", KuVpnGui::update, KuVpnGui::view)
 }
 
+#[derive(Debug, Clone, PartialEq)]
+enum ConnectionStatus {
+    Disconnected,
+    Connecting,
+    Connected,
+}
+
 struct KuVpnGui {
     url: String,
     domain: String,
     email: String,
     headless: bool,
     logs: Vec<String>,
-    is_connecting: bool,
+    status: ConnectionStatus,
     pending_request: Option<InputRequest>,
     current_input: String,
+    cancel_tx: Option<oneshot::Sender<()>>,
+    mfa_info: Option<String>,
+    escalation_tool: String,
 }
 
 #[derive(Debug)]
@@ -34,13 +44,17 @@ enum Message {
     UrlChanged(String),
     DomainChanged(String),
     EmailChanged(String),
+    EscalationToolChanged(String),
     HeadlessToggled(bool),
     ConnectPressed,
+    DisconnectPressed,
+    ClearSessionPressed,
     LogAppended(String),
     RequestInput(Arc<InputRequestWrapper>),
     InputChanged(String),
     SubmitInput,
     ConnectionFinished(Option<String>),
+    StatusChanged(ConnectionStatus),
 }
 
 #[derive(Debug)]
@@ -105,12 +119,15 @@ impl KuVpnGui {
             Message::EmailChanged(email) => {
                 self.email = email;
             }
+            Message::EscalationToolChanged(tool) => {
+                self.escalation_tool = tool;
+            }
             Message::HeadlessToggled(headless) => {
                 self.headless = headless;
             }
             Message::ConnectPressed => {
-                if !self.is_connecting {
-                    self.is_connecting = true;
+                if self.status == ConnectionStatus::Disconnected {
+                    self.status = ConnectionStatus::Connecting;
                     self.logs.clear();
                     self.logs.push("[*] Starting connection process...".to_string());
                     
@@ -118,6 +135,9 @@ impl KuVpnGui {
                     let domain = self.domain.clone();
                     let email = if self.email.is_empty() { None } else { Some(self.email.clone()) };
                     let headless = self.headless;
+                    let escalation_tool = self.escalation_tool.clone();
+                    let (cancel_tx, mut cancel_rx) = oneshot::channel();
+                    self.cancel_tx = Some(cancel_tx);
 
                     return Task::stream(stream::channel(100, move |mut output| async move {
                         let (log_tx, mut log_rx) = mpsc::channel(100);
@@ -140,10 +160,12 @@ impl KuVpnGui {
                         let headless_c = headless;
                         let log_tx_c = log_tx.clone();
 
+                        let (child_tx, mut child_rx) = mpsc::channel::<Arc<Mutex<Option<std::process::Child>>>>(1);
+
                         std::thread::spawn(move || {
                             let provider = GuiProvider { request_tx: req_tx };
                             let dsid_res = kuvpn::run_login_and_get_dsid(
-                                headless_c,
+                                !headless_c,
                                 &url_c,
                                 &domain_c,
                                 "Mozilla/5.0",
@@ -170,11 +192,14 @@ impl KuVpnGui {
                             };
 
                             let _ = log_tx_c.blocking_send("[*] Executing openconnect...".to_string());
-                            match kuvpn::execute_openconnect(dsid, url_c, &None, &openconnect_path, Stdio::piped(), Stdio::piped()) {
+                            match kuvpn::execute_openconnect(dsid, url_c, &Some(escalation_tool), &openconnect_path, Stdio::piped(), Stdio::piped()) {
                                 Ok(mut child) => {
                                     let stdout = child.stdout.take().unwrap();
                                     let stderr = child.stderr.take().unwrap();
                                     
+                                    let shared_child = Arc::new(Mutex::new(Some(child)));
+                                    let _ = child_tx.blocking_send(shared_child.clone());
+
                                     let log_tx_stdout = log_tx_c.clone();
                                     std::thread::spawn(move || {
                                         let reader = BufReader::new(stdout);
@@ -195,7 +220,11 @@ impl KuVpnGui {
                                         }
                                     });
 
-                                    let _ = child.wait();
+                                    if let Ok(mut guard) = shared_child.lock() {
+                                        if let Some(child_ref) = guard.as_mut() {
+                                            let _ = child_ref.wait();
+                                        }
+                                    }
                                     let _ = log_tx_c.blocking_send("[*] OpenConnect process finished".to_string());
                                 }
                                 Err(e) => {
@@ -204,18 +233,80 @@ impl KuVpnGui {
                             }
                         });
 
-                        while let Some(msg) = tokio::select! {
-                            res = log_rx.recv() => res.map(Message::LogAppended),
-                            res = req_rx.recv() => res.map(|r| Message::RequestInput(Arc::new(InputRequestWrapper(Mutex::new(Some(r)))))),
-                        } {
-                            let _ = output.send(msg).await;
+                        let mut active_child: Option<Arc<Mutex<Option<std::process::Child>>>> = None;
+
+                        loop {
+                            tokio::select! {
+                                res = log_rx.recv() => {
+                                    if let Some(log) = res {
+                                        if log.contains("Established") || log.contains("Connected as") {
+                                            let _ = output.send(Message::StatusChanged(ConnectionStatus::Connected)).await;
+                                        }
+                                        let _ = output.send(Message::LogAppended(log)).await;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                                res = req_rx.recv() => {
+                                    if let Some(r) = res {
+                                        let _ = output.send(Message::RequestInput(Arc::new(InputRequestWrapper(Mutex::new(Some(r)))))).await;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                                child_res = child_rx.recv() => {
+                                    active_child = child_res;
+                                }
+                                _ = &mut cancel_rx => {
+                                    let _ = log_tx.send("[*] Disconnecting...".to_string()).await;
+                                    if let Some(shared_child) = active_child.take() {
+                                        if let Ok(mut guard) = shared_child.lock() {
+                                            if let Some(mut child) = guard.take() {
+                                                let _ = child.kill();
+                                            }
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
                         }
                         
                         let _ = output.send(Message::ConnectionFinished(None)).await;
                     }));
                 }
             }
+            Message::DisconnectPressed => {
+                if let Some(tx) = self.cancel_tx.take() {
+                    let _ = tx.send(());
+                }
+            }
+            Message::ClearSessionPressed => {
+                match kuvpn::get_user_data_dir() {
+                    Ok(dir) => {
+                        if dir.exists() {
+                            if let Err(e) = std::fs::remove_dir_all(&dir) {
+                                self.logs.push(format!("[!] Failed to clear session: {}", e));
+                            } else {
+                                self.logs.push("[✓] Session cleared successfully.".to_string());
+                            }
+                        } else {
+                            self.logs.push("[*] No session found to clear.".to_string());
+                        }
+                    }
+                    Err(e) => {
+                        self.logs.push(format!("[!] Error getting session dir: {}", e));
+                    }
+                }
+            }
+            Message::StatusChanged(status) => {
+                self.status = status;
+            }
             Message::LogAppended(log) => {
+                if log.contains("Push Approval: ") {
+                    self.mfa_info = Some(log.clone());
+                } else if log.contains("Push page finished") || log.contains("Number prompt gone") {
+                    self.mfa_info = None;
+                }
                 self.logs.push(log);
                 if self.logs.len() > 1000 {
                     self.logs.remove(0);
@@ -239,7 +330,8 @@ impl KuVpnGui {
                 }
             }
             Message::ConnectionFinished(err) => {
-                self.is_connecting = false;
+                self.status = ConnectionStatus::Disconnected;
+                self.mfa_info = None;
                 if let Some(e) = err {
                     self.logs.push(format!("[!] Error: {}", e));
                 }
@@ -285,21 +377,76 @@ impl KuVpnGui {
             ]
             .spacing(10)
             .align_y(Alignment::Center),
+            row![
+                text("Escalation Tool:").width(Length::Fixed(120.0)),
+                iced::widget::pick_list(
+                    vec!["pkexec".to_string(), "sudo".to_string(), "doas".to_string()],
+                    Some(self.escalation_tool.clone()),
+                    Message::EscalationToolChanged
+                ),
+            ]
+            .spacing(10)
+            .align_y(Alignment::Center),
         ]
         .spacing(15);
 
-        let connect_button = button(
-            text(if self.is_connecting {
-                "Establishing Connection..."
-            } else {
-                "Connect to VPN"
-            })
-            .size(18)
-            .align_x(iced::alignment::Horizontal::Center),
+        let mfa_notice = if let Some(mfa) = &self.mfa_info {
+            container(
+                text(mfa)
+                    .size(20)
+                    .color(iced::Color::from_rgb(1.0, 1.0, 0.0))
+                    .align_x(iced::alignment::Horizontal::Center)
+                    .width(Length::Fill),
+            )
+            .padding(10)
+            .style(|_theme: &Theme| container::Style::default()
+                .background(iced::Color::from_rgb(0.2, 0.2, 0.0))
+                .border(iced::Border {
+                    color: iced::Color::from_rgb(1.0, 1.0, 0.0),
+                    width: 2.0,
+                    radius: 8.0.into(),
+                })
+            )
+        } else {
+            container(iced::widget::Space::with_height(0))
+        };
+
+        let connect_button = match self.status {
+            ConnectionStatus::Disconnected => button(
+                text("Connect to VPN")
+                    .size(18)
+                    .align_x(iced::alignment::Horizontal::Center),
+            )
+            .width(Length::Fill)
+            .padding(15)
+            .on_press(Message::ConnectPressed),
+            ConnectionStatus::Connecting => button(
+                text("Establishing Connection...")
+                    .size(18)
+                    .align_x(iced::alignment::Horizontal::Center),
+            )
+            .width(Length::Fill)
+            .padding(15),
+            ConnectionStatus::Connected => button(
+                text("Connected - Disconnect")
+                    .size(18)
+                    .align_x(iced::alignment::Horizontal::Center),
+            )
+            .width(Length::Fill)
+            .padding(15)
+            .on_press(Message::DisconnectPressed)
+            .style(button::danger),
+        };
+
+        let clear_button = button(
+            text("Clear Session")
+                .align_x(iced::alignment::Horizontal::Center),
         )
-        .width(Length::Fill)
-        .padding(15)
-        .on_press(Message::ConnectPressed);
+        .padding(10)
+        .on_press(Message::ClearSessionPressed)
+        .style(button::secondary);
+
+        let actions = column![connect_button, clear_button].spacing(10).align_x(Alignment::Center);
 
         let console_content = self.logs.join("\n");
         let console = container(
@@ -323,7 +470,7 @@ impl KuVpnGui {
             })
         );
 
-        let main_content = column![title, inputs, connect_button, console]
+        let main_content = column![title, inputs, mfa_notice, actions, console]
             .spacing(20)
             .padding(20);
 
@@ -382,9 +529,12 @@ impl Default for KuVpnGui {
             email: "".to_string(),
             headless: true,
             logs: vec!["Welcome to KUVPN GUI".to_string()],
-            is_connecting: false,
+            status: ConnectionStatus::Disconnected,
             pending_request: None,
             current_input: String::new(),
+            cancel_tx: None,
+            mfa_info: None,
+            escalation_tool: "pkexec".to_string(),
         }
     }
 }
