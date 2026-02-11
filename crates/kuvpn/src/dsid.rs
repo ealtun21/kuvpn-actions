@@ -146,14 +146,14 @@ pub fn run_login_and_get_dsid(
 
     loop {
         if let Some(dsid) = poll_dsid(&tab, domain)? {
-            println!("[✓] Found valid DSID, quitting.");
+            log::info!("[✓] Found valid DSID, quitting.");
             tab.close(true)?;
             return Ok(dsid);
         }
 
         let current_url = tab.get_url();
         if current_url != last_url {
-            println!("[*] Page navigated to: {}", current_url);
+            log::info!("[*] Page navigated to: {}", current_url);
             last_url = current_url;
             retries = 0;
         }

@@ -31,7 +31,7 @@ pub fn handle_authenticator_push_approval(tab: &Tab) -> anyhow::Result<bool> {
             .unwrap()
             .to_string();
 
-        println!(
+        log::info!(
             "[*] Push Approval: Please enter this number in your Microsoft Authenticator app: {}",
             number
         );
@@ -54,13 +54,13 @@ pub fn handle_authenticator_push_approval(tab: &Tab) -> anyhow::Result<bool> {
                 .unwrap_or(false);
 
             if !still_showing {
-                println!("[*] Number prompt gone, continuing...");
+                log::info!("[*] Number prompt gone, continuing...");
                 break;
             }
 
             let new_url = tab.get_url();
             if new_url != prev_url {
-                println!("[*] URL changed, continuing...");
+                log::info!("[*] URL changed, continuing...");
                 break;
             }
         }
@@ -129,7 +129,7 @@ pub fn handle_use_app_instead(tab: &Tab) -> anyhow::Result<bool> {
             r#"var el=document.getElementById('idA_PWD_SwitchToRemoteNGC'); if(el){el.click();}"#,
             false,
         )?;
-        println!("[*] Clicked 'Use an app instead'");
+        log::info!("[*] Clicked 'Use an app instead'");
         sleep(Duration::from_millis(400));
         return Ok(true);
     }
@@ -166,12 +166,12 @@ pub fn handle_authenticator_ngc_push(tab: &Tab) -> anyhow::Result<bool> {
             .to_string();
 
         if !number.is_empty() {
-            println!(
+            log::info!(
                 "[*] Push Approval: Enter this number in your MS Authenticator app: {}",
                 number
             );
         } else {
-            println!("[*] Push Approval: Please approve in your MS Authenticator app");
+            log::info!("[*] Push Approval: Please approve in your MS Authenticator app");
         }
 
         let prev_url = tab.get_url();
@@ -193,7 +193,7 @@ pub fn handle_authenticator_ngc_push(tab: &Tab) -> anyhow::Result<bool> {
 
             let new_url = tab.get_url();
             if (!still_showing && !number.is_empty()) || new_url != prev_url {
-                println!("[*] Push page finished, moving on...");
+                log::info!("[*] Push page finished, moving on...");
                 break;
             }
         }
@@ -245,7 +245,7 @@ pub fn handle_ngc_error_use_password(
                 r#"var el=document.getElementById('idA_PWD_SwitchToPassword'); if(el){el.click();}"#,
                 false,
             )?;
-            println!("[*] NGC error page, switching to password");
+            log::info!("[*] NGC error page, switching to password");
             handled.insert("use_app_instead");
             sleep(Duration::from_millis(400));
             return Ok(true);

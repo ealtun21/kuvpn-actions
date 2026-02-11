@@ -46,6 +46,8 @@ enum Message {
 #[derive(Debug)]
 struct InputRequestWrapper(Mutex<Option<InputRequest>>);
 
+static LOGGER_INIT: std::sync::Once = std::sync::Once::new();
+
 struct GuiProvider {
     request_tx: mpsc::Sender<InputRequest>,
 }
@@ -74,16 +76,22 @@ impl GuiProvider {
 }
 
 struct GuiLogger {
-    tx: mpsc::Sender<String>,
+    tx: Mutex<Option<mpsc::Sender<String>>>,
 }
 
 impl log::Log for GuiLogger {
     fn enabled(&self, _metadata: &log::Metadata) -> bool { true }
     fn log(&self, record: &log::Record) {
-        let _ = self.tx.try_send(format!("[*] {}", record.args()));
+        if let Ok(guard) = self.tx.lock() {
+            if let Some(tx) = &*guard {
+                let _ = tx.try_send(format!("[*] {}", record.args()));
+            }
+        }
     }
     fn flush(&self) {}
 }
+
+static GUI_LOGGER: GuiLogger = GuiLogger { tx: Mutex::new(None) };
 
 impl KuVpnGui {
     fn update(&mut self, message: Message) -> Task<Message> {
@@ -115,9 +123,16 @@ impl KuVpnGui {
                         let (log_tx, mut log_rx) = mpsc::channel(100);
                         let (req_tx, mut req_rx) = mpsc::channel(1);
                         
-                        // Set up logger
-                        let _ = log::set_boxed_logger(Box::new(GuiLogger { tx: log_tx.clone() }));
-                        log::set_max_level(log::LevelFilter::Info);
+                        // Update logger sender
+                        if let Ok(mut guard) = GUI_LOGGER.tx.lock() {
+                            *guard = Some(log_tx.clone());
+                        }
+
+                        // Set up logger once
+                        LOGGER_INIT.call_once(|| {
+                            let _ = log::set_logger(&GUI_LOGGER);
+                            log::set_max_level(log::LevelFilter::Info);
+                        });
 
                         let url_c = url.clone();
                         let domain_c = domain.clone();
@@ -128,7 +143,7 @@ impl KuVpnGui {
                         std::thread::spawn(move || {
                             let provider = GuiProvider { request_tx: req_tx };
                             let dsid_res = kuvpn::run_login_and_get_dsid(
-                                !headless_c,
+                                headless_c,
                                 &url_c,
                                 &domain_c,
                                 "Mozilla/5.0",
@@ -241,7 +256,7 @@ impl KuVpnGui {
 
         let inputs = column![
             row![
-                text("URL:").width(Length::Fixed(100.0)),
+                text("VPN URL:").width(Length::Fixed(120.0)),
                 text_input("https://vpn.ku.edu.tr", &self.url)
                     .on_input(Message::UrlChanged)
                     .padding(10),
@@ -249,7 +264,7 @@ impl KuVpnGui {
             .spacing(10)
             .align_y(Alignment::Center),
             row![
-                text("Domain:").width(Length::Fixed(100.0)),
+                text("DSID Domain:").width(Length::Fixed(120.0)),
                 text_input("vpn.ku.edu.tr", &self.domain)
                     .on_input(Message::DomainChanged)
                     .padding(10),
@@ -257,28 +272,29 @@ impl KuVpnGui {
             .spacing(10)
             .align_y(Alignment::Center),
             row![
-                text("Email:").width(Length::Fixed(100.0)),
-                text_input("Email (optional)", &self.email)
+                text("Email:").width(Length::Fixed(120.0)),
+                text_input("user@ku.edu.tr (optional)", &self.email)
                     .on_input(Message::EmailChanged)
                     .padding(10),
             ]
             .spacing(10)
             .align_y(Alignment::Center),
             row![
-                text("Headless:").width(Length::Fixed(100.0)),
-                checkbox("", self.headless).on_toggle(Message::HeadlessToggled),
+                text("Headless Mode:").width(Length::Fixed(120.0)),
+                checkbox("Use headless browser for login", self.headless).on_toggle(Message::HeadlessToggled),
             ]
             .spacing(10)
             .align_y(Alignment::Center),
         ]
-        .spacing(10);
+        .spacing(15);
 
         let connect_button = button(
             text(if self.is_connecting {
-                "Connecting..."
+                "Establishing Connection..."
             } else {
-                "Connect"
+                "Connect to VPN"
             })
+            .size(18)
             .align_x(iced::alignment::Horizontal::Center),
         )
         .width(Length::Fill)
@@ -290,16 +306,24 @@ impl KuVpnGui {
             scrollable(
                 text(console_content)
                     .font(Font::MONOSPACE)
-                    .size(12),
+                    .size(13)
+                    .color(iced::Color::from_rgb(0.0, 1.0, 0.0)), // Green terminal text
             )
             .height(Length::Fill),
         )
         .padding(10)
         .height(Length::Fill)
         .width(Length::Fill)
-        .style(container::dark);
+        .style(|_theme: &Theme| container::Style::default()
+            .background(iced::Color::from_rgb(0.05, 0.05, 0.05)) // Dark background
+            .border(iced::Border {
+                color: iced::Color::from_rgb(0.2, 0.2, 0.2),
+                width: 1.0,
+                radius: 4.0.into(),
+            })
+        );
 
-        let mut main_content = column![title, inputs, connect_button, console]
+        let main_content = column![title, inputs, connect_button, console]
             .spacing(20)
             .padding(20);
 
