@@ -50,9 +50,17 @@ if [ ! -f "packaging/appimage/appimagetool" ]; then
     chmod +x packaging/appimage/appimagetool
 fi
 
+# Bundle openconnect if found on host
+OPENCONNECT_HOST=$(which openconnect || true)
+if [ -n "$OPENCONNECT_HOST" ]; then
+    echo "Bundling openconnect from host: $OPENCONNECT_HOST"
+    cp "$OPENCONNECT_HOST" "$APPDIR/usr/bin/"
+fi
+
 # Build Minimal AppImage
 ./packaging/appimage/linuxdeploy --appdir "$APPDIR" \
     --executable "$APPDIR/usr/bin/kuvpn-gui" \
+    $( [ -f "$APPDIR/usr/bin/openconnect" ] && echo "--executable $APPDIR/usr/bin/openconnect" ) \
     --desktop-file "$APPDIR/usr/share/applications/kuvpn.desktop" \
     --icon-file packaging/appimage/kuvpn.png \
     --custom-apprun scripts/AppRun.sh
