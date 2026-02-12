@@ -7,12 +7,11 @@ mod args;
 
 use args::Args;
 use clap::Parser;
-use kuvpn::run_login_and_get_dsid;
-use log::{error, info};
 use kuvpn::init_logger;
+use kuvpn::run_login_and_get_dsid;
 use kuvpn::{execute_openconnect, locate_openconnect};
+use log::{error, info};
 use std::process::{ExitCode, Stdio};
-use kuvpn::get_user_data_dir;
 
 /// The main entry point of the application.
 ///
@@ -33,29 +32,15 @@ fn main() -> ExitCode {
 
     // Handle the clean session option.
     if args.clean {
-        let user_data_dir = match get_user_data_dir() {
-            Ok(dir) => dir,
+        match kuvpn::utils::wipe_user_data_dir() {
+            Ok(_) => {
+                info!("Session information successfully removed.");
+                return ExitCode::SUCCESS;
+            }
             Err(e) => {
-                error!("Unable to get user data directory: {}", e);
+                error!("Failed to remove session information: {}", e);
                 return ExitCode::FAILURE;
             }
-        };
-
-        println!("[*] Cleaning user data directory: {:?}", user_data_dir);
-        if user_data_dir.exists() {
-            match std::fs::remove_dir_all(&user_data_dir) {
-                Ok(_) => {
-                    info!("Session information successfully removed.");
-                    return ExitCode::SUCCESS;
-                }
-                Err(e) => {
-                    error!("Failed to remove session information: {}", e);
-                    return ExitCode::FAILURE;
-                }
-            }
-        } else {
-            info!("No session information found.");
-            return ExitCode::FAILURE;
         }
     }
 
@@ -97,7 +82,14 @@ fn main() -> ExitCode {
     };
 
     // Execute `openconnect` with the retrieved DSID and specified URL.
-    match execute_openconnect(dsid, args.url, &args.run_command, &openconnect_path, Stdio::inherit(), Stdio::inherit()) {
+    match execute_openconnect(
+        dsid,
+        args.url,
+        &args.run_command,
+        &openconnect_path,
+        Stdio::inherit(),
+        Stdio::inherit(),
+    ) {
         Ok(mut child) => {
             // Wait for the child process to finish.
             // Since we piped stdout/stderr, we might want to display them.
