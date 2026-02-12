@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 kuvpn = { path = "../kuvpn" }
-iced = { version = "0.13", features = ["tokio"] }
+iced = { version = "0.14", features = ["tokio", "svg"] }
 anyhow = "1.0.101"
 tokio = { version = "1.43", features = ["full"] }
 log = "0.4.29"
