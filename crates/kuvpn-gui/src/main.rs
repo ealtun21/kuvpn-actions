@@ -46,47 +46,71 @@ fn get_theme(_: &KuVpnGui) -> iced::Theme {
     iced::Theme::Dark
 }
 
-fn init_tray() -> TrayIcon {
+struct TrayComponents {
+    tray: TrayIcon,
+    show_item: MenuItem,
+    connect_item: MenuItem,
+    disconnect_item: MenuItem,
+}
+
+fn init_tray() -> TrayComponents {
+    let show_item = MenuItem::with_id("show", "Hide KUVPN", true, None);
+    let connect_item = MenuItem::with_id("connect", "Connect", true, None);
+    let disconnect_item = MenuItem::with_id("disconnect", "Disconnect", true, None);
+    let quit_item = MenuItem::with_id("quit", "Quit", true, None);
+
     let tray_menu = Menu::with_items(&[
-        &MenuItem::with_id("show", "Show KUVPN", true, None),
-        &MenuItem::with_id("connect", "Connect", true, None),
-        &MenuItem::with_id("disconnect", "Disconnect", true, None),
+        &show_item,
+        &connect_item,
+        &disconnect_item,
         &PredefinedMenuItem::separator(),
-        &MenuItem::with_id("quit", "Quit", true, None),
+        &quit_item,
     ]).expect("Failed to create tray menu");
 
-    // Simple burgundy icon
-    let mut rgba = vec![0u8; 32 * 32 * 4];
-    for i in 0..32*32 {
-        rgba[i*4] = 128;   // R
-        rgba[i*4+1] = 0;   // G
-        rgba[i*4+2] = 32;  // B
-        rgba[i*4+3] = 255; // A
-    }
-    let icon = tray_icon::Icon::from_rgba(rgba, 32, 32).expect("Failed to create icon");
+    let icon = {
+        let mut rgba = vec![0u8; 32 * 32 * 4];
+        for i in 0..32*32 {
+            rgba[i*4] = 128;   // R
+            rgba[i*4+1] = 0;   // G
+            rgba[i*4+2] = 32;  // B
+            rgba[i*4+3] = 255; // A
+        }
+        tray_icon::Icon::from_rgba(rgba, 32, 32).expect("Failed to create icon")
+    };
 
-    TrayIconBuilder::new()
+    let tray = TrayIconBuilder::new()
         .with_menu(Box::new(tray_menu))
         .with_tooltip("KUVPN")
         .with_icon(icon)
         .build()
-        .expect("Failed to create tray icon")
+        .expect("Failed to create tray icon");
+
+    TrayComponents {
+        tray,
+        show_item,
+        connect_item,
+        disconnect_item,
+    }
 }
 
 pub fn main() -> iced::Result {
     #[cfg(target_os = "linux")]
     {
         // tray-icon on Linux requires GTK to be initialized first
-        // We initialize it here to ensure it's ready for TrayIcon creation
         let _ = gtk::init();
     }
 
-    let tray = Arc::new(Mutex::new(Some(init_tray())));
+    let components = Arc::new(Mutex::new(Some(init_tray())));
     
     iced::application(move || {
         let mut gui = KuVpnGui::default();
-        if let Ok(mut guard) = tray.lock() {
-            gui.tray_icon = guard.take();
+        if let Ok(mut guard) = components.lock() {
+            if let Some(c) = guard.take() {
+                gui.tray_icon = Some(c.tray);
+                gui.show_item = Some(c.show_item);
+                gui.connect_item = Some(c.connect_item);
+                gui.disconnect_item = Some(c.disconnect_item);
+            }
         }
         (gui, Task::none())
     }, KuVpnGui::update, KuVpnGui::view)
@@ -131,6 +155,7 @@ enum Message {
     CloseToTrayToggled(bool),
     ToggleVisibility,
     WindowOpened(iced::window::Id),
+    GtkTick,
 }
 
 struct KuVpnGui {
@@ -159,6 +184,9 @@ struct KuVpnGui {
     
     // Tray & Window state
     tray_icon: Option<TrayIcon>,
+    show_item: Option<MenuItem>,
+    connect_item: Option<MenuItem>,
+    disconnect_item: Option<MenuItem>,
     window_id: Option<iced::window::Id>,
     is_visible: bool,
     close_to_tray: bool,
@@ -210,30 +238,19 @@ struct GuiLogger {
 
 impl log::Log for GuiLogger {
     fn enabled(&self, metadata: &log::Metadata) -> bool { 
-        // Always enable internal trace/debug for state tracking
         metadata.level() <= log::Level::Trace
     }
     fn log(&self, record: &log::Record) {
-        // Internal state tracking always sees the logs
-        // But we only send to the UI if it matches user preference
-        let user_level = if let Ok(guard) = self.user_level.lock() {
-            *guard
-        } else {
-            log::LevelFilter::Info
-        };
-
-        if record.level() <= user_level {
-            if let Ok(guard) = self.tx.lock() {
-                if let Some(tx) = &*guard {
-                    let _ = tx.try_send(format!("[*] {}", record.args()));
-                }
+        if let Ok(guard) = self.tx.lock() {
+            if let Some(tx) = &*guard {
+                let _ = tx.try_send(format!("{:?}|{}", record.level(), record.args()));
             }
         }
     }
     fn flush(&self) {}
 }
 
-static GUI_LOGGER: GuiLogger = GuiLogger { 
+static GUI_LOGGER: GuiLogger = GuiLogger {
     tx: Mutex::new(None),
     user_level: Mutex::new(log::LevelFilter::Info),
 };
@@ -242,17 +259,23 @@ impl KuVpnGui {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::WindowOpened(id) => {
+                log::info!("Window opened with ID: {:?}", id);
                 self.window_id = Some(id);
+                Task::none()
+            }
+            Message::GtkTick => {
+                #[cfg(target_os = "linux")]
+                {
+                    while gtk::events_pending() {
+                        gtk::main_iteration();
+                    }
+                }
                 Task::none()
             }
             Message::TrayEvent(event) => {
                 match event {
-                    TrayIconEvent::Click { .. } => {
-                        self.is_visible = !self.is_visible;
-                        if let Some(id) = self.window_id {
-                            let mode = if self.is_visible { iced::window::Mode::Windowed } else { iced::window::Mode::Hidden };
-                            return iced::window::set_mode(id, mode);
-                        }
+                    TrayIconEvent::Click { ..} => {
+                        return self.update(Message::ToggleVisibility);
                     }
                     _ => {}
                 }
@@ -262,14 +285,10 @@ impl KuVpnGui {
                 match event.id.as_ref() {
                     "quit" => return iced::exit(),
                     "show" => {
-                        self.is_visible = true;
-                        if let Some(id) = self.window_id {
-                            return iced::window::set_mode(id, iced::window::Mode::Windowed);
-                        }
-                        Task::none()
+                        return self.update(Message::ToggleVisibility);
                     }
-                    "connect" => self.update(Message::ConnectPressed),
-                    "disconnect" => self.update(Message::DisconnectPressed),
+                    "connect" => return self.update(Message::ConnectPressed),
+                    "disconnect" => return self.update(Message::DisconnectPressed),
                     _ => Task::none(),
                 }
             }
@@ -278,13 +297,25 @@ impl KuVpnGui {
                 Task::none()
             }
             Message::ToggleVisibility => {
-                if !self.close_to_tray {
-                    return iced::exit();
-                }
                 self.is_visible = !self.is_visible;
+                
+                // Update tray menu text
+                if let Some(item) = &self.show_item {
+                    item.set_text(if self.is_visible { "Hide KUVPN" } else { "Show KUVPN" });
+                }
+
                 if let Some(id) = self.window_id {
-                    let mode = if self.is_visible { iced::window::Mode::Windowed } else { iced::window::Mode::Hidden };
-                    return iced::window::set_mode(id, mode);
+                    if self.is_visible {
+                        return Task::batch(vec![
+                            iced::window::set_mode(id, iced::window::Mode::Windowed),
+                            iced::window::gain_focus(id),
+                        ]);
+                    } else {
+                        if !self.close_to_tray {
+                            return iced::exit();
+                        }
+                        return iced::window::set_mode(id, iced::window::Mode::Hidden);
+                    }
                 }
                 Task::none()
             }
@@ -395,16 +426,16 @@ impl KuVpnGui {
                             let dsid = match dsid_res {
                                 Ok(d) => d,
                                 Err(e) => {
-                                    let _ = log_tx_c.blocking_send(format!("Error: {}", e));
+                                    let _ = log_tx_c.blocking_send(format!("Error|{}", e));
                                     return;
                                 }
                             };
 
-                            let _ = log_tx_c.blocking_send("[*] Initializing Koç University tunnel...".to_string());
+                            let _ = log_tx_c.blocking_send("Info|Initializing Koç University tunnel...".to_string());
                             let final_oc_path = match kuvpn::locate_openconnect(&openconnect_path) {
                                 Some(p) => p,
                                 None => {
-                                    let _ = log_tx_c.blocking_send(format!("Error: Could not locate '{}'", openconnect_path));
+                                    let _ = log_tx_c.blocking_send(format!("Error|Could not locate '{}'", openconnect_path));
                                     return;
                                 }
                             };
@@ -422,7 +453,7 @@ impl KuVpnGui {
                                         let reader = BufReader::new(stdout);
                                         for line in reader.lines() {
                                             if let Ok(l) = line {
-                                                let _ = log_tx_stdout.blocking_send(l);
+                                                let _ = log_tx_stdout.blocking_send(format!("Info|{}", l));
                                             }
                                         }
                                     });
@@ -432,7 +463,7 @@ impl KuVpnGui {
                                         let reader = BufReader::new(stderr);
                                         for line in reader.lines() {
                                             if let Ok(l) = line {
-                                                let _ = log_tx_stderr.blocking_send(l);
+                                                let _ = log_tx_stderr.blocking_send(format!("Warn|{}", l));
                                             }
                                         }
                                     });
@@ -440,7 +471,7 @@ impl KuVpnGui {
                                     let _ = child.wait();
                                 }
                                 Err(e) => {
-                                    let _ = log_tx_c.blocking_send(format!("Error: {}", e));
+                                    let _ = log_tx_c.blocking_send(format!("Error|{}", e));
                                 }
                             }
                         });
@@ -491,20 +522,49 @@ impl KuVpnGui {
                 }
                 Task::none()
             }
-            Message::LogAppended(log) => {
+            Message::LogAppended(raw_log) => {
+                let parts: Vec<&str> = raw_log.splitn(2, '|').collect();
+                if parts.len() < 2 { return Task::none(); }
+                let lvl_str = parts[0];
+                let log_msg = parts[1];
+
+                let record_level = match lvl_str {
+                    "Error" => log::Level::Error,
+                    "Warn" => log::Level::Warn,
+                    "Info" => log::Level::Info,
+                    "Debug" => log::Level::Debug,
+                    "Trace" => log::Level::Trace,
+                    _ => log::Level::Info,
+                };
+
                 let mfa_before = self.mfa_info.is_some();
-                self.handle_log_event(&log);
+                self.handle_log_event(log_msg);
                 let mfa_after = self.mfa_info.is_some();
                 
-                self.logs.push(log);
-                if self.logs.len() > 500 {
-                    self.logs.remove(0);
+                // User visibility filtering
+                let user_filter = if let Ok(guard) = GUI_LOGGER.user_level.lock() {
+                    *guard
+                } else {
+                    log::LevelFilter::Info
+                };
+
+                if record_level <= user_filter {
+                    self.logs.push(format!("[*] {}", log_msg));
+                    if self.logs.len() > 500 {
+                        self.logs.remove(0);
+                    }
                 }
 
                 if !mfa_before && mfa_after {
                     self.is_visible = true;
+                    if let Some(item) = &self.show_item {
+                        item.set_text("Hide KUVPN");
+                    }
                     if let Some(id) = self.window_id {
-                        return iced::window::set_mode(id, iced::window::Mode::Windowed);
+                        return Task::batch(vec![
+                            iced::window::set_mode(id, iced::window::Mode::Windowed),
+                            iced::window::gain_focus(id),
+                        ]);
                     }
                 }
                 Task::none()
@@ -515,8 +575,14 @@ impl KuVpnGui {
                         self.pending_request = Some(req);
                         self.current_input = String::new();
                         self.is_visible = true;
+                        if let Some(item) = &self.show_item {
+                            item.set_text("Hide KUVPN");
+                        }
                         if let Some(id) = self.window_id {
-                            return iced::window::set_mode(id, iced::window::Mode::Windowed);
+                            return Task::batch(vec![
+                                iced::window::set_mode(id, iced::window::Mode::Windowed),
+                                iced::window::gain_focus(id),
+                            ]);
                         }
                     }
                 }
@@ -583,14 +649,13 @@ impl KuVpnGui {
             subs.push(iced::time::every(std::time::Duration::from_millis(16)).map(|_| Message::Tick));
         }
 
+        // GTK Event Loop pump (for Tray Icon on Linux)
+        #[cfg(target_os = "linux")]
+        subs.push(iced::time::every(std::time::Duration::from_millis(20)).map(|_| Message::GtkTick));
+
         // Window events
-        subs.push(iced::event::listen_with(|event, _status, window_id| {
-            match event {
-                iced::Event::Window(iced::window::Event::CloseRequested) => Some(Message::ToggleVisibility),
-                iced::Event::Window(iced::window::Event::Opened { .. }) => Some(Message::WindowOpened(window_id)),
-                _ => None,
-            }
-        }));
+        subs.push(iced::window::close_requests().map(|_| Message::ToggleVisibility));
+        subs.push(iced::window::open_events().map(Message::WindowOpened));
 
         // Tray & Menu events
         subs.push(Subscription::run(|| {
@@ -604,7 +669,7 @@ impl KuVpnGui {
                     if let Ok(event) = menu_rx.try_recv() {
                         let _ = output.send(Message::MenuEvent(event)).await;
                     }
-                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
                 }
             })
         }));
@@ -973,6 +1038,9 @@ impl Default for KuVpnGui {
             mfa_info: None,
             rotation: 0.0,
             tray_icon: None,
+            show_item: None,
+            connect_item: None,
+            disconnect_item: None,
             window_id: None,
             is_visible: true,
             close_to_tray: true,
