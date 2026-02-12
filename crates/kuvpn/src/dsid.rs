@@ -1,7 +1,7 @@
 use crate::browser::create_browser;
 use crate::handlers::page_detection::{is_incorrect_password_visible, is_invalid_username_visible};
 use crate::handlers::{auth_handlers::*, mfa_handlers::*, page_detection::is_input_visible};
-use crate::utils::CredentialsProvider;
+use crate::utils::{CredentialsProvider, CancellationToken};
 use headless_chrome::Tab;
 use std::collections::HashSet;
 use std::thread::sleep;
@@ -124,6 +124,7 @@ pub fn run_login_and_get_dsid(
     no_auto_login: bool,
     email: Option<String>,
     provider: &dyn CredentialsProvider,
+    cancel_token: Option<CancellationToken>,
 ) -> anyhow::Result<String> {
     const MAX_RETRIES: usize = 10;
 
@@ -145,6 +146,14 @@ pub fn run_login_and_get_dsid(
     let mut retries = 0;
 
     loop {
+        if let Some(token) = &cancel_token {
+            if token.is_cancelled() {
+                log::info!("[!] Cancellation requested, closing browser.");
+                let _ = tab.close(true);
+                return Err(anyhow::anyhow!("Operation cancelled by user"));
+            }
+        }
+
         if let Some(dsid) = poll_dsid(&tab, domain)? {
             log::info!("[✓] Found valid DSID, quitting.");
             tab.close(true)?;

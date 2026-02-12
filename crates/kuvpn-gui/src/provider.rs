@@ -1,4 +1,4 @@
-use kuvpn::utils::CredentialsProvider;
+use kuvpn::utils::{CredentialsProvider, CancellationToken};
 use tokio::sync::{mpsc, oneshot};
 use crate::types::InputRequest;
 
@@ -11,6 +11,7 @@ pub enum GuiInteraction {
 
 pub struct GuiProvider {
     pub interaction_tx: mpsc::Sender<GuiInteraction>,
+    pub cancel_token: CancellationToken,
 }
 
 impl CredentialsProvider for GuiProvider {
@@ -38,6 +39,20 @@ impl GuiProvider {
         };
         
         let _ = self.interaction_tx.blocking_send(GuiInteraction::Request(request));
-        futures::executor::block_on(rx).unwrap_or_default()
+        
+        // Wait for response, but also poll for cancellation
+        let mut rx = rx;
+        loop {
+            if self.cancel_token.is_cancelled() {
+                return String::new();
+            }
+            match rx.try_recv() {
+                Ok(val) => return val,
+                Err(oneshot::error::TryRecvError::Empty) => {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+                Err(oneshot::error::TryRecvError::Closed) => return String::new(),
+            }
+        }
     }
 }

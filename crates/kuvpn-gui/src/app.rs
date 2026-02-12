@@ -23,6 +23,7 @@ pub struct KuVpnGui {
     pub pending_request: Option<InputRequest>,
     pub current_input: String,
     pub cancel_tx: Option<oneshot::Sender<()>>,
+    pub cancel_token: Option<kuvpn::utils::CancellationToken>,
     pub mfa_info: Option<String>,
     pub rotation: f32,
     
@@ -186,6 +187,14 @@ impl KuVpnGui {
             }
             Message::ConnectPressed => {
                 if self.status == ConnectionStatus::Disconnected {
+                    // Cancel any orphaned tokens (though status should prevent this, safety first)
+                    if let Some(token) = &self.cancel_token {
+                        token.cancel();
+                    }
+                    if let Some(tx) = self.cancel_tx.take() {
+                        let _ = tx.send(());
+                    }
+
                     self.status = ConnectionStatus::Connecting;
                     self.logs.clear();
                     self.logs.push("[*] Accessing campus gateway...".to_string());
@@ -205,6 +214,9 @@ impl KuVpnGui {
 
                     let (cancel_tx, mut cancel_rx) = oneshot::channel();
                     self.cancel_tx = Some(cancel_tx);
+                    let cancel_token = kuvpn::utils::CancellationToken::new();
+                    self.cancel_token = Some(cancel_token.clone());
+                    let cancel_token_clone = cancel_token.clone();
 
                     return Task::stream(iced::stream::channel(100, move |mut output: iced::futures::channel::mpsc::Sender<Message>| async move {
                         let (log_tx, mut log_rx) = mpsc::channel(100);
@@ -223,9 +235,13 @@ impl KuVpnGui {
                         let url_c = url.clone();
                         let domain_c = domain.clone();
                         let log_tx_c = log_tx.clone();
+                        let cancel_token_thread = cancel_token_clone.clone();
 
                         std::thread::spawn(move || {
-                            let provider = GuiProvider { interaction_tx };
+                            let provider = GuiProvider { 
+                                interaction_tx,
+                                cancel_token: cancel_token_thread,
+                            };
                             let dsid_res = kuvpn::run_login_and_get_dsid(
                                 headless,
                                 &url_c,
@@ -234,7 +250,9 @@ impl KuVpnGui {
                                 no_auto_login,
                                 email,
                                 &provider,
+                                Some(cancel_token_clone),
                             );
+// ...
 
                             let dsid = match dsid_res {
                                 Ok(d) => d,
@@ -324,6 +342,7 @@ impl KuVpnGui {
                                     active_pid = child_res;
                                 }
                                 _ = &mut cancel_rx => {
+                                    cancel_token.cancel();
                                     if let Some(pid) = active_pid.take() {
                                         let _ = kuvpn::kill_process(pid);
                                     }
@@ -337,6 +356,9 @@ impl KuVpnGui {
                 Task::none()
             }
             Message::DisconnectPressed => {
+                if let Some(token) = self.cancel_token.take() {
+                    token.cancel();
+                }
                 if let Some(tx) = self.cancel_tx.take() {
                     let _ = tx.send(());
                 }
@@ -511,6 +533,7 @@ impl Default for KuVpnGui {
             pending_request: None,
             current_input: String::new(),
             cancel_tx: None,
+            cancel_token: None,
             mfa_info: None,
             rotation: 0.0,
             tray_icon: None,
