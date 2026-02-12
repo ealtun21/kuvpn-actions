@@ -1,7 +1,7 @@
 use crate::browser::create_browser;
 use crate::handlers::page_detection::{is_incorrect_password_visible, is_invalid_username_visible};
 use crate::handlers::{auth_handlers::*, mfa_handlers::*, page_detection::is_input_visible};
-use crate::utils::{CredentialsProvider, CancellationToken};
+use crate::utils::{CancellationToken, CredentialsProvider};
 use headless_chrome::Tab;
 use std::collections::HashSet;
 use std::thread::sleep;

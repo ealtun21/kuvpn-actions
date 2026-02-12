@@ -1,10 +1,10 @@
-use iced::widget::{column, container, text, row};
-use iced::{Alignment, Border, Element};
 use crate::app::KuVpnGui;
 use crate::types::{
-    ConnectionStatus, Message, COLOR_SUCCESS, COLOR_TEXT_DIM, COLOR_WARNING,
-    ICON_REFRESH, ICON_SHIELD, ICON_SHIELD_CHECK, ICON_INFO, NERD_FONT,
+    ConnectionStatus, Message, COLOR_SUCCESS, COLOR_TEXT_DIM, COLOR_WARNING, ICON_INFO,
+    ICON_REFRESH, ICON_SHIELD, ICON_SHIELD_CHECK, NERD_FONT,
 };
+use iced::widget::{column, container, row, text};
+use iced::{Alignment, Border, Element};
 
 impl KuVpnGui {
     pub fn view_status_circle(&self) -> Element<'_, Message> {
@@ -28,21 +28,26 @@ impl KuVpnGui {
                     },
                     ..Default::default()
                 }),
-            text(status_text)
-                .size(18)
-                .font(NERD_FONT)
-                .color(color),
-            text(if self.status == ConnectionStatus::Connected { "Internal Resources Available" } else { "Koç University Access Restricted" })
-                .size(12)
-                .color(COLOR_TEXT_DIM),
-
+            text(status_text).size(18).font(NERD_FONT).color(color),
+            text(if self.status == ConnectionStatus::Connected {
+                "Internal Resources Available"
+            } else {
+                "Koç University Access Restricted"
+            })
+            .size(12)
+            .color(COLOR_TEXT_DIM),
             if self.oc_test_result == Some(false) {
                 container(
                     row![
                         text(ICON_INFO).font(NERD_FONT).color(COLOR_WARNING),
-                        text("OpenConnect not found! Check settings.").size(12).color(COLOR_WARNING),
-                    ].spacing(10).align_y(Alignment::Center)
-                ).padding(10)
+                        text("OpenConnect not found! Check settings.")
+                            .size(12)
+                            .color(COLOR_WARNING),
+                    ]
+                    .spacing(10)
+                    .align_y(Alignment::Center),
+                )
+                .padding(10)
             } else {
                 container(iced::widget::Space::new().height(0))
             }

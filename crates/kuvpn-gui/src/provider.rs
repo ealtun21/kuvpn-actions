@@ -1,6 +1,6 @@
-use kuvpn::utils::{CredentialsProvider, CancellationToken};
-use tokio::sync::{mpsc, oneshot};
 use crate::types::InputRequest;
+use kuvpn::utils::{CancellationToken, CredentialsProvider};
+use tokio::sync::{mpsc, oneshot};
 
 #[derive(Debug)]
 pub enum GuiInteraction {
@@ -22,10 +22,14 @@ impl CredentialsProvider for GuiProvider {
         self.request(msg, true)
     }
     fn on_mfa_push(&self, code: &str) {
-        let _ = self.interaction_tx.blocking_send(GuiInteraction::MfaPush(code.to_string()));
+        let _ = self
+            .interaction_tx
+            .blocking_send(GuiInteraction::MfaPush(code.to_string()));
     }
     fn on_mfa_complete(&self) {
-        let _ = self.interaction_tx.blocking_send(GuiInteraction::MfaComplete);
+        let _ = self
+            .interaction_tx
+            .blocking_send(GuiInteraction::MfaComplete);
     }
 }
 
@@ -37,9 +41,11 @@ impl GuiProvider {
             is_password,
             response_tx: tx,
         };
-        
-        let _ = self.interaction_tx.blocking_send(GuiInteraction::Request(request));
-        
+
+        let _ = self
+            .interaction_tx
+            .blocking_send(GuiInteraction::Request(request));
+
         // Wait for response, but also poll for cancellation
         let mut rx = rx;
         loop {

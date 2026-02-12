@@ -204,7 +204,6 @@ pub fn handle_authenticator_ngc_push(
     Ok(false)
 }
 
-
 /// Handles NGC error and switches to password authentication.
 pub fn handle_ngc_error_use_password(
     tab: &Tab,

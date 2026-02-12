@@ -22,15 +22,16 @@ pub fn init_tray() -> TrayComponents {
         &disconnect_item,
         &PredefinedMenuItem::separator(),
         &quit_item,
-    ]).expect("Failed to create tray menu");
+    ])
+    .expect("Failed to create tray menu");
 
     let icon = {
         let mut rgba = vec![0u8; 32 * 32 * 4];
-        for i in 0..32*32 {
-            rgba[i*4] = 128;   // R
-            rgba[i*4+1] = 0;   // G
-            rgba[i*4+2] = 32;  // B
-            rgba[i*4+3] = 255; // A
+        for i in 0..32 * 32 {
+            rgba[i * 4] = 128; // R
+            rgba[i * 4 + 1] = 0; // G
+            rgba[i * 4 + 2] = 32; // B
+            rgba[i * 4 + 3] = 255; // A
         }
         tray_icon::Icon::from_rgba(rgba, 32, 32).expect("Failed to create icon")
     };
