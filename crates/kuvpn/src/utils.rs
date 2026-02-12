@@ -8,6 +8,8 @@ use std::path::PathBuf;
 pub trait CredentialsProvider {
     fn request_text(&self, msg: &str) -> String;
     fn request_password(&self, msg: &str) -> String;
+    fn on_mfa_push(&self, _code: &str) {}
+    fn on_mfa_complete(&self) {}
 }
 
 /// A implementation of `CredentialsProvider` for terminal input.
@@ -20,6 +22,15 @@ impl CredentialsProvider for TerminalCredentialsProvider {
 
     fn request_password(&self, msg: &str) -> String {
         prompt_password(msg)
+    }
+
+    fn on_mfa_push(&self, code: &str) {
+        log::info!("MFA Push: Please approve in your Authenticator app. Code: {}", code);
+        println!("MFA Push: Please approve in your Authenticator app. Code: {}", code);
+    }
+
+    fn on_mfa_complete(&self) {
+        log::info!("MFA Push completed.");
     }
 }
 

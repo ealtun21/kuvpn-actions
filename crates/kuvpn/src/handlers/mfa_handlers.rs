@@ -1,10 +1,14 @@
+use crate::utils::CredentialsProvider;
 use headless_chrome::Tab;
 use std::collections::HashSet;
 use std::thread::sleep;
 use std::time::Duration;
 
 /// Handles authenticator push approval.
-pub fn handle_authenticator_push_approval(tab: &Tab) -> anyhow::Result<bool> {
+pub fn handle_authenticator_push_approval(
+    tab: &Tab,
+    provider: &dyn CredentialsProvider,
+) -> anyhow::Result<bool> {
     let is_push_page = tab.evaluate(
         r#"(function() {
     return !!(
@@ -31,10 +35,7 @@ pub fn handle_authenticator_push_approval(tab: &Tab) -> anyhow::Result<bool> {
             .unwrap()
             .to_string();
 
-        log::info!(
-            "[*] Push Approval: Please enter this number in your Microsoft Authenticator app: {}",
-            number
-        );
+        provider.on_mfa_push(&number);
 
         let prev_url = tab.get_url();
         loop {
@@ -54,12 +55,14 @@ pub fn handle_authenticator_push_approval(tab: &Tab) -> anyhow::Result<bool> {
                 .unwrap_or(false);
 
             if !still_showing {
+                provider.on_mfa_complete();
                 log::info!("[*] Number prompt gone, continuing...");
                 break;
             }
 
             let new_url = tab.get_url();
             if new_url != prev_url {
+                provider.on_mfa_complete();
                 log::info!("[*] URL changed, continuing...");
                 break;
             }
@@ -138,7 +141,10 @@ pub fn handle_use_app_instead(tab: &Tab) -> anyhow::Result<bool> {
 }
 
 /// Handles authenticator NGC push notifications.
-pub fn handle_authenticator_ngc_push(tab: &Tab) -> anyhow::Result<bool> {
+pub fn handle_authenticator_ngc_push(
+    tab: &Tab,
+    provider: &dyn CredentialsProvider,
+) -> anyhow::Result<bool> {
     let is_ngc_push = tab.evaluate(
         r#"(function() {
     var header = document.getElementById('loginHeader') &&
@@ -165,14 +171,7 @@ pub fn handle_authenticator_ngc_push(tab: &Tab) -> anyhow::Result<bool> {
             .unwrap()
             .to_string();
 
-        if !number.is_empty() {
-            log::info!(
-                "[*] Push Approval: Enter this number in your MS Authenticator app: {}",
-                number
-            );
-        } else {
-            log::info!("[*] Push Approval: Please approve in your MS Authenticator app");
-        }
+        provider.on_mfa_push(&number);
 
         let prev_url = tab.get_url();
         loop {
@@ -193,6 +192,7 @@ pub fn handle_authenticator_ngc_push(tab: &Tab) -> anyhow::Result<bool> {
 
             let new_url = tab.get_url();
             if (!still_showing && !number.is_empty()) || new_url != prev_url {
+                provider.on_mfa_complete();
                 log::info!("[*] Push page finished, moving on...");
                 break;
             }
@@ -203,6 +203,7 @@ pub fn handle_authenticator_ngc_push(tab: &Tab) -> anyhow::Result<bool> {
 
     Ok(false)
 }
+
 
 /// Handles NGC error and switches to password authentication.
 pub fn handle_ngc_error_use_password(

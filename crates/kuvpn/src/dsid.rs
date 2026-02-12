@@ -78,7 +78,7 @@ fn try_handle_page(
         return Ok(true);
     }
 
-    if !handled.contains("ngc_push") && handle_authenticator_ngc_push(tab)? {
+    if !handled.contains("ngc_push") && handle_authenticator_ngc_push(tab, provider)? {
         handled.insert("ngc_push");
         return Ok(true);
     }
@@ -102,7 +102,7 @@ fn try_handle_page(
         return Ok(true);
     }
 
-    if !handled.contains("push") && handle_authenticator_push_approval(tab)? {
+    if !handled.contains("push") && handle_authenticator_push_approval(tab, provider)? {
         handled.insert("push");
         return Ok(true);
     }
