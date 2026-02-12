@@ -112,21 +112,24 @@ fi
 export NO_STRIP=1
 export DEPLOY_GTK_VERSION=3
 
-# We need to be VERY aggressive about bundling. 
-# The "undefined symbol: g_once_init_leave_pointer" happens when there is a mismatch 
-# between bundled libs and host glib/gio. We bundle the whole ayatana/dbusmenu stack.
-export EXTRA_LIBS="libayatana-appindicator3.so.1;libappindicator3.so.1;libayatana-ido3-0.4.so.0;libayatana-indicator3.so.7;libdbusmenu-glib.so.4;libdbusmenu-gtk3.so.4;libdbusmenu-gtk.so.4;libindicator3.so.7;libpangoft2-1.0.so.0;libnss3.so;libnssutil3.so;libsmime3.so;libnspr4.so;libatk-1.0.so.0;libatk-bridge-2.0.so.0;libcups.so.2;libgbm.so.1;libxdo.so.3"
-
-# Also explicitly bundle GLib related libs to avoid host mismatches
-export EXTRA_LIBS="$EXTRA_LIBS;libglib-2.0.so.0;libgio-2.0.so.0;libgobject-2.0.so.0;libgmodule-2.0.so.0"
-
 # Make sure linuxdeploy can find the gtk plugin
 cp packaging/appimage/linuxdeploy-plugin-gtk.sh ./linuxdeploy-plugin-gtk.sh
+
+# List of libraries to bundle explicitly to avoid host mismatches
+# We use find to get full paths in the container environment
+LIBS_TO_BUNDLE=""
+for lib in libayatana-appindicator3.so.1 libayatana-ido3-0.4.so.0 libayatana-indicator3.so.7 libdbusmenu-glib.so.4 libdbusmenu-gtk3.so.4 libindicator3.so.7 libpangoft2-1.0.so.0 libnss3.so libnssutil3.so libsmime3.so libnspr4.so libatk-1.0.so.0 libatk-bridge-2.0.so.0 libcups.so.2 libgbm.so.1 libxdo.so.3 libglib-2.0.so.0 libgio-2.0.so.0 libgobject-2.0.so.0 libgmodule-2.0.so.0; do
+    LIB_PATH=$(find /usr/lib -name "$lib" | head -n 1)
+    if [ -n "$LIB_PATH" ]; then
+        LIBS_TO_BUNDLE="$LIBS_TO_BUNDLE --library $LIB_PATH"
+    fi
+done
 
 ./packaging/appimage/linuxdeploy --appimage-extract-and-run --appdir "$APPDIR" \
     --executable "$APPDIR/usr/bin/kuvpn-gui" \
     --desktop-file "$APPDIR/usr/share/applications/kuvpn.desktop" \
     --icon-file packaging/appimage/kuvpn.png \
+    $LIBS_TO_BUNDLE \
     --plugin gtk \
     --custom-apprun scripts/AppRun.sh
  
