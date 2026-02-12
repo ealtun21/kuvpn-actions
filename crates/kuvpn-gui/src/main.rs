@@ -7,7 +7,7 @@ use tray_icon::{
     TrayIcon, TrayIconBuilder, TrayIconEvent,
 };
 use std::sync::{Arc, Mutex};
-use tokio::sync::{mpsc, oneshot};experimental
+use tokio::sync::{mpsc, oneshot};
 use std::process::Stdio;
 use std::io::{BufRead, BufReader};
 use kuvpn::utils::CredentialsProvider;
