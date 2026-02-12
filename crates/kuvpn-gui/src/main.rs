@@ -791,7 +791,7 @@ impl KuVpnGui {
                 row![
                     text(ICON_PHONE).font(NERD_FONT).size(40).color(COLOR_WARNING),
                     column![
-                        text("Duo Approval Required").size(14).color(COLOR_WARNING).font(NERD_FONT),
+                        text("Approval Required").size(14).color(COLOR_WARNING).font(NERD_FONT),
                         text(mfa).size(22).color(Color::WHITE).font(NERD_FONT),
                     ].spacing(5)
                 ]
