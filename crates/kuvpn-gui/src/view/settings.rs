@@ -32,7 +32,16 @@ impl KuVpnGui {
                 self.view_field("Gateway URL", &self.settings.url, is_locked, Message::UrlChanged),
                 self.view_field("DSID Domain", &self.settings.domain, is_locked, Message::DomainChanged),
                 self.view_field("Login Email", &self.settings.email, is_locked, Message::EmailChanged),
-                self.view_field("OC Path", &self.settings.openconnect_path, is_locked, Message::OpenConnectPathChanged),
+                
+                row![
+                    text("OC Path:").width(Length::Fixed(120.0)),
+                    text_input("openconnect", &self.settings.openconnect_path)
+                        .on_input(if is_locked { |_| Message::Tick } else { Message::OpenConnectPathChanged })
+                        .padding(8),
+                    button(text(if self.oc_test_result == Some(true) { "✓" } else if self.oc_test_result == Some(false) { "✗" } else { "Test" }).font(NERD_FONT))
+                        .on_press(if is_locked { Message::Tick } else { Message::TestOpenConnect })
+                        .style(if self.oc_test_result == Some(true) { button::success } else if self.oc_test_result == Some(false) { button::danger } else { button::secondary }),
+                ].spacing(10).align_y(Alignment::Center),
                 
                 row![
                     text("Log Level:").width(Length::Fixed(120.0)),

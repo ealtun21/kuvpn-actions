@@ -26,6 +26,7 @@ pub struct KuVpnGui {
     pub cancel_token: Option<kuvpn::utils::CancellationToken>,
     pub mfa_info: Option<String>,
     pub rotation: f32,
+    pub oc_test_result: Option<bool>,
     
     // Tray & Window state
     pub tray_icon: Option<TrayIcon>,
@@ -158,6 +159,7 @@ impl KuVpnGui {
             }
             Message::OpenConnectPathChanged(p) => {
                 self.settings.openconnect_path = p;
+                self.oc_test_result = None;
                 self.save_settings();
                 Task::none()
             }
@@ -462,10 +464,21 @@ impl KuVpnGui {
             Message::ResetSettings => {
                 self.settings = GuiSettings::default();
                 self.save_settings();
+                self.oc_test_result = None;
                 // We also need to update the log level filter immediately
                 if let Ok(mut guard) = GUI_LOGGER.user_level.lock() {
                     *guard = log::LevelFilter::Error; // Default
                 }
+                Task::none()
+            }
+            Message::TestOpenConnect => {
+                let path = self.settings.openconnect_path.clone();
+                Task::perform(async move {
+                    kuvpn::locate_openconnect(&path).is_some()
+                }, Message::OpenConnectTestResult)
+            }
+            Message::OpenConnectTestResult(success) => {
+                self.oc_test_result = Some(success);
                 Task::none()
             }
         }
@@ -536,6 +549,7 @@ impl Default for KuVpnGui {
             cancel_token: None,
             mfa_info: None,
             rotation: 0.0,
+            oc_test_result: None,
             tray_icon: None,
             show_item: None,
             connect_item: None,
