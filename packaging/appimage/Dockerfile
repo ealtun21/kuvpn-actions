@@ -14,6 +14,9 @@ RUN apt-get update && apt-get install -y \
     librsvg2-dev \
     libasound2-dev \
     libdbus-1-dev \
+    libxdo-dev \
+    libxkbcommon-dev \
+    libxcb1-dev \
     libfuse2 \
     file \
     wget \
