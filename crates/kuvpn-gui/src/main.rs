@@ -1,5 +1,5 @@
 use iced::widget::{
-    button, checkbox, column, container, pick_list, row, scrollable, stack, text, text_input, svg,
+    button, checkbox, column, container, pick_list, row, scrollable, slider, stack, text, text_input, svg,
 };
 use iced::{Alignment, Border, Color, Element, Font, Length, Task, Subscription};
 use tray_icon::{
@@ -7,7 +7,7 @@ use tray_icon::{
     TrayIcon, TrayIconBuilder, TrayIconEvent,
 };
 use std::sync::{Arc, Mutex};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot};experimental
 use std::process::Stdio;
 use std::io::{BufRead, BufReader};
 use kuvpn::utils::CredentialsProvider;
@@ -133,11 +133,10 @@ enum Message {
     UrlChanged(String),
     DomainChanged(String),
     EscalationToolChanged(String),
-    LogLevelChanged(String),
+    LogLevelSliderChanged(f32),
     OpenConnectPathChanged(String),
     EmailChanged(String),
-    NoAutoLoginToggled(bool),
-    ShowBrowserToggled(bool),
+    LoginModeChanged(f32),
     ToggleAdvanced,
     ToggleConsole,
     ConnectPressed,
@@ -167,11 +166,10 @@ struct KuVpnGui {
     escalation_tool: String,
     
     // Advanced Settings (CLI parity)
-    log_level: String,
+    log_level_val: f32,
     openconnect_path: String,
-    no_auto_login: bool,
+    login_mode_val: f32,
     email: String,
-    show_browser: bool,
 
     // UI State
     show_advanced: bool,
@@ -346,16 +344,16 @@ impl KuVpnGui {
                 self.escalation_tool = tool;
                 Task::none()
             }
-            Message::LogLevelChanged(lvl) => {
-                self.log_level = lvl.clone();
+            Message::LogLevelSliderChanged(val) => {
+                self.log_level_val = val;
                 if let Ok(mut guard) = GUI_LOGGER.user_level.lock() {
-                    *guard = match lvl.as_str() {
-                        "off" => log::LevelFilter::Off,
-                        "info" => log::LevelFilter::Info,
-                        "warn" => log::LevelFilter::Warn,
-                        "debug" => log::LevelFilter::Debug,
-                        "error" => log::LevelFilter::Error,
-                        "trace" => log::LevelFilter::Trace,
+                    *guard = match val.round() as i32 {
+                        0 => log::LevelFilter::Off,
+                        1 => log::LevelFilter::Error,
+                        2 => log::LevelFilter::Warn,
+                        3 => log::LevelFilter::Info,
+                        4 => log::LevelFilter::Debug,
+                        5 => log::LevelFilter::Trace,
                         _ => log::LevelFilter::Info,
                     };
                 }
@@ -369,12 +367,8 @@ impl KuVpnGui {
                 self.email = e;
                 Task::none()
             }
-            Message::NoAutoLoginToggled(v) => {
-                self.no_auto_login = v;
-                Task::none()
-            }
-            Message::ShowBrowserToggled(show) => {
-                self.show_browser = show;
+            Message::LoginModeChanged(val) => {
+                self.login_mode_val = val;
                 Task::none()
             }
             Message::ToggleAdvanced => {
@@ -399,10 +393,15 @@ impl KuVpnGui {
                     
                     let url = self.url.clone();
                     let domain = self.domain.clone();
-                    let headless = !self.show_browser;
+                    
+                    let (headless, no_auto_login) = match self.login_mode_val.round() as i32 {
+                        0 => (true, false),  // Full Automatic
+                        1 => (false, false), // Visual Automatic
+                        _ => (false, true),  // Manual
+                    };
+
                     let escalation_tool = self.escalation_tool.clone();
                     let openconnect_path = if self.openconnect_path.is_empty() { "openconnect".to_string() } else { self.openconnect_path.clone() };
-                    let no_auto_login = self.no_auto_login;
                     let email = if self.email.is_empty() { None } else { Some(self.email.clone()) };
 
                     let (cancel_tx, mut cancel_rx) = oneshot::channel();
@@ -876,11 +875,18 @@ impl KuVpnGui {
                 
                 row![
                     text("Log Level:").width(Length::Fixed(120.0)),
-                    pick_list(
-                        vec!["off".to_string(), "info".to_string(), "warn".to_string(), "debug".to_string(), "error".to_string(), "trace".to_string()],
-                        Some(self.log_level.clone()),
-                        if is_locked { |_| Message::Tick } else { Message::LogLevelChanged }
-                    ).width(Length::Fill),
+                    slider(0.0..=5.0, self.log_level_val, if is_locked { |_| Message::Tick } else { Message::LogLevelSliderChanged })
+                        .step(1.0)
+                        .width(Length::Fill),
+                    text(match self.log_level_val.round() as i32 {
+                        0 => "Off",
+                        1 => "Error",
+                        2 => "Warn",
+                        3 => "Info",
+                        4 => "Debug",
+                        5 => "Trace",
+                        _ => "Info",
+                    }).width(Length::Fixed(60.0)),
                 ].spacing(10).align_y(Alignment::Center),
 
                 row![
@@ -892,17 +898,23 @@ impl KuVpnGui {
                     ).width(Length::Fill),
                 ].spacing(10).align_y(Alignment::Center),
                 
-                row![
-                    checkbox(self.show_browser)
-                        .on_toggle(if is_locked { |_| Message::Tick } else { Message::ShowBrowserToggled }),
-                    text("Disable automation headless mode"),
-                ].spacing(10).align_y(Alignment::Center),
-
-                row![
-                    checkbox(self.no_auto_login)
-                        .on_toggle(if is_locked { |_| Message::Tick } else { Message::NoAutoLoginToggled }),
-                    text("Disable automatic login handlers"),
-                ].spacing(10).align_y(Alignment::Center),
+                column![
+                    row![
+                        text("Login Mode:").width(Length::Fixed(120.0)),
+                        slider(0.0..=2.0, self.login_mode_val, if is_locked { |_| Message::Tick } else { Message::LoginModeChanged })
+                            .step(1.0)
+                            .width(Length::Fill),
+                    ].spacing(10).align_y(Alignment::Center),
+                    text(match self.login_mode_val.round() as i32 {
+                        0 => "Full Automatic (Headless + Auto-Login)",
+                        1 => "Visual Automatic (Browser + Auto-Login)",
+                        _ => "Manual Mode (Browser + Manual Entry)",
+                    })
+                    .size(12)
+                    .color(COLOR_TEXT_DIM)
+                    .width(Length::Fill)
+                    .align_x(Alignment::Center),
+                ].spacing(5),
 
                 row![
                     checkbox(self.close_to_tray)
@@ -1037,11 +1049,10 @@ impl Default for KuVpnGui {
             url: "https://vpn.ku.edu.tr".to_string(),
             domain: "vpn.ku.edu.tr".to_string(),
             escalation_tool: "pkexec".to_string(),
-            log_level: "error".to_string(),
+            log_level_val: 1.0, // Default: Error
             openconnect_path: "openconnect".to_string(),
-            no_auto_login: false,
+            login_mode_val: 0.0, // Default: Auto Headless
             email: String::new(),
-            show_browser: false,
             show_advanced: false,
             show_console: false,
             logs: vec!["Ready for secure campus access.".to_string()],
