@@ -111,10 +111,14 @@ fi
 # Build Minimal AppImage
 export NO_STRIP=1
 export DEPLOY_GTK_VERSION=3
-# Ensure we include appindicator for the tray and other libs often missing in minimal setups
-# libnss3 and others are often needed by headless_chrome/chromium
-# We add libayatana-ido3 and libdbusmenu-glib to fix "undefined symbol: g_once_init_leave_pointer"
-export EXTRA_LIBS="libayatana-appindicator3.so.1;libappindicator3.so.1;libayatana-ido3-0.4.so.0;libayatana-indicator3.so.7;libdbusmenu-glib.so.4;libdbusmenu-gtk3.so.4;libpangoft2-1.0.so.0;libnss3.so;libnssutil3.so;libsmime3.so;libnspr4.so;libatk-1.0.so.0;libatk-bridge-2.0.so.0;libcups.so.2;libgbm.so.1"
+
+# We need to be VERY aggressive about bundling. 
+# The "undefined symbol: g_once_init_leave_pointer" happens when there is a mismatch 
+# between bundled libs and host glib/gio. We bundle the whole ayatana/dbusmenu stack.
+export EXTRA_LIBS="libayatana-appindicator3.so.1;libappindicator3.so.1;libayatana-ido3-0.4.so.0;libayatana-indicator3.so.7;libdbusmenu-glib.so.4;libdbusmenu-gtk3.so.4;libdbusmenu-gtk.so.4;libindicator3.so.7;libpangoft2-1.0.so.0;libnss3.so;libnssutil3.so;libsmime3.so;libnspr4.so;libatk-1.0.so.0;libatk-bridge-2.0.so.0;libcups.so.2;libgbm.so.1;libxdo.so.3"
+
+# Also explicitly bundle GLib related libs to avoid host mismatches
+export EXTRA_LIBS="$EXTRA_LIBS;libglib-2.0.so.0;libgio-2.0.so.0;libgobject-2.0.so.0;libgmodule-2.0.so.0"
 
 # Make sure linuxdeploy can find the gtk plugin
 cp packaging/appimage/linuxdeploy-plugin-gtk.sh ./linuxdeploy-plugin-gtk.sh

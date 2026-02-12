@@ -15,6 +15,8 @@ RUN apt-get update && apt-get install -y \
     libayatana-indicator3-dev \
     libdbusmenu-glib-dev \
     libdbusmenu-gtk3-dev \
+    libdbusmenu-gtk-dev \
+    libindicator3-dev \
     librsvg2-dev \
     librsvg2-bin \
     libasound2-dev \
