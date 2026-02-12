@@ -65,6 +65,7 @@ pub enum Message {
     WindowOpened(iced::window::Id),
     WindowClosed(iced::window::Id),
     GtkTick,
+    ResetSettings,
 }
 
 #[derive(Debug)]

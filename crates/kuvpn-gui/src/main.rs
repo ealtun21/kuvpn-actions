@@ -1,4 +1,5 @@
 mod app;
+mod config;
 mod logger;
 mod provider;
 mod tray;
