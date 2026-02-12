@@ -117,11 +117,82 @@ cp packaging/appimage/linuxdeploy-plugin-gtk.sh ./linuxdeploy-plugin-gtk.sh
 
 # List of libraries to bundle explicitly to avoid host mismatches
 # We use find to get full paths in the container environment
+# We are including almost everything except glibc/libstdc++ to ensure maximum compatibility
+LIBS_TO_BUNDLE_LIST="
+    libayatana-appindicator3.so.1 
+    libayatana-ido3-0.4.so.0 
+    libayatana-indicator3.so.7 
+    libdbusmenu-glib.so.4 
+    libdbusmenu-gtk3.so.4 
+    libindicator3.so.7 
+    libpangoft2-1.0.so.0 
+    libnss3.so 
+    libnssutil3.so 
+    libsmime3.so 
+    libnspr4.so 
+    libatk-1.0.so.0 
+    libatk-bridge-2.0.so.0 
+    libcups.so.2 
+    libgbm.so.1 
+    libdrm.so.2
+    libxdo.so.3 
+    libglib-2.0.so.0 
+    libgio-2.0.so.0 
+    libgobject-2.0.so.0 
+    libgmodule-2.0.so.0
+    libdbus-1.so.3
+    libproxy.so.1
+    libfreetype.so.6
+    libfontconfig.so.1
+    libharfbuzz.so.0
+    libfribidi.so.0
+    libgraphite2.so.3
+    libexpat.so.1
+    libz.so.1
+    libpng16.so.16
+    libjpeg.so.8
+    libwayland-client.so.0
+    libwayland-cursor.so.0
+    libwayland-egl.so.1
+    libxkbcommon.so.0
+    liblzma.so.5
+    liblz4.so.1
+    libgcrypt.so.20
+    libgpg-error.so.0
+    libblkid.so.1
+    libmount.so.1
+    libselinux.so.1
+    libffi.so.7
+    libpcre.so.3
+    libuuid.so.1
+    libssl.so.1.1
+    libcrypto.so.1.1
+    libasound.so.2
+    libpulse.so.0
+    libpulse-mainloop-glib.so.0
+    libsqlite3.so.0
+    libxml2.so.2
+    libstdc++.so.6
+    libgcc_s.so.1
+    libxkbcommon-x11.so.0
+    libxcb-xkb.so.1
+    libX11-xcb.so.1
+    libxcb-render.so.0
+    libxcb-shm.so.0
+    libxcb-util.so.1
+"
+
 LIBS_TO_BUNDLE=""
-for lib in libayatana-appindicator3.so.1 libayatana-ido3-0.4.so.0 libayatana-indicator3.so.7 libdbusmenu-glib.so.4 libdbusmenu-gtk3.so.4 libindicator3.so.7 libpangoft2-1.0.so.0 libnss3.so libnssutil3.so libsmime3.so libnspr4.so libatk-1.0.so.0 libatk-bridge-2.0.so.0 libcups.so.2 libgbm.so.1 libxdo.so.3 libglib-2.0.so.0 libgio-2.0.so.0 libgobject-2.0.so.0 libgmodule-2.0.so.0; do
+for lib in $LIBS_TO_BUNDLE_LIST; do
     LIB_PATH=$(find /usr/lib -name "$lib" | head -n 1)
     if [ -n "$LIB_PATH" ]; then
         LIBS_TO_BUNDLE="$LIBS_TO_BUNDLE --library $LIB_PATH"
+    else
+        # Try /lib too
+        LIB_PATH=$(find /lib -name "$lib" | head -n 1)
+        if [ -n "$LIB_PATH" ]; then
+            LIBS_TO_BUNDLE="$LIBS_TO_BUNDLE --library $LIB_PATH"
+        fi
     fi
 done
 
@@ -137,6 +208,15 @@ done
     if [ -d "$APPDIR/usr/lib/x86_64-linux-gnu" ]; then
         cp -rn "$APPDIR"/usr/lib/x86_64-linux-gnu/* "$APPDIR/usr/lib/" || true
     fi
+
+    # Bundle GIO modules from the build environment
+    mkdir -p "$APPDIR/usr/lib/gio/modules"
+    cp -L /usr/lib/x86_64-linux-gnu/gio/modules/*.so "$APPDIR/usr/lib/gio/modules/" || true
+
+    # Bundle and compile GSettings schemas
+    mkdir -p "$APPDIR/usr/share/glib-2.0/schemas"
+    cp -L /usr/share/glib-2.0/schemas/*.gschema.xml "$APPDIR/usr/share/glib-2.0/schemas/" || true
+    glib-compile-schemas "$APPDIR/usr/share/glib-2.0/schemas/" || true
 
 rm ./linuxdeploy-plugin-gtk.sh
 
