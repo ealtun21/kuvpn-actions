@@ -129,6 +129,11 @@ cp packaging/appimage/linuxdeploy-plugin-gtk.sh ./linuxdeploy-plugin-gtk.sh
     --icon-file packaging/appimage/kuvpn.png \
     --plugin gtk \
     --custom-apprun scripts/AppRun.sh
+ 
+    # Flatten libraries to ensure LD_PRELOAD and LD_LIBRARY_PATH find them easily
+    if [ -d "$APPDIR/usr/lib/x86_64-linux-gnu" ]; then
+        cp -rn "$APPDIR"/usr/lib/x86_64-linux-gnu/* "$APPDIR/usr/lib/" || true
+    fi
 
 rm ./linuxdeploy-plugin-gtk.sh
 
