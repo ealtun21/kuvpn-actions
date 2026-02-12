@@ -76,7 +76,8 @@ fn init_tray() -> TrayIcon {
 pub fn main() -> iced::Result {
     #[cfg(target_os = "linux")]
     {
-        // tray-icon on Linux requires GTK to be initialized
+        // tray-icon on Linux requires GTK to be initialized first
+        // We initialize it here to ensure it's ready for TrayIcon creation
         let _ = gtk::init();
     }
 
@@ -248,9 +249,9 @@ impl KuVpnGui {
                 match event {
                     TrayIconEvent::Click { .. } => {
                         self.is_visible = !self.is_visible;
-                        let is_visible = self.is_visible;
                         if let Some(id) = self.window_id {
-                            return iced::window::minimize(id, !is_visible);
+                            let mode = if self.is_visible { iced::window::Mode::Windowed } else { iced::window::Mode::Hidden };
+                            return iced::window::set_mode(id, mode);
                         }
                     }
                     _ => {}
@@ -263,7 +264,7 @@ impl KuVpnGui {
                     "show" => {
                         self.is_visible = true;
                         if let Some(id) = self.window_id {
-                            return iced::window::minimize(id, false);
+                            return iced::window::set_mode(id, iced::window::Mode::Windowed);
                         }
                         Task::none()
                     }
@@ -281,9 +282,9 @@ impl KuVpnGui {
                     return iced::exit();
                 }
                 self.is_visible = !self.is_visible;
-                let is_visible = self.is_visible;
                 if let Some(id) = self.window_id {
-                    return iced::window::minimize(id, !is_visible);
+                    let mode = if self.is_visible { iced::window::Mode::Windowed } else { iced::window::Mode::Hidden };
+                    return iced::window::set_mode(id, mode);
                 }
                 Task::none()
             }
@@ -364,7 +365,7 @@ impl KuVpnGui {
                     return Task::stream(iced::stream::channel(100, move |mut output: iced::futures::channel::mpsc::Sender<Message>| async move {
                         let (log_tx, mut log_rx) = mpsc::channel(100);
                         let (req_tx, mut req_rx) = mpsc::channel(1);
-                        let (child_tx, mut child_rx) = mpsc::channel::<Arc<Mutex<Option<std::process::Child>>>>(1);
+                        let (child_tx, mut child_rx) = mpsc::channel::<u32>(1);
                         
                         if let Ok(mut guard) = GUI_LOGGER.tx.lock() {
                             *guard = Some(log_tx.clone());
@@ -412,9 +413,9 @@ impl KuVpnGui {
                                 Ok(mut child) => {
                                     let stdout = child.stdout.take().unwrap();
                                     let stderr = child.stderr.take().unwrap();
+                                    let pid = child.id();
                                     
-                                    let shared_child = Arc::new(Mutex::new(Some(child)));
-                                    let _ = child_tx.blocking_send(shared_child.clone());
+                                    let _ = child_tx.blocking_send(pid);
 
                                     let log_tx_stdout = log_tx_c.clone();
                                     std::thread::spawn(move || {
@@ -436,11 +437,7 @@ impl KuVpnGui {
                                         }
                                     });
 
-                                    if let Ok(mut guard) = shared_child.lock() {
-                                        if let Some(child_ref) = guard.as_mut() {
-                                            let _ = child_ref.wait();
-                                        }
-                                    };
+                                    let _ = child.wait();
                                 }
                                 Err(e) => {
                                     let _ = log_tx_c.blocking_send(format!("Error: {}", e));
@@ -448,7 +445,7 @@ impl KuVpnGui {
                             }
                         });
 
-                        let mut active_child: Option<Arc<Mutex<Option<std::process::Child>>>> = None;
+                        let mut active_pid: Option<u32> = None;
 
                         loop {
                             tokio::select! {
@@ -473,15 +470,11 @@ impl KuVpnGui {
                                     }
                                 }
                                 child_res = child_rx.recv() => {
-                                    active_child = child_res;
+                                    active_pid = child_res;
                                 }
                                 _ = &mut cancel_rx => {
-                                    if let Some(shared_child) = active_child.take() {
-                                        if let Ok(mut guard) = shared_child.lock() {
-                                            if let Some(mut child) = guard.take() {
-                                                let _ = kuvpn::kill_child(&mut child);
-                                            }
-                                        }
+                                    if let Some(pid) = active_pid.take() {
+                                        let _ = kuvpn::kill_process(pid);
                                     }
                                     break;
                                 }
@@ -511,7 +504,7 @@ impl KuVpnGui {
                 if !mfa_before && mfa_after {
                     self.is_visible = true;
                     if let Some(id) = self.window_id {
-                        return iced::window::minimize(id, false);
+                        return iced::window::set_mode(id, iced::window::Mode::Windowed);
                     }
                 }
                 Task::none()
@@ -523,7 +516,7 @@ impl KuVpnGui {
                         self.current_input = String::new();
                         self.is_visible = true;
                         if let Some(id) = self.window_id {
-                            return iced::window::minimize(id, false);
+                            return iced::window::set_mode(id, iced::window::Mode::Windowed);
                         }
                     }
                 }
