@@ -21,80 +21,17 @@ jobs:
           target: aarch64-apple-darwin
           cache: true
 
-            - name: Build CLI and GUI
+      - name: Build and Package
+        run: ./scripts/build_macos.sh
 
-              run: |
-
-                cargo build --release -p kuvpn-cli
-
-                cargo build --release -p kuvpn-gui
-
-      
-
-            - name: Create Bundle
-
-              run: |
-
-                mkdir -p KUVPN.app/Contents/MacOS
-
-                mkdir -p KUVPN.app/Contents/Resources
-
-                cp target/release/kuvpn-gui KUVPN.app/Contents/MacOS/
-
-                cp crates/kuvpn-gui/assets/ku.svg KUVPN.app/Contents/Resources/
-
-                # Create a basic Info.plist
-
-                cat > KUVPN.app/Contents/Info.plist <<EOF
-
-                <?xml version="1.0" encoding="UTF-8"?>
-
-                <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-
-                <plist version="1.0">
-
-                <dict>
-
-                    <key>CFBundleExecutable</key>
-
-                    <string>kuvpn-gui</string>
-
-                    <key>CFBundleIdentifier</key>
-
-                    <string>tr.edu.ku.kuvpn</string>
-
-                    <key>CFBundleName</key>
-
-                    <string>KUVPN</string>
-
-                    <key>CFBundleVersion</key>
-
-                    <string>2.0.2</string>
-
-                    <key>CFBundlePackageType</key>
-
-                    <string>APPL</string>
-
-                </dict>
-
-                </plist>
-
-                EOF
-
-      
-
-            - name: Upload
-
-              uses: actions/upload-artifact@v4.3.1
-
-              with:
-
-                name: kuvpn-macos-aarch64
-
-                path: |
-
-                  target/release/kuvpn-cli
-
-                  KUVPN.app
+      - name: Upload
+        uses: actions/upload-artifact@v4.3.1
+        with:
+          name: kuvpn-macos-aarch64
+          path: |
+            target/release/kuvpn-cli
+            KUVPN.app
+            KUVPN.dmg
+            KUVPN.pkg
 
       
