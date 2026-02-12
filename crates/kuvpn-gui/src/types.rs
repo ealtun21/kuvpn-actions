@@ -66,6 +66,8 @@ pub enum Message {
     WindowClosed(iced::window::Id),
     GtkTick,
     ResetSettings,
+    TestOpenConnect,
+    OpenConnectTestResult(bool),
 }
 
 #[derive(Debug)]
