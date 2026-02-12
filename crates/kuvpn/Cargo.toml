@@ -1,6 +1,6 @@
 [package]
 name = "kuvpn"
-version = "2.0.2"
+version = "2.0.3"
 edition = "2021"
 description = "Core library for connecting to Koç University's VPN"
 repository = "https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn"
@@ -16,4 +16,4 @@ rpassword = "7.4.0"
 which = "8.0.0"
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.29", features = ["signal", "process"] }
+nix = { version = "0.31.1", features = ["signal", "process"] }
