@@ -46,7 +46,7 @@ struct TrayComponents {
 }
 
 fn init_tray() -> TrayComponents {
-    let show_item = MenuItem::with_id("show", "Hide KUVPN", true, None);
+    let show_item = MenuItem::with_id("show", "Toggle Visibility", true, None);
     let connect_item = MenuItem::with_id("connect", "Connect", true, None);
     let disconnect_item = MenuItem::with_id("disconnect", "Disconnect", true, None);
     let quit_item = MenuItem::with_id("quit", "Quit", true, None);
@@ -112,7 +112,10 @@ pub fn main() -> iced::Result {
                 gui.disconnect_item = Some(c.disconnect_item);
             }
         }
-        let (id, task) = iced::window::open(iced::window::Settings::default());
+        let (id, task) = iced::window::open(iced::window::Settings {
+            exit_on_close_request: false,
+            ..Default::default()
+        });
         gui.window_id = Some(id);
         (gui, Task::batch(vec![
             iced::font::load(NERD_FONT_BYTES).map(|_| Message::GtkTick),
@@ -159,8 +162,9 @@ enum Message {
     TrayEvent(TrayIconEvent),
     MenuEvent(MenuEvent),
     CloseToTrayToggled(bool),
-    ToggleVisibility,
+    ToggleVisibility { from_close_request: bool },
     WindowOpened(iced::window::Id),
+    WindowClosed(iced::window::Id),
     GtkTick,
 }
 
@@ -285,7 +289,15 @@ impl KuVpnGui {
                 self.window_id = Some(id);
                 self.is_visible = true;
                 if let Some(item) = &self.show_item {
-                    item.set_text("Hide KUVPN");
+                    item.set_text("Toggle Visibility");
+                }
+                Task::none()
+            }
+            Message::WindowClosed(id) => {
+                log::info!("Window closed with ID: {:?}", id);
+                if self.window_id == Some(id) {
+                    self.window_id = None;
+                    self.is_visible = false;
                 }
                 Task::none()
             }
@@ -301,7 +313,7 @@ impl KuVpnGui {
             Message::TrayEvent(event) => {
                 match event {
                     TrayIconEvent::Click { ..} => {
-                        return self.update(Message::ToggleVisibility);
+                        return self.update(Message::ToggleVisibility { from_close_request: false });
                     }
                     _ => {}
                 }
@@ -311,7 +323,7 @@ impl KuVpnGui {
                 match event.id.as_ref() {
                     "quit" => return iced::exit(),
                     "show" => {
-                        return self.update(Message::ToggleVisibility);
+                        return self.update(Message::ToggleVisibility { from_close_request: false });
                     }
                     "connect" => return self.update(Message::ConnectPressed),
                     "disconnect" => return self.update(Message::DisconnectPressed),
@@ -322,24 +334,26 @@ impl KuVpnGui {
                 self.close_to_tray = v;
                 Task::none()
             }
-            Message::ToggleVisibility => {
-                log::info!("ToggleVisibility called. visible={}, close_to_tray={}", self.is_visible, self.close_to_tray);
+            Message::ToggleVisibility { from_close_request } => {
+                log::info!("ToggleVisibility called. visible={}, close_to_tray={}, from_close_request={}", 
+                    self.is_visible, self.close_to_tray, from_close_request);
+                
                 if self.is_visible {
-                    if !self.close_to_tray {
-                        log::info!("Exiting application");
+                    if from_close_request && !self.close_to_tray {
+                        log::info!("Exiting application due to close request");
                         return iced::exit();
                     }
                     log::info!("Closing window to hide");
                     self.is_visible = false;
-                    if let Some(item) = &self.show_item {
-                        item.set_text("Show KUVPN");
-                    }
                     if let Some(id) = self.window_id.take() {
                         return iced::window::close(id);
                     }
                 } else {
                     log::info!("Opening window to show");
-                    let (id, task) = iced::window::open(iced::window::Settings::default());
+                    let (id, task) = iced::window::open(iced::window::Settings {
+                        exit_on_close_request: false,
+                        ..Default::default()
+                    });
                     self.window_id = Some(id);
                     return task.map(Message::WindowOpened);
                 }
@@ -589,7 +603,7 @@ impl KuVpnGui {
             Message::MfaPushReceived(code) => {
                 self.mfa_info = Some(code);
                 if !self.is_visible {
-                    return self.update(Message::ToggleVisibility);
+                    return self.update(Message::ToggleVisibility { from_close_request: false });
                 }
                 Task::none()
             }
@@ -603,7 +617,7 @@ impl KuVpnGui {
                         self.pending_request = Some(req);
                         self.current_input = String::new();
                         if !self.is_visible {
-                            return self.update(Message::ToggleVisibility);
+                            return self.update(Message::ToggleVisibility { from_close_request: false });
                         }
                     }
                 }
@@ -666,7 +680,8 @@ impl KuVpnGui {
         subs.push(iced::time::every(std::time::Duration::from_millis(20)).map(|_| Message::GtkTick));
 
         // Window events
-        subs.push(iced::window::close_requests().map(|_| Message::ToggleVisibility));
+        subs.push(iced::window::close_requests().map(|_| Message::ToggleVisibility { from_close_request: true }));
+        subs.push(iced::window::close_events().map(Message::WindowClosed));
 
         // Tray & Menu events
         subs.push(Subscription::run(|| {
