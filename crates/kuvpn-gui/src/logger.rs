@@ -7,7 +7,7 @@ pub struct GuiLogger {
 }
 
 impl log::Log for GuiLogger {
-    fn enabled(&self, metadata: &log::Metadata) -> bool { 
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
         metadata.level() <= log::Level::Trace
     }
     fn log(&self, record: &log::Record) {

@@ -118,7 +118,7 @@ pub fn execute_openconnect(
             "Running openconnect using {} for elevated privileges or execution",
             command_to_run
         );
-        
+
         return Command::new(command_to_run)
             .arg(openconnect_path)
             .arg("--protocol")
@@ -205,10 +205,10 @@ mod tests {
             .arg("10")
             .spawn()
             .expect("failed to execute sleep");
-        
+
         let res = kill_child(&mut child);
         assert!(res.is_ok());
-        
+
         let _ = child.wait();
     }
 }

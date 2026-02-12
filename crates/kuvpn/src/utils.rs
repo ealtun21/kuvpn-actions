@@ -44,8 +44,14 @@ impl CredentialsProvider for TerminalCredentialsProvider {
     }
 
     fn on_mfa_push(&self, code: &str) {
-        log::info!("MFA Push: Please approve in your Authenticator app. Code: {}", code);
-        println!("MFA Push: Please approve in your Authenticator app. Code: {}", code);
+        log::info!(
+            "MFA Push: Please approve in your Authenticator app. Code: {}",
+            code
+        );
+        println!(
+            "MFA Push: Please approve in your Authenticator app. Code: {}",
+            code
+        );
     }
 
     fn on_mfa_complete(&self) {

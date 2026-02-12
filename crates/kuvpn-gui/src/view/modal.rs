@@ -1,7 +1,9 @@
+use crate::app::KuVpnGui;
+use crate::types::{
+    InputRequest, Message, COLOR_ACCENT, COLOR_SURFACE, COLOR_TEXT, ICON_LOCK, NERD_FONT,
+};
 use iced::widget::{button, column, container, row, text, text_input};
 use iced::{Alignment, Border, Color, Element, Length};
-use crate::app::KuVpnGui;
-use crate::types::{InputRequest, Message, COLOR_ACCENT, COLOR_SURFACE, COLOR_TEXT, ICON_LOCK, NERD_FONT};
 
 impl KuVpnGui {
     pub fn view_modal<'a>(&self, req: &'a InputRequest) -> Element<'a, Message> {
@@ -10,10 +12,10 @@ impl KuVpnGui {
                 row![
                     text(ICON_LOCK).font(NERD_FONT).size(30).color(COLOR_ACCENT),
                     text("Campus Gateway").size(24).font(NERD_FONT),
-                ].spacing(15).align_y(Alignment::Center),
-                
+                ]
+                .spacing(15)
+                .align_y(Alignment::Center),
                 text(&req.msg).size(16).color(COLOR_TEXT),
-                
                 if req.is_password {
                     text_input("Credentials", &self.current_input)
                         .on_input(Message::InputChanged)
@@ -26,7 +28,6 @@ impl KuVpnGui {
                         .on_submit(Message::SubmitInput)
                         .padding(15)
                 },
-                
                 button(
                     text("VERIFY")
                         .width(Length::Fill)
@@ -38,7 +39,7 @@ impl KuVpnGui {
                 .style(button::primary)
             ]
             .spacing(25)
-            .padding(40)
+            .padding(40),
         )
         .width(Length::Fixed(450.0))
         .style(|_| container::Style {
