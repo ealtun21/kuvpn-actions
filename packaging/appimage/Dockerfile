@@ -11,6 +11,8 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     libgtk-3-dev \
     libayatana-appindicator3-dev \
+    libayatana-ido3-dev \
+    libdbusmenu-gtk3-dev \
     librsvg2-dev \
     librsvg2-bin \
     libasound2-dev \
@@ -24,9 +26,10 @@ RUN apt-get update && apt-get install -y \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Rust
+# Install Rust and MUSL target
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
+RUN rustup target add x86_64-unknown-linux-musl
 
 WORKDIR /build
 
