@@ -12,6 +12,8 @@ RUN apt-get update && apt-get install -y \
     libgtk-3-dev \
     libayatana-appindicator3-dev \
     libayatana-ido3-dev \
+    libayatana-indicator3-dev \
+    libdbusmenu-glib-dev \
     libdbusmenu-gtk3-dev \
     librsvg2-dev \
     librsvg2-bin \
