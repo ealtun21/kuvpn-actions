@@ -31,11 +31,28 @@ pub fn locate_openconnect(user_path: &str) -> Option<PathBuf> {
     }
 
     // Step 3: Fallback to searching in common sbin directories.
-    let fallback_dirs = ["/sbin", "/usr/sbin", "/usr/local/sbin"];
-    for dir in &fallback_dirs {
-        let path_in_dir = Path::new(dir).join("openconnect");
-        if path_in_dir.exists() && path_in_dir.is_file() {
-            return Some(path_in_dir);
+    #[cfg(unix)]
+    {
+        let fallback_dirs = ["/sbin", "/usr/sbin", "/usr/local/sbin"];
+        for dir in &fallback_dirs {
+            let path_in_dir = Path::new(dir).join("openconnect");
+            if path_in_dir.exists() && path_in_dir.is_file() {
+                return Some(path_in_dir);
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        let common_paths = [
+            "C:\\Program Files\\OpenConnect\\openconnect.exe",
+            "C:\\Program Files (x86)\\OpenConnect\\openconnect.exe",
+        ];
+        for path in &common_paths {
+            let p = Path::new(path);
+            if p.exists() && p.is_file() {
+                return Some(p.to_path_buf());
+            }
         }
     }
 
@@ -67,60 +84,71 @@ pub fn execute_openconnect(
     stdout: Stdio,
     stderr: Stdio,
 ) -> anyhow::Result<Child> {
-    // Default list of privilege escalation tools.
-    let mut default_tools = vec!["doas", "sudo", "pkexec"];
+    #[cfg(unix)]
+    {
+        // Default list of privilege escalation tools.
+        let mut default_tools = vec!["doas", "sudo", "pkexec"];
 
-    // If a custom run command is provided, check its availability and prioritize it.
-    if let Some(custom_command) = run_command {
-        info!("Custom run command provided: {}", custom_command);
-        if which(custom_command).is_ok() {
-            info!("Custom command found: {}", custom_command);
-            default_tools.insert(0, custom_command.as_str());
+        // If a custom run command is provided, check its availability and prioritize it.
+        if let Some(custom_command) = run_command {
+            info!("Custom run command provided: {}", custom_command);
+            if which(custom_command).is_ok() {
+                info!("Custom command found: {}", custom_command);
+                default_tools.insert(0, custom_command.as_str());
+            } else {
+                log::info!(
+                    "Custom command '{}' not found, falling back to default tools.",
+                    custom_command
+                );
+            }
         } else {
-            log::info!(
-                "Custom command '{}' not found, falling back to default tools.",
-                custom_command
-            );
+            log::info!("No custom run command provided, defaulting to built-in tools.");
         }
-    } else {
-        log::info!("No custom run command provided, defaulting to built-in tools.");
+
+        // Identify the first available escalation tool from the list.
+        log::info!("Checking for available tools/commands: {:?}", default_tools);
+        let command_to_run = default_tools
+            .iter()
+            .find_map(|&tool| which(tool).ok().map(|_| tool))
+            .ok_or(anyhow::anyhow!(
+                "No available tool for running openconnect (sudo/doas/pkexec not found)"
+            ))?;
+
+        log::info!(
+            "Running openconnect using {} for elevated privileges or execution",
+            command_to_run
+        );
+        
+        return Command::new(command_to_run)
+            .arg(openconnect_path)
+            .arg("--protocol")
+            .arg("nc")
+            .arg("-C")
+            .arg(format!("DSID={}", cookie_value))
+            .arg(url)
+            .stdout(stdout)
+            .stderr(stderr)
+            .spawn()
+            .map_err(anyhow::Error::from);
     }
 
-    // Identify the first available escalation tool from the list.
-    log::info!("Checking for available tools/commands: {:?}", default_tools);
-    let command_to_run = default_tools
-        .iter()
-        .find_map(|&tool| which(tool).ok().map(|_| tool))
-        .ok_or(anyhow::anyhow!(
-            "No available tool for running openconnect (sudo/doas/pkexec not found)"
-        ))?;
-
-    log::info!(
-        "Running openconnect using {} for elevated privileges or execution",
-        command_to_run
-    );
-    info!(
-        "Command to run: {} {:?} --protocol nc -C DSID={} {}",
-        command_to_run,
-        openconnect_path.display(),
-        cookie_value,
-        url
-    );
-
-    // Execute the command with the constructed arguments.
-    // Example: sudo /path/to/openconnect --protocol nc -C DSID=abcd https://vpn.ku.edu.tr
-    let child = Command::new(command_to_run)
-        .arg(openconnect_path)
-        .arg("--protocol")
-        .arg("nc")
-        .arg("-C")
-        .arg(format!("DSID={}", cookie_value))
-        .arg(url)
-        .stdout(stdout)
-        .stderr(stderr)
-        .spawn()?;
-
-    Ok(child)
+    #[cfg(windows)]
+    {
+        log::info!("Running openconnect on Windows: {:?}", openconnect_path);
+        // On Windows, we might need to use 'runas' to elevate if not already elevated.
+        // However, Command::new doesn't easily support 'runas' for child processes with piped I/O.
+        // For now, we assume the app is run as Admin or openconnect.exe has manifest for elevation.
+        return Command::new(openconnect_path)
+            .arg("--protocol")
+            .arg("nc")
+            .arg("-C")
+            .arg(format!("DSID={}", cookie_value))
+            .arg(url)
+            .stdout(stdout)
+            .stderr(stderr)
+            .spawn()
+            .map_err(anyhow::Error::from);
+    }
 }
 
 /// Gracefully terminates a process by its PID.
@@ -132,11 +160,17 @@ pub fn kill_process(pid: u32) -> anyhow::Result<()> {
         let pid = Pid::from_raw(pid as i32);
         signal::kill(pid, Signal::SIGINT)?;
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        // Fallback for non-unix systems (less graceful)
-        // We'd need a handle or use taskkill on windows
-        // But for now let's just use what we can
+        use std::process::Command;
+        // Use taskkill /F /PID <pid> as a fallback on Windows
+        // Ideally we'd use GenerateConsoleCtrlEvent but that's complex
+        Command::new("taskkill")
+            .arg("/F")
+            .arg("/PID")
+            .arg(pid.to_string())
+            .spawn()?
+            .wait()?;
     }
     Ok(())
 }
