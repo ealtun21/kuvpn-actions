@@ -1,5 +1,5 @@
 use iced::widget::{
-    button, checkbox, column, container, pick_list, row, scrollable, stack, text, text_input,
+    button, checkbox, column, container, pick_list, row, scrollable, stack, text, text_input, svg,
 };
 use iced::{Alignment, Border, Color, Element, Font, Length, Task, Subscription};
 use std::sync::{Arc, Mutex};
@@ -12,31 +12,42 @@ use futures::SinkExt;
 // --- Constants & Styling ---
 const NERD_FONT: Font = Font::with_name("JetBrainsMono Nerd Font Mono");
 const NERD_FONT_BYTES: &[u8] = include_bytes!("../assets/JetBrainsMonoNerdFontMono-Regular.ttf");
+const KU_LOGO_BYTES: &[u8] = include_bytes!("../assets/ku.svg");
 
-// Colors (Nord/TokyoNight inspired)
-const COLOR_BG: Color = Color::from_rgb(0.09, 0.10, 0.15);
-const COLOR_SURFACE: Color = Color::from_rgb(0.14, 0.16, 0.23);
-const COLOR_ACCENT: Color = Color::from_rgb(0.48, 0.64, 1.0);
-const COLOR_SUCCESS: Color = Color::from_rgb(0.62, 0.81, 0.42);
-const COLOR_WARNING: Color = Color::from_rgb(0.88, 0.69, 0.41);
-const COLOR_TEXT: Color = Color::from_rgb(0.75, 0.79, 0.96);
-const COLOR_TEXT_DIM: Color = Color::from_rgb(0.44, 0.47, 0.64);
+// Colors (Refined Koç University Palette)
+const COLOR_BG: Color = Color::from_rgb(0.07, 0.07, 0.07);
+const COLOR_SURFACE: Color = Color::from_rgb(0.12, 0.12, 0.12);
+const COLOR_ACCENT: Color = Color::from_rgb(0.50, 0.0, 0.125); // #800020 Burgundy
+const COLOR_SUCCESS: Color = Color::from_rgb(0.42, 0.55, 0.35);
+const COLOR_WARNING: Color = Color::from_rgb(0.80, 0.60, 0.30);
+const COLOR_TEXT: Color = Color::from_rgb(0.85, 0.85, 0.85);
+const COLOR_TEXT_DIM: Color = Color::from_rgb(0.50, 0.50, 0.50);
 
 // Icons (Nerd Font)
-const ICON_VPN: &str = "\u{f0573}";
 const ICON_SETTINGS: &str = "\u{f013}";
 const ICON_SHIELD: &str = "\u{f132}";
 const ICON_SHIELD_CHECK: &str = "\u{f0568}";
 const ICON_LOCK: &str = "\u{f023}";
 const ICON_PHONE: &str = "\u{f095}";
 const ICON_TERMINAL: &str = "\u{f120}";
+const ICON_INFO: &str = "\u{f05a}";
 const ICON_REFRESH: &str = "\u{f021}";
+const ICON_TRASH: &str = "\u{f1f8}";
+
+fn get_title(_: &KuVpnGui) -> String {
+    "KUVPN".to_string()
+}
+
+fn get_theme(_: &KuVpnGui) -> iced::Theme {
+    iced::Theme::Dark
+}
 
 pub fn main() -> iced::Result {
-    iced::application("KUVPN", KuVpnGui::update, KuVpnGui::view)
+    iced::application(|| (KuVpnGui::default(), Task::none()), KuVpnGui::update, KuVpnGui::view)
+        .title(get_title)
         .font(NERD_FONT_BYTES)
         .subscription(KuVpnGui::subscription)
-        .theme(|_| iced::Theme::Dark)
+        .theme(get_theme)
         .run()
 }
 
@@ -52,6 +63,10 @@ enum Message {
     UrlChanged(String),
     DomainChanged(String),
     EscalationToolChanged(String),
+    LogLevelChanged(String),
+    OpenConnectPathChanged(String),
+    EmailChanged(String),
+    NoAutoLoginToggled(bool),
     ShowBrowserToggled(bool),
     ToggleAdvanced,
     ToggleConsole,
@@ -60,15 +75,26 @@ enum Message {
     RequestInput(Arc<InputRequestWrapper>),
     InputChanged(String),
     SubmitInput,
+    ClearSessionPressed,
     ConnectionFinished(Option<String>),
     StatusChanged(ConnectionStatus),
     Tick,
 }
 
 struct KuVpnGui {
+    // Basic Settings
     url: String,
     domain: String,
+    escalation_tool: String,
+    
+    // Advanced Settings (CLI parity)
+    log_level: String,
+    openconnect_path: String,
+    no_auto_login: bool,
+    email: String,
     show_browser: bool,
+
+    // UI State
     show_advanced: bool,
     show_console: bool,
     logs: Vec<String>,
@@ -77,7 +103,6 @@ struct KuVpnGui {
     current_input: String,
     cancel_tx: Option<oneshot::Sender<()>>,
     mfa_info: Option<String>,
-    escalation_tool: String,
     rotation: f32,
 }
 
@@ -144,6 +169,10 @@ impl KuVpnGui {
             Message::UrlChanged(url) => self.url = url,
             Message::DomainChanged(domain) => self.domain = domain,
             Message::EscalationToolChanged(tool) => self.escalation_tool = tool,
+            Message::LogLevelChanged(lvl) => self.log_level = lvl,
+            Message::OpenConnectPathChanged(p) => self.openconnect_path = p,
+            Message::EmailChanged(e) => self.email = e,
+            Message::NoAutoLoginToggled(v) => self.no_auto_login = v,
             Message::ShowBrowserToggled(show) => self.show_browser = show,
             Message::ToggleAdvanced => self.show_advanced = !self.show_advanced,
             Message::ToggleConsole => self.show_console = !self.show_console,
@@ -156,16 +185,20 @@ impl KuVpnGui {
                 if self.status == ConnectionStatus::Disconnected {
                     self.status = ConnectionStatus::Connecting;
                     self.logs.clear();
-                    self.logs.push("[*] Initiating secure tunnel...".to_string());
+                    self.logs.push("[*] Accessing campus gateway...".to_string());
                     
                     let url = self.url.clone();
                     let domain = self.domain.clone();
                     let headless = !self.show_browser;
                     let escalation_tool = self.escalation_tool.clone();
+                    let openconnect_path = if self.openconnect_path.is_empty() { "openconnect".to_string() } else { self.openconnect_path.clone() };
+                    let no_auto_login = self.no_auto_login;
+                    let email = if self.email.is_empty() { None } else { Some(self.email.clone()) };
+
                     let (cancel_tx, mut cancel_rx) = oneshot::channel();
                     self.cancel_tx = Some(cancel_tx);
 
-                    return Task::stream(iced::stream::channel(100, move |mut output| async move {
+                    return Task::stream(iced::stream::channel(100, move |mut output: iced::futures::channel::mpsc::Sender<Message>| async move {
                         let (log_tx, mut log_rx) = mpsc::channel(100);
                         let (req_tx, mut req_rx) = mpsc::channel(1);
                         let (child_tx, mut child_rx) = mpsc::channel::<Arc<Mutex<Option<std::process::Child>>>>(1);
@@ -190,8 +223,8 @@ impl KuVpnGui {
                                 &url_c,
                                 &domain_c,
                                 "Mozilla/5.0",
-                                false,
-                                None,
+                                no_auto_login,
+                                email,
                                 &provider,
                             );
 
@@ -203,17 +236,16 @@ impl KuVpnGui {
                                 }
                             };
 
-                            let _ = log_tx_c.blocking_send("[*] Locating OpenConnect...".to_string());
-                            let openconnect_path = match kuvpn::locate_openconnect("openconnect") {
+                            let _ = log_tx_c.blocking_send("[*] Initializing Koç University tunnel...".to_string());
+                            let final_oc_path = match kuvpn::locate_openconnect(&openconnect_path) {
                                 Some(p) => p,
                                 None => {
-                                    let _ = log_tx_c.blocking_send("Error: Could not locate openconnect".to_string());
+                                    let _ = log_tx_c.blocking_send(format!("Error: Could not locate '{}'", openconnect_path));
                                     return;
                                 }
                             };
 
-                            let _ = log_tx_c.blocking_send(format!("[*] Starting tunnel via {}...", escalation_tool));
-                            match kuvpn::execute_openconnect(dsid, url_c, &Some(escalation_tool), &openconnect_path, Stdio::piped(), Stdio::piped()) {
+                            match kuvpn::execute_openconnect(dsid, url_c, &Some(escalation_tool), &final_oc_path, Stdio::piped(), Stdio::piped()) {
                                 Ok(mut child) => {
                                     let stdout = child.stdout.take().unwrap();
                                     let stderr = child.stderr.take().unwrap();
@@ -245,8 +277,7 @@ impl KuVpnGui {
                                         if let Some(child_ref) = guard.as_mut() {
                                             let _ = child_ref.wait();
                                         }
-                                    }
-                                    let _ = log_tx_c.blocking_send("[*] Tunnel disconnected".to_string());
+                                    };
                                 }
                                 Err(e) => {
                                     let _ = log_tx_c.blocking_send(format!("Error: {}", e));
@@ -324,11 +355,29 @@ impl KuVpnGui {
                     self.current_input = String::new();
                 }
             }
+            Message::ClearSessionPressed => {
+                match kuvpn::get_user_data_dir() {
+                    Ok(dir) => {
+                        if dir.exists() {
+                            if let Err(e) = std::fs::remove_dir_all(&dir) {
+                                self.logs.push(format!("[!] Failed to clear session: {}", e));
+                            } else {
+                                self.logs.push("[✓] Saved session data wiped.".to_string());
+                            }
+                        } else {
+                            self.logs.push("[*] No active session found.".to_string());
+                        }
+                    }
+                    Err(e) => {
+                        self.logs.push(format!("[!] System error: {}", e));
+                    }
+                }
+            }
             Message::ConnectionFinished(err) => {
                 self.status = ConnectionStatus::Disconnected;
                 self.mfa_info = None;
                 if let Some(e) = err {
-                    self.logs.push(format!("[!] Critical: {}", e));
+                    self.logs.push(format!("[!] Session Error: {}", e));
                 }
             }
         }
@@ -336,7 +385,6 @@ impl KuVpnGui {
     }
 
     fn handle_log_event(&mut self, log: &str) {
-        // MFA Detection logic - easily extendible
         if log.contains("Push Approval: ") {
             let cleaned = log.replace("[*] ", "").replace("Push Approval: ", "");
             self.mfa_info = Some(cleaned);
@@ -399,7 +447,7 @@ impl KuVpnGui {
 
     fn view_header(&self) -> Element<'_, Message> {
         row![
-            text(ICON_VPN).font(NERD_FONT).size(32).color(COLOR_ACCENT),
+            svg(svg::Handle::from_memory(KU_LOGO_BYTES)).width(32).height(32),
             text("KUVPN").size(24).font(NERD_FONT).width(Length::Fill),
             button(text(ICON_SETTINGS).font(NERD_FONT).size(24))
                 .on_press(Message::ToggleAdvanced)
@@ -415,9 +463,9 @@ impl KuVpnGui {
 
     fn view_status_circle(&self) -> Element<'_, Message> {
         let (color, icon, status_text) = match self.status {
-            ConnectionStatus::Disconnected => (COLOR_TEXT_DIM, ICON_SHIELD, "Protected"),
-            ConnectionStatus::Connecting => (COLOR_WARNING, ICON_REFRESH, "Securing..."),
-            ConnectionStatus::Connected => (COLOR_SUCCESS, ICON_SHIELD_CHECK, "Secure Connection"),
+            ConnectionStatus::Disconnected => (COLOR_TEXT_DIM, ICON_SHIELD, "Public Access"),
+            ConnectionStatus::Connecting => (COLOR_WARNING, ICON_REFRESH, "Joining Campus..."),
+            ConnectionStatus::Connected => (COLOR_SUCCESS, ICON_SHIELD_CHECK, "KU Network Active"),
         };
 
         let icon_display = text(icon).font(NERD_FONT).size(80).color(color);
@@ -429,22 +477,20 @@ impl KuVpnGui {
                 .style(move |_| container::Style {
                     border: Border {
                         color: color,
-                        width: 3.0,
+                        width: 2.0,
                         radius: 90.0.into(),
                     },
                     ..Default::default()
                 }),
             text(status_text)
-                .size(20)
+                .size(18)
                 .font(NERD_FONT)
                 .color(color),
-            if self.status == ConnectionStatus::Connected {
-                text(&self.url).size(14).color(COLOR_TEXT_DIM)
-            } else {
-                text("Not Connected").size(14).color(COLOR_TEXT_DIM)
-            }
+            text(if self.status == ConnectionStatus::Connected { "Internal Resources Available" } else { "Koç University Access Restricted" })
+                .size(12)
+                .color(COLOR_TEXT_DIM)
         ]
-        .spacing(20)
+        .spacing(15)
         .align_x(Alignment::Center)
         .into()
     }
@@ -455,8 +501,8 @@ impl KuVpnGui {
                 row![
                     text(ICON_PHONE).font(NERD_FONT).size(40).color(COLOR_WARNING),
                     column![
-                        text("MFA Action Required").size(16).color(COLOR_WARNING).font(NERD_FONT),
-                        text(mfa).size(24).color(Color::WHITE).font(NERD_FONT),
+                        text("Duo Approval Required").size(14).color(COLOR_WARNING).font(NERD_FONT),
+                        text(mfa).size(22).color(Color::WHITE).font(NERD_FONT),
                     ].spacing(5)
                 ]
                 .spacing(20)
@@ -465,17 +511,17 @@ impl KuVpnGui {
             .padding(20)
             .width(Length::Fill)
             .style(|_| container::Style {
-                background: Some(Color::from_rgba(0.88, 0.69, 0.41, 0.1).into()),
+                background: Some(Color::from_rgba(0.80, 0.60, 0.30, 0.05).into()),
                 border: Border {
                     color: COLOR_WARNING,
                     width: 1.0,
-                    radius: 12.0.into(),
+                    radius: 8.0.into(),
                 },
                 ..Default::default()
             })
             .into()
         } else {
-            container(iced::widget::Space::with_height(0)).into()
+            container(iced::widget::Space::new().height(0)).into()
         }
     }
 
@@ -484,58 +530,103 @@ impl KuVpnGui {
             ConnectionStatus::Disconnected => {
                 button(
                     row![
-                        text(ICON_VPN).font(NERD_FONT),
-                        text("CONNECT").font(NERD_FONT).size(18),
+                        svg(svg::Handle::from_memory(KU_LOGO_BYTES)).width(20).height(20),
+                        text("JOIN NETWORK").font(NERD_FONT).size(16),
                     ].spacing(10).align_y(Alignment::Center)
                 )
                 .padding(15)
-                .width(Length::Fixed(200.0))
+                .width(Length::Fixed(220.0))
                 .on_press(Message::ConnectPressed)
                 .style(button::primary)
                 .into()
             }
             _ => {
                 container(
-                   text("VPN is running...")
-                    .size(16)
+                   text("Campus tunnel is established.")
+                    .size(14)
                     .color(COLOR_TEXT_DIM)
                     .font(NERD_FONT)
                 )
-                .padding(15)
+                .padding(10)
                 .into()
             }
         }
     }
 
     fn view_advanced_settings(&self) -> Element<'_, Message> {
+        let is_locked = self.status != ConnectionStatus::Disconnected;
+
+        let locked_hint = if is_locked {
+            container(
+                row![
+                    text(ICON_INFO).font(NERD_FONT).color(COLOR_ACCENT),
+                    text("Settings locked during active session.").size(11).color(COLOR_TEXT_DIM),
+                ].spacing(8).align_y(Alignment::Center)
+            ).padding(5)
+        } else {
+            container(iced::widget::Space::new().height(0))
+        };
+
         container(
             column![
-                text("ADVANCED SETTINGS").size(14).color(COLOR_ACCENT).font(NERD_FONT),
                 row![
-                    text("Gateway:").width(Length::Fixed(100.0)),
-                    text_input("URL", &self.url).on_input(Message::UrlChanged).padding(10),
+                    text("CONFIGURATION").size(14).color(COLOR_ACCENT).font(NERD_FONT).width(Length::Fill),
+                    locked_hint,
+                ].align_y(Alignment::Center),
+                
+                // Parity with CLI options
+                self.view_field("Gateway URL", &self.url, is_locked, Message::UrlChanged),
+                self.view_field("DSID Domain", &self.domain, is_locked, Message::DomainChanged),
+                self.view_field("Login Email", &self.email, is_locked, Message::EmailChanged),
+                self.view_field("OC Path", &self.openconnect_path, is_locked, Message::OpenConnectPathChanged),
+                
+                row![
+                    text("Log Level:").width(Length::Fixed(120.0)),
+                    pick_list(
+                        vec!["off".to_string(), "info".to_string(), "warn".to_string(), "debug".to_string(), "error".to_string(), "trace".to_string()],
+                        Some(self.log_level.clone()),
+                        if is_locked { |_| Message::Tick } else { Message::LogLevelChanged }
+                    ).width(Length::Fill),
                 ].spacing(10).align_y(Alignment::Center),
+
                 row![
-                    text("Domain:").width(Length::Fixed(100.0)),
-                    text_input("Domain", &self.domain).on_input(Message::DomainChanged).padding(10),
-                ].spacing(10).align_y(Alignment::Center),
-                row![
-                    text("Privilege:").width(Length::Fixed(100.0)),
+                    text("Elevation:").width(Length::Fixed(120.0)),
                     pick_list(
                         vec!["pkexec".to_string(), "sudo".to_string(), "doas".to_string()],
                         Some(self.escalation_tool.clone()),
-                        Message::EscalationToolChanged
-                    ),
+                        if is_locked { |_| Message::Tick } else { Message::EscalationToolChanged }
+                    ).width(Length::Fill),
                 ].spacing(10).align_y(Alignment::Center),
-                checkbox("Show browser window", self.show_browser).on_toggle(Message::ShowBrowserToggled),
+                
+                row![
+                    checkbox(self.show_browser)
+                        .on_toggle(if is_locked { |_| Message::Tick } else { Message::ShowBrowserToggled }),
+                    text("Disable automation headless mode"),
+                ].spacing(10).align_y(Alignment::Center),
+
+                row![
+                    checkbox(self.no_auto_login)
+                        .on_toggle(if is_locked { |_| Message::Tick } else { Message::NoAutoLoginToggled }),
+                    text("Disable automatic login handlers"),
+                ].spacing(10).align_y(Alignment::Center),
+
+                button(
+                    row![
+                        text(ICON_TRASH).font(NERD_FONT),
+                        text("WIPE SAVED SESSION").font(NERD_FONT).size(12),
+                    ].spacing(10).align_y(Alignment::Center)
+                )
+                .padding(10)
+                .on_press(Message::ClearSessionPressed)
+                .style(button::secondary),
             ]
-            .spacing(15)
+            .spacing(12)
         )
         .padding(25)
         .style(|_| container::Style {
             background: Some(COLOR_SURFACE.into()),
             border: Border {
-                radius: 12.0.into(),
+                radius: 8.0.into(),
                 ..Default::default()
             },
             ..Default::default()
@@ -543,12 +634,21 @@ impl KuVpnGui {
         .into()
     }
 
+    fn view_field(&self, label: &str, value: &str, locked: bool, on_change: fn(String) -> Message) -> Element<'_, Message> {
+        row![
+            text(format!("{}:", label)).width(Length::Fixed(120.0)),
+            text_input(label, value)
+                .on_input(if locked { |_| Message::Tick } else { on_change })
+                .padding(8),
+        ].spacing(10).align_y(Alignment::Center).into()
+    }
+
     fn view_console(&self) -> Element<'_, Message> {
         container(
             column![
                 row![
                     text(ICON_TERMINAL).font(NERD_FONT).color(COLOR_TEXT_DIM),
-                    text("SYSTEM LOGS").size(12).color(COLOR_TEXT_DIM).font(NERD_FONT),
+                    text("SESSION LOGS").size(12).color(COLOR_TEXT_DIM).font(NERD_FONT),
                 ].spacing(10),
                 scrollable(
                     text(self.logs.join("\n"))
@@ -556,14 +656,14 @@ impl KuVpnGui {
                         .size(11)
                         .color(COLOR_TEXT_DIM),
                 )
-                .height(Length::Fixed(150.0)),
+                .height(Length::Fixed(140.0)),
             ].spacing(10)
         )
         .padding(15)
         .style(|_| container::Style {
-            background: Some(Color::from_rgb(0.05, 0.05, 0.08).into()),
+            background: Some(Color::from_rgb(0.04, 0.04, 0.04).into()),
             border: Border {
-                radius: 8.0.into(),
+                radius: 4.0.into(),
                 ..Default::default()
             },
             ..Default::default()
@@ -576,28 +676,28 @@ impl KuVpnGui {
             column![
                 row![
                     text(ICON_LOCK).font(NERD_FONT).size(30).color(COLOR_ACCENT),
-                    text("Authentication").size(24).font(NERD_FONT),
+                    text("Campus Gateway").size(24).font(NERD_FONT),
                 ].spacing(15).align_y(Alignment::Center),
                 
                 text(&req.msg).size(16).color(COLOR_TEXT),
                 
                 if req.is_password {
-                    text_input("Password", &self.current_input)
+                    text_input("Credentials", &self.current_input)
                         .on_input(Message::InputChanged)
                         .secure(true)
                         .on_submit(Message::SubmitInput)
                         .padding(15)
                 } else {
-                    text_input("Enter response", &self.current_input)
+                    text_input("Response Required", &self.current_input)
                         .on_input(Message::InputChanged)
                         .on_submit(Message::SubmitInput)
                         .padding(15)
                 },
                 
                 button(
-                    text("SUBMIT")
+                    text("VERIFY")
                         .width(Length::Fill)
-                        .align_x(iced::alignment::Horizontal::Center)
+                        .align_x(Alignment::Center)
                         .font(NERD_FONT)
                 )
                 .padding(12)
@@ -611,7 +711,7 @@ impl KuVpnGui {
         .style(|_| container::Style {
             background: Some(COLOR_SURFACE.into()),
             border: Border {
-                radius: 16.0.into(),
+                radius: 12.0.into(),
                 color: COLOR_ACCENT,
                 width: 1.0,
             },
@@ -624,7 +724,7 @@ impl KuVpnGui {
             .center_x(Length::Fill)
             .center_y(Length::Fill)
             .style(|_| container::Style {
-                background: Some(Color::from_rgba(0.0, 0.0, 0.0, 0.8).into()),
+                background: Some(Color::from_rgba(0.0, 0.0, 0.0, 0.85).into()),
                 ..Default::default()
             })
             .into()
@@ -636,16 +736,20 @@ impl Default for KuVpnGui {
         Self {
             url: "https://vpn.ku.edu.tr".to_string(),
             domain: "vpn.ku.edu.tr".to_string(),
+            escalation_tool: "pkexec".to_string(),
+            log_level: "error".to_string(),
+            openconnect_path: "openconnect".to_string(),
+            no_auto_login: false,
+            email: String::new(),
             show_browser: false,
             show_advanced: false,
             show_console: false,
-            logs: vec!["Ready to secure your connection.".to_string()],
+            logs: vec!["Ready for secure campus access.".to_string()],
             status: ConnectionStatus::Disconnected,
             pending_request: None,
             current_input: String::new(),
             cancel_tx: None,
             mfa_info: None,
-            escalation_tool: "pkexec".to_string(),
             rotation: 0.0,
         }
     }
