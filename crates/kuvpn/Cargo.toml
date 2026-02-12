@@ -14,4 +14,6 @@ headless_chrome = { version = "1.0.21", features = ["fetch", "rustls"] }
 log = "0.4.29"
 rpassword = "7.4.0"
 which = "8.0.0"
+
+[target.'cfg(unix)'.dependencies]
 nix = { version = "0.29", features = ["signal", "process"] }
