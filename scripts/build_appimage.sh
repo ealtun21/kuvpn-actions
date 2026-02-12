@@ -114,7 +114,7 @@ export DEPLOY_GTK_VERSION=3
 # Ensure we include appindicator for the tray and other libs often missing in minimal setups
 # libnss3 and others are often needed by headless_chrome/chromium
 # We add libayatana-ido3 and libdbusmenu-glib to fix "undefined symbol: g_once_init_leave_pointer"
-export EXTRA_LIBS="libayatana-appindicator3.so.1;libappindicator3.so.1;libayatana-ido3-0.4.so.0;libdbusmenu-glib.so.4;libdbusmenu-gtk3.so.4;libpangoft2-1.0.so.0;libnss3.so;libnssutil3.so;libsmime3.so;libnspr4.so;libatk-1.0.so.0;libatk-bridge-2.0.so.0;libcups.so.2;libgbm.so.1"
+export EXTRA_LIBS="libayatana-appindicator3.so.1;libappindicator3.so.1;libayatana-ido3-0.4.so.0;libayatana-indicator3.so.7;libdbusmenu-glib.so.4;libdbusmenu-gtk3.so.4;libpangoft2-1.0.so.0;libnss3.so;libnssutil3.so;libsmime3.so;libnspr4.so;libatk-1.0.so.0;libatk-bridge-2.0.so.0;libcups.so.2;libgbm.so.1"
 
 # Make sure linuxdeploy can find the gtk plugin
 cp packaging/appimage/linuxdeploy-plugin-gtk.sh ./linuxdeploy-plugin-gtk.sh
