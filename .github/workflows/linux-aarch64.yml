@@ -20,11 +20,11 @@ jobs:
       uses: houseabsolute/actions-rust-cross@v0
       with:
         target: aarch64-unknown-linux-musl
-        args: "--release -p kuvpn"
+        args: "--release -p kuvpn-cli"
     
     - name: Upload
       uses: actions/upload-artifact@v4.3.1
       with:
         name: kuvpn-aarch64-unknown-linux-musl
         path: |
-          ./target/aarch64-unknown-linux-musl/release/kuvpn
+          ./target/aarch64-unknown-linux-musl/release/kuvpn-cli
