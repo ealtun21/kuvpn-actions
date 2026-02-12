@@ -29,17 +29,17 @@ impl KuVpnGui {
                 ].align_y(Alignment::Center),
                 
                 // Parity with CLI options
-                self.view_field("Gateway URL", &self.url, is_locked, Message::UrlChanged),
-                self.view_field("DSID Domain", &self.domain, is_locked, Message::DomainChanged),
-                self.view_field("Login Email", &self.email, is_locked, Message::EmailChanged),
-                self.view_field("OC Path", &self.openconnect_path, is_locked, Message::OpenConnectPathChanged),
+                self.view_field("Gateway URL", &self.settings.url, is_locked, Message::UrlChanged),
+                self.view_field("DSID Domain", &self.settings.domain, is_locked, Message::DomainChanged),
+                self.view_field("Login Email", &self.settings.email, is_locked, Message::EmailChanged),
+                self.view_field("OC Path", &self.settings.openconnect_path, is_locked, Message::OpenConnectPathChanged),
                 
                 row![
                     text("Log Level:").width(Length::Fixed(120.0)),
-                    slider(0.0..=5.0, self.log_level_val, if is_locked { |_| Message::Tick } else { Message::LogLevelSliderChanged })
+                    slider(0.0..=5.0, self.settings.log_level_val, if is_locked { |_| Message::Tick } else { Message::LogLevelSliderChanged })
                         .step(1.0)
                         .width(Length::Fill),
-                    text(match self.log_level_val.round() as i32 {
+                    text(match self.settings.log_level_val.round() as i32 {
                         0 => "Off",
                         1 => "Error",
                         2 => "Warn",
@@ -54,7 +54,7 @@ impl KuVpnGui {
                     text("Elevation:").width(Length::Fixed(120.0)),
                     pick_list(
                         vec!["pkexec".to_string(), "sudo".to_string(), "doas".to_string()],
-                        Some(self.escalation_tool.clone()),
+                        Some(self.settings.escalation_tool.clone()),
                         if is_locked { |_| Message::Tick } else { Message::EscalationToolChanged }
                     ).width(Length::Fill),
                 ].spacing(10).align_y(Alignment::Center),
@@ -62,11 +62,11 @@ impl KuVpnGui {
                 column![
                     row![
                         text("Login Mode:").width(Length::Fixed(120.0)),
-                        slider(0.0..=2.0, self.login_mode_val, if is_locked { |_| Message::Tick } else { Message::LoginModeChanged })
+                        slider(0.0..=2.0, self.settings.login_mode_val, if is_locked { |_| Message::Tick } else { Message::LoginModeChanged })
                             .step(1.0)
                             .width(Length::Fill),
                     ].spacing(10).align_y(Alignment::Center),
-                    text(match self.login_mode_val.round() as i32 {
+                    text(match self.settings.login_mode_val.round() as i32 {
                         0 => "Full Automatic (Headless + Auto-Login)",
                         1 => "Visual Automatic (Browser + Auto-Login)",
                         _ => "Manual Mode (Browser + Manual Entry)",
@@ -78,20 +78,32 @@ impl KuVpnGui {
                 ].spacing(5),
 
                 row![
-                    checkbox(self.close_to_tray)
+                    checkbox(self.settings.close_to_tray)
                         .on_toggle(Message::CloseToTrayToggled),
                     text("Close window to system tray"),
                 ].spacing(10).align_y(Alignment::Center),
 
-                button(
-                    row![
-                        text(ICON_TRASH).font(NERD_FONT),
-                        text("WIPE SAVED SESSION").font(NERD_FONT).size(12),
-                    ].spacing(10).align_y(Alignment::Center)
-                )
-                .padding(10)
-                .on_press(Message::ClearSessionPressed)
-                .style(button::secondary),
+                row![
+                    button(
+                        row![
+                            text(ICON_TRASH).font(NERD_FONT),
+                            text("WIPE SAVED SESSION").font(NERD_FONT).size(12),
+                        ].spacing(10).align_y(Alignment::Center)
+                    )
+                    .padding(10)
+                    .on_press(Message::ClearSessionPressed)
+                    .style(button::secondary),
+
+                    button(
+                        row![
+                            text("\u{f021}").font(NERD_FONT), // Refresh icon for reset
+                            text("RESET TO DEFAULTS").font(NERD_FONT).size(12),
+                        ].spacing(10).align_y(Alignment::Center)
+                    )
+                    .padding(10)
+                    .on_press(if is_locked { Message::Tick } else { Message::ResetSettings })
+                    .style(button::secondary),
+                ].spacing(10)
             ]
             .spacing(12)
         )

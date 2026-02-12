@@ -9,18 +9,11 @@ use futures::SinkExt;
 use crate::types::{ConnectionStatus, InputRequest, InputRequestWrapper, Message};
 use crate::logger::{GUI_LOGGER, LOGGER_INIT};
 use crate::provider::{GuiInteraction, GuiProvider};
+use crate::config::GuiSettings;
 
 pub struct KuVpnGui {
-    // Basic Settings
-    pub url: String,
-    pub domain: String,
-    pub escalation_tool: String,
-    
-    // Advanced Settings (CLI parity)
-    pub log_level_val: f32,
-    pub openconnect_path: String,
-    pub login_mode_val: f32,
-    pub email: String,
+    // Settings
+    pub settings: GuiSettings,
 
     // UI State
     pub show_advanced: bool,
@@ -40,12 +33,17 @@ pub struct KuVpnGui {
     pub disconnect_item: Option<MenuItem>,
     pub window_id: Option<iced::window::Id>,
     pub is_visible: bool,
-    pub close_to_tray: bool,
 }
 
 impl KuVpnGui {
     pub fn theme(&self, _id: iced::window::Id) -> iced::Theme {
         iced::Theme::Dark
+    }
+
+    fn save_settings(&self) {
+        if let Err(e) = self.settings.save() {
+            log::error!("Failed to save settings: {}", e);
+        }
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
@@ -97,15 +95,16 @@ impl KuVpnGui {
                 }
             }
             Message::CloseToTrayToggled(v) => {
-                self.close_to_tray = v;
+                self.settings.close_to_tray = v;
+                self.save_settings();
                 Task::none()
             }
             Message::ToggleVisibility { from_close_request } => {
                 log::info!("ToggleVisibility called. visible={}, close_to_tray={}, from_close_request={}", 
-                    self.is_visible, self.close_to_tray, from_close_request);
+                    self.is_visible, self.settings.close_to_tray, from_close_request);
                 
                 if self.is_visible {
-                    if from_close_request && !self.close_to_tray {
+                    if from_close_request && !self.settings.close_to_tray {
                         log::info!("Exiting application due to close request");
                         return iced::exit();
                     }
@@ -126,19 +125,22 @@ impl KuVpnGui {
                 Task::none()
             }
             Message::UrlChanged(url) => {
-                self.url = url;
+                self.settings.url = url;
+                self.save_settings();
                 Task::none()
             }
             Message::DomainChanged(domain) => {
-                self.domain = domain;
+                self.settings.domain = domain;
+                self.save_settings();
                 Task::none()
             }
             Message::EscalationToolChanged(tool) => {
-                self.escalation_tool = tool;
+                self.settings.escalation_tool = tool;
+                self.save_settings();
                 Task::none()
             }
             Message::LogLevelSliderChanged(val) => {
-                self.log_level_val = val;
+                self.settings.log_level_val = val;
                 if let Ok(mut guard) = GUI_LOGGER.user_level.lock() {
                     *guard = match val.round() as i32 {
                         0 => log::LevelFilter::Off,
@@ -150,18 +152,22 @@ impl KuVpnGui {
                         _ => log::LevelFilter::Info,
                     };
                 }
+                self.save_settings();
                 Task::none()
             }
             Message::OpenConnectPathChanged(p) => {
-                self.openconnect_path = p;
+                self.settings.openconnect_path = p;
+                self.save_settings();
                 Task::none()
             }
             Message::EmailChanged(e) => {
-                self.email = e;
+                self.settings.email = e;
+                self.save_settings();
                 Task::none()
             }
             Message::LoginModeChanged(val) => {
-                self.login_mode_val = val;
+                self.settings.login_mode_val = val;
+                self.save_settings();
                 Task::none()
             }
             Message::ToggleAdvanced => {
@@ -184,18 +190,18 @@ impl KuVpnGui {
                     self.logs.clear();
                     self.logs.push("[*] Accessing campus gateway...".to_string());
                     
-                    let url = self.url.clone();
-                    let domain = self.domain.clone();
+                    let url = self.settings.url.clone();
+                    let domain = self.settings.domain.clone();
                     
-                    let (headless, no_auto_login) = match self.login_mode_val.round() as i32 {
+                    let (headless, no_auto_login) = match self.settings.login_mode_val.round() as i32 {
                         0 => (true, false),  // Full Automatic
                         1 => (false, false), // Visual Automatic
                         _ => (false, true),  // Manual
                     };
 
-                    let escalation_tool = self.escalation_tool.clone();
-                    let openconnect_path = if self.openconnect_path.is_empty() { "openconnect".to_string() } else { self.openconnect_path.clone() };
-                    let email = if self.email.is_empty() { None } else { Some(self.email.clone()) };
+                    let escalation_tool = self.settings.escalation_tool.clone();
+                    let openconnect_path = if self.settings.openconnect_path.is_empty() { "openconnect".to_string() } else { self.settings.openconnect_path.clone() };
+                    let email = if self.settings.email.is_empty() { None } else { Some(self.settings.email.clone()) };
 
                     let (cancel_tx, mut cancel_rx) = oneshot::channel();
                     self.cancel_tx = Some(cancel_tx);
@@ -431,6 +437,15 @@ impl KuVpnGui {
                 self.status = status;
                 Task::none()
             }
+            Message::ResetSettings => {
+                self.settings = GuiSettings::default();
+                self.save_settings();
+                // We also need to update the log level filter immediately
+                if let Ok(mut guard) = GUI_LOGGER.user_level.lock() {
+                    *guard = log::LevelFilter::Error; // Default
+                }
+                Task::none()
+            }
         }
     }
 
@@ -472,14 +487,23 @@ impl KuVpnGui {
 
 impl Default for KuVpnGui {
     fn default() -> Self {
+        let settings = GuiSettings::load();
+        
+        // Ensure logger is synced with loaded settings
+        if let Ok(mut guard) = GUI_LOGGER.user_level.lock() {
+            *guard = match settings.log_level_val.round() as i32 {
+                0 => log::LevelFilter::Off,
+                1 => log::LevelFilter::Error,
+                2 => log::LevelFilter::Warn,
+                3 => log::LevelFilter::Info,
+                4 => log::LevelFilter::Debug,
+                5 => log::LevelFilter::Trace,
+                _ => log::LevelFilter::Info,
+            };
+        }
+
         Self {
-            url: "https://vpn.ku.edu.tr".to_string(),
-            domain: "vpn.ku.edu.tr".to_string(),
-            escalation_tool: "pkexec".to_string(),
-            log_level_val: 1.0, // Default: Error
-            openconnect_path: "openconnect".to_string(),
-            login_mode_val: 0.0, // Default: Auto Headless
-            email: String::new(),
+            settings,
             show_advanced: false,
             show_console: false,
             logs: vec!["Ready for secure campus access.".to_string()],
@@ -495,7 +519,6 @@ impl Default for KuVpnGui {
             disconnect_item: None,
             window_id: None,
             is_visible: false,
-            close_to_tray: true,
         }
     }
 }
