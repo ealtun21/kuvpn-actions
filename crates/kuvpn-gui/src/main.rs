@@ -61,8 +61,15 @@ pub fn main() -> iced::Result {
             (
                 gui,
                 Task::batch(vec![
-                    iced::font::load(NERD_FONT_BYTES).map(|_| Message::GtkTick),
+                    iced::font::load(NERD_FONT_BYTES).map(|res| {
+                        match res {
+                            Ok(_) => log::info!("Font loaded successfully"),
+                            Err(e) => log::error!("Failed to load font: {:?}", e),
+                        }
+                        Message::GtkTick
+                    }),
                     task.map(Message::WindowOpened),
+                    Task::done(Message::TestOpenConnect),
                 ]),
             )
         },
