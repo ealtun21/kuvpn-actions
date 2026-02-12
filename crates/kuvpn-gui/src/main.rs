@@ -146,6 +146,8 @@ enum Message {
     RequestInput(Arc<InputRequestWrapper>),
     InputChanged(String),
     SubmitInput,
+    MfaPushReceived(String),
+    MfaCompleteReceived,
     ClearSessionPressed,
     ConnectionFinished(Option<String>),
     StatusChanged(ConnectionStatus),
@@ -200,12 +202,19 @@ struct InputRequest {
 }
 
 #[derive(Debug)]
+enum GuiInteraction {
+    Request(InputRequest),
+    MfaPush(String),
+    MfaComplete,
+}
+
+#[derive(Debug)]
 struct InputRequestWrapper(Mutex<Option<InputRequest>>);
 
 static LOGGER_INIT: std::sync::Once = std::sync::Once::new();
 
 struct GuiProvider {
-    request_tx: mpsc::Sender<InputRequest>,
+    interaction_tx: mpsc::Sender<GuiInteraction>,
 }
 
 impl CredentialsProvider for GuiProvider {
@@ -214,6 +223,12 @@ impl CredentialsProvider for GuiProvider {
     }
     fn request_password(&self, msg: &str) -> String {
         self.request(msg, true)
+    }
+    fn on_mfa_push(&self, code: &str) {
+        let _ = self.interaction_tx.blocking_send(GuiInteraction::MfaPush(code.to_string()));
+    }
+    fn on_mfa_complete(&self) {
+        let _ = self.interaction_tx.blocking_send(GuiInteraction::MfaComplete);
     }
 }
 
@@ -226,7 +241,7 @@ impl GuiProvider {
             response_tx: tx,
         };
         
-        let _ = self.request_tx.blocking_send(request);
+        let _ = self.interaction_tx.blocking_send(GuiInteraction::Request(request));
         futures::executor::block_on(rx).unwrap_or_default()
     }
 }
@@ -395,7 +410,7 @@ impl KuVpnGui {
 
                     return Task::stream(iced::stream::channel(100, move |mut output: iced::futures::channel::mpsc::Sender<Message>| async move {
                         let (log_tx, mut log_rx) = mpsc::channel(100);
-                        let (req_tx, mut req_rx) = mpsc::channel(1);
+                        let (interaction_tx, mut interaction_rx) = mpsc::channel(10);
                         let (child_tx, mut child_rx) = mpsc::channel::<u32>(1);
                         
                         if let Ok(mut guard) = GUI_LOGGER.tx.lock() {
@@ -412,7 +427,7 @@ impl KuVpnGui {
                         let log_tx_c = log_tx.clone();
 
                         std::thread::spawn(move || {
-                            let provider = GuiProvider { request_tx: req_tx };
+                            let provider = GuiProvider { interaction_tx };
                             let dsid_res = kuvpn::run_login_and_get_dsid(
                                 headless,
                                 &url_c,
@@ -493,11 +508,18 @@ impl KuVpnGui {
                                         break;
                                     }
                                 }
-                                res = req_rx.recv() => {
-                                    if let Some(r) = res {
-                                        let _ = output.send(Message::RequestInput(Arc::new(InputRequestWrapper(Mutex::new(Some(r)))))).await;
-                                    } else {
-                                        break;
+                                res = interaction_rx.recv() => {
+                                    match res {
+                                        Some(GuiInteraction::Request(req)) => {
+                                            let _ = output.send(Message::RequestInput(Arc::new(InputRequestWrapper(Mutex::new(Some(req)))))).await;
+                                        }
+                                        Some(GuiInteraction::MfaPush(code)) => {
+                                            let _ = output.send(Message::MfaPushReceived(code)).await;
+                                        }
+                                        Some(GuiInteraction::MfaComplete) => {
+                                            let _ = output.send(Message::MfaCompleteReceived).await;
+                                        }
+                                        None => break,
                                     }
                                 }
                                 child_res = child_rx.recv() => {
@@ -537,10 +559,6 @@ impl KuVpnGui {
                     _ => log::Level::Info,
                 };
 
-                let mfa_before = self.mfa_info.is_some();
-                self.handle_log_event(log_msg);
-                let mfa_after = self.mfa_info.is_some();
-                
                 // User visibility filtering
                 let user_filter = if let Ok(guard) = GUI_LOGGER.user_level.lock() {
                     *guard
@@ -554,19 +572,24 @@ impl KuVpnGui {
                         self.logs.remove(0);
                     }
                 }
-
-                if !mfa_before && mfa_after {
-                    self.is_visible = true;
-                    if let Some(item) = &self.show_item {
-                        item.set_text("Hide KUVPN");
-                    }
-                    if let Some(id) = self.window_id {
-                        return Task::batch(vec![
-                            iced::window::set_mode(id, iced::window::Mode::Windowed),
-                            iced::window::gain_focus(id),
-                        ]);
-                    }
+                Task::none()
+            }
+            Message::MfaPushReceived(code) => {
+                self.mfa_info = Some(code);
+                self.is_visible = true;
+                if let Some(item) = &self.show_item {
+                    item.set_text("Hide KUVPN");
                 }
+                if let Some(id) = self.window_id {
+                    return Task::batch(vec![
+                        iced::window::set_mode(id, iced::window::Mode::Windowed),
+                        iced::window::gain_focus(id),
+                    ]);
+                }
+                Task::none()
+            }
+            Message::MfaCompleteReceived => {
+                self.mfa_info = None;
                 Task::none()
             }
             Message::RequestInput(wrapper) => {
@@ -630,15 +653,6 @@ impl KuVpnGui {
                 self.status = status;
                 Task::none()
             }
-        }
-    }
-
-    fn handle_log_event(&mut self, log: &str) {
-        if log.contains("Push Approval: ") {
-            let cleaned = log.replace("[*] ", "").replace("Push Approval: ", "");
-            self.mfa_info = Some(cleaned);
-        } else if log.contains("Push page finished") || log.contains("Number prompt gone") {
-            self.mfa_info = None;
         }
     }
 
