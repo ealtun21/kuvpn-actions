@@ -91,7 +91,9 @@ pub fn execute_openconnect(
     let command_to_run = default_tools
         .iter()
         .find_map(|&tool| which(tool).ok().map(|_| tool))
-        .ok_or(anyhow::anyhow!("No available tool for running openconnect (sudo/doas/pkexec not found)"))?;
+        .ok_or(anyhow::anyhow!(
+            "No available tool for running openconnect (sudo/doas/pkexec not found)"
+        ))?;
 
     log::info!(
         "Running openconnect using {} for elevated privileges or execution",

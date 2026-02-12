@@ -1,4 +1,3 @@
-use crate::utils::get_user_data_dir;
 use headless_chrome::browser::default_executable;
 use headless_chrome::{Browser, LaunchOptions};
 use std::error::Error;
@@ -25,35 +24,44 @@ use std::time::Duration;
 ///
 /// A `Result` containing the configured `Browser` instance on success, or an error on failure.
 pub fn create_browser(agent: &str, headless: bool) -> Result<Browser, Box<dyn Error>> {
-    // Retrieve the user data directory.
-    let user_data_dir = get_user_data_dir()?;
-
-    // Build the command-line arguments for launching the browser.
     let user_agent = OsString::from(format!("--user-agent={agent}"));
     let body = OsString::from("--app=data:text/html,");
     let window = OsString::from("--new-window");
 
-    // Configure the browser launch options.
-    let mut options = LaunchOptions::default_builder();
-    let mut launch_options = options
-        .headless(headless)
-        .sandbox(false)
-        .idle_browser_timeout(Duration::MAX)
-        .window_size(Some((800, 800)))
-        .args(vec![
-            body.as_os_str(),
-            window.as_os_str(),
-            user_agent.as_os_str(),
-        ])
-        .user_data_dir(Some(user_data_dir));
+    let mut attempts = 0;
+    loop {
+        let user_data_dir = crate::utils::get_user_data_dir()?;
 
-    // If KUVPN_CHROME_PATH is set, use it. Otherwise, use default.
-    if let Ok(path) = std::env::var("KUVPN_CHROME_PATH") {
-        launch_options = launch_options.path(Some(path.into()));
-    } else if let Ok(executable_path) = default_executable() {
-        launch_options = launch_options.path(Some(executable_path));
+        let mut options = LaunchOptions::default_builder();
+        let mut launch_options = options
+            .headless(headless)
+            .sandbox(false)
+            .idle_browser_timeout(Duration::MAX)
+            .window_size(Some((800, 800)))
+            .enable_gpu(false)
+            .args(vec![
+                body.as_os_str(),
+                window.as_os_str(),
+                user_agent.as_os_str(),
+            ])
+            .user_data_dir(Some(user_data_dir));
+
+        if let Ok(path) = std::env::var("KUVPN_CHROME_PATH") {
+            launch_options = launch_options.path(Some(path.into()));
+        } else if let Ok(executable_path) = default_executable() {
+            launch_options = launch_options.path(Some(executable_path));
+        }
+
+        match Browser::new(launch_options.build()?) {
+            Ok(browser) => return Ok(browser),
+            Err(e) => {
+                attempts += 1;
+                if attempts >= 2 {
+                    return Err(format!("Browser failed even after wipe: {}", e).into());
+                }
+                log::warn!("[!] Browser connection failed. Wiping profile and retrying...");
+                crate::utils::wipe_user_data_dir()?;
+            }
+        }
     }
-
-    // Build and return the Browser instance.
-    Ok(Browser::new(launch_options.build()?)?)
 }
