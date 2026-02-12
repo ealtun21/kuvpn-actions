@@ -6,6 +6,11 @@ APP_NAME="KUVPN"
 VERSION="2.0.2"
 ARCH="x86_64"
 
+echo "Building $APP_NAME AppImage v$VERSION for $ARCH..."
+echo "TIP: For maximum compatibility (older GLIBC), build this inside the provided Dockerfile:"
+echo "     docker build -t kuvpn-builder -f packaging/appimage/Dockerfile ."
+echo "     docker run --rm -v \$(pwd):/out kuvpn-builder sh -c 'cp *.AppImage /out/'"
+
 # Build the GUI binary
 cargo build -p kuvpn-gui --release
 
@@ -63,8 +68,9 @@ fi
 # Build Minimal AppImage
 export NO_STRIP=1
 export DEPLOY_GTK_VERSION=3
-# Ensure we include appindicator for the tray and pangoft2 (often missing in minimal setups)
-export EXTRA_LIBS="libayatana-appindicator3.so.1;libappindicator3.so.1;libpangoft2-1.0.so.0"
+# Ensure we include appindicator for the tray and other libs often missing in minimal setups
+# libnss3 and others are often needed by headless_chrome/chromium
+export EXTRA_LIBS="libayatana-appindicator3.so.1;libappindicator3.so.1;libpangoft2-1.0.so.0;libnss3.so;libnssutil3.so;libsmime3.so;libnspr4.so;libatk-1.0.so.0;libatk-bridge-2.0.so.0;libcups.so.2;libgbm.so.1"
 
 # Make sure linuxdeploy can find the gtk plugin
 cp packaging/appimage/linuxdeploy-plugin-gtk.sh ./linuxdeploy-plugin-gtk.sh
