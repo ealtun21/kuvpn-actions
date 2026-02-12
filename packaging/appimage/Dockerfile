@@ -23,6 +23,12 @@ RUN apt-get update && apt-get install -y \
     libdbus-1-dev \
     libxdo-dev \
     libxkbcommon-dev \
+    libxkbcommon-x11-dev \
+    libxcb-xkb-dev \
+    libxcb-render0-dev \
+    libxcb-shm0-dev \
+    libxcb-util-dev \
+    libxcb-image0-dev \
     libxcb1-dev \
     libfuse2 \
     file \
