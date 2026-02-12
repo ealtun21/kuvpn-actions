@@ -8,9 +8,14 @@ ARCH="x86_64"
 
 # Podman/Docker detection and wrapper
 if [ "$1" != "--no-container" ] && [ ! -f /.containerenv ] && [ ! -f /run/.containerenv ]; then
+    BUILD_ARGS=""
+    if [ "$1" == "--full" ]; then
+        BUILD_ARGS="--full"
+    fi
+
     if command -v podman >/dev/null 2>&1; then
         echo "Using Podman to build AppImage for maximum compatibility..."
-        podman build -t kuvpn-builder -f packaging/appimage/Dockerfile .
+        podman build --build-arg BUILD_ARGS="$BUILD_ARGS" -t kuvpn-builder -f packaging/appimage/Dockerfile .
         
         CONTAINER_ID=$(podman create kuvpn-builder)
         podman cp "$CONTAINER_ID":/build/${APP_NAME}-minimal-${ARCH}.AppImage .
@@ -23,7 +28,7 @@ if [ "$1" != "--no-container" ] && [ ! -f /.containerenv ] && [ ! -f /run/.conta
         exit 0
     elif command -v docker >/dev/null 2>&1; then
         echo "Using Docker to build AppImage for maximum compatibility..."
-        docker build -t kuvpn-builder -f packaging/appimage/Dockerfile .
+        docker build --build-arg BUILD_ARGS="$BUILD_ARGS" -t kuvpn-builder -f packaging/appimage/Dockerfile .
         
         CONTAINER_ID=$(docker create kuvpn-builder)
         docker cp "$CONTAINER_ID":/build/${APP_NAME}-minimal-${ARCH}.AppImage .
