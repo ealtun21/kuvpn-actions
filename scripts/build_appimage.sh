@@ -6,10 +6,44 @@ APP_NAME="KUVPN"
 VERSION="2.0.2"
 ARCH="x86_64"
 
+# Podman/Docker detection and wrapper
+if [ "$1" != "--no-container" ] && [ ! -f /.containerenv ] && [ ! -f /run/.containerenv ]; then
+    if command -v podman >/dev/null 2>&1; then
+        echo "Using Podman to build AppImage for maximum compatibility..."
+        podman build -t kuvpn-builder -f packaging/appimage/Dockerfile .
+        
+        CONTAINER_ID=$(podman create kuvpn-builder)
+        podman cp "$CONTAINER_ID":/build/${APP_NAME}-minimal-${ARCH}.AppImage .
+        if [ "$1" == "--full" ]; then
+             podman cp "$CONTAINER_ID":/build/${APP_NAME}-full-${ARCH}.AppImage .
+        fi
+        podman rm "$CONTAINER_ID"
+        
+        echo "Successfully built and extracted AppImage(s)."
+        exit 0
+    elif command -v docker >/dev/null 2>&1; then
+        echo "Using Docker to build AppImage for maximum compatibility..."
+        docker build -t kuvpn-builder -f packaging/appimage/Dockerfile .
+        
+        CONTAINER_ID=$(docker create kuvpn-builder)
+        docker cp "$CONTAINER_ID":/build/${APP_NAME}-minimal-${ARCH}.AppImage .
+        if [ "$1" == "--full" ]; then
+             docker cp "$CONTAINER_ID":/build/${APP_NAME}-full-${ARCH}.AppImage .
+        fi
+        docker rm "$CONTAINER_ID"
+        
+        echo "Successfully built and extracted AppImage(s)."
+        exit 0
+    else
+        echo "Neither Podman nor Docker found. Building on host (may have compatibility issues)..."
+    fi
+fi
+
+if [ "$1" == "--no-container" ]; then
+    shift
+fi
+
 echo "Building $APP_NAME AppImage v$VERSION for $ARCH..."
-echo "TIP: For maximum compatibility (older GLIBC), build this inside the provided Dockerfile:"
-echo "     docker build -t kuvpn-builder -f packaging/appimage/Dockerfile ."
-echo "     docker run --rm -v \$(pwd):/out kuvpn-builder sh -c 'cp *.AppImage /out/'"
 
 # Build the GUI binary
 cargo build -p kuvpn-gui --release
@@ -75,7 +109,7 @@ export EXTRA_LIBS="libayatana-appindicator3.so.1;libappindicator3.so.1;libpangof
 # Make sure linuxdeploy can find the gtk plugin
 cp packaging/appimage/linuxdeploy-plugin-gtk.sh ./linuxdeploy-plugin-gtk.sh
 
-./packaging/appimage/linuxdeploy --appdir "$APPDIR" \
+./packaging/appimage/linuxdeploy --appimage-extract-and-run --appdir "$APPDIR" \
     --executable "$APPDIR/usr/bin/kuvpn-gui" \
     --desktop-file "$APPDIR/usr/share/applications/kuvpn.desktop" \
     --icon-file packaging/appimage/kuvpn.png \
