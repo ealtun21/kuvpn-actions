@@ -52,6 +52,7 @@ fn main() -> ExitCode {
         args.no_auto_login,
         args.email,
         &kuvpn::utils::TerminalCredentialsProvider,
+        None,
     ) {
         Ok(dsid) => dsid,
         Err(e) => {

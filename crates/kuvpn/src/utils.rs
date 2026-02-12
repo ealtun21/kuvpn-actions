@@ -3,9 +3,28 @@ use std::env;
 use std::error::Error;
 use std::io::{self, Write};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+#[derive(Clone, Default)]
+pub struct CancellationToken(Arc<AtomicBool>);
+
+impl CancellationToken {
+    pub fn new() -> Self {
+        Self(Arc::new(AtomicBool::new(false)))
+    }
+
+    pub fn cancel(&self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(Ordering::SeqCst)
+    }
+}
 
 /// Trait for providing credentials and user input.
-pub trait CredentialsProvider {
+pub trait CredentialsProvider: Send + Sync {
     fn request_text(&self, msg: &str) -> String;
     fn request_password(&self, msg: &str) -> String;
     fn on_mfa_push(&self, _code: &str) {}
