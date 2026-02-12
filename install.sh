@@ -180,6 +180,7 @@ update_shell_config() {
     local PATH_STR="\$HOME/.local/bin"
     local SH_CMD="export PATH=\"$PATH_STR:\$PATH\""
     local FISH_CMD="set -gx PATH $PATH_STR \$PATH"
+    local MARKER="# Added by kuvpn installer"
     local UPDATED=0
 
     # 1. Update Standard Shells
@@ -187,9 +188,10 @@ update_shell_config() {
 
     for config_file in "${FILES[@]}"; do
         if [ -f "$config_file" ]; then
-            if ! grep -q ".local/bin" "$config_file"; then
+            # Check for our marker comment OR the exact export line
+            if ! grep -qF "$MARKER" "$config_file" && ! grep -qF 'export PATH="$HOME/.local/bin:$PATH"' "$config_file"; then
                 echo "" >> "$config_file"
-                echo "# User binaries" >> "$config_file"
+                echo "$MARKER" >> "$config_file"
                 echo "$SH_CMD" >> "$config_file"
                 log_success "Added to PATH in $config_file"
                 UPDATED=1
@@ -203,9 +205,10 @@ update_shell_config() {
     local FISH_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"
     if [ -d "$(dirname "$FISH_CONFIG")" ]; then
         touch "$FISH_CONFIG"
-        if ! grep -q ".local/bin" "$FISH_CONFIG"; then
+        # Check for our marker comment OR the exact fish PATH line
+        if ! grep -qF "$MARKER" "$FISH_CONFIG" && ! grep -qF 'set -gx PATH $HOME/.local/bin $PATH' "$FISH_CONFIG"; then
             echo "" >> "$FISH_CONFIG"
-            echo "# User binaries" >> "$FISH_CONFIG"
+            echo "$MARKER" >> "$FISH_CONFIG"
             echo "$FISH_CMD" >> "$FISH_CONFIG"
             log_success "Added to PATH in $FISH_CONFIG"
             UPDATED=1
