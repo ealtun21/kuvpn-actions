@@ -8,7 +8,7 @@ pub mod status;
 
 use crate::app::KuVpnGui;
 use crate::types::{Message, COLOR_BG, COLOR_TEXT};
-use iced::widget::{column, container, scrollable, stack};
+use iced::widget::{column, container, row, scrollable, stack, text};
 use iced::{Alignment, Element, Length};
 
 impl KuVpnGui {
@@ -18,7 +18,41 @@ impl KuVpnGui {
         let mfa_banner = self.view_mfa_banner();
         let action_section = self.view_actions();
 
-        let mut content = column![header, status_view, mfa_banner, action_section,]
+        let mut content = column![];
+
+        if self.oc_test_result == Some(false) {
+            content = content.push(
+                container(
+                    row![
+                        text(crate::types::ICON_INFO)
+                            .font(crate::types::NERD_FONT)
+                            .color(crate::types::COLOR_WARNING),
+                        text("OpenConnect not found! Please install it or set path in Settings.")
+                            .size(14)
+                            .color(crate::types::COLOR_WARNING),
+                    ]
+                    .spacing(10)
+                    .align_y(Alignment::Center),
+                )
+                .width(Length::Fill)
+                .padding(15)
+                .style(|_| container::Style {
+                    background: Some(crate::types::COLOR_SURFACE.into()),
+                    border: iced::Border {
+                        color: crate::types::COLOR_WARNING,
+                        width: 1.0,
+                        radius: 5.0.into(),
+                    },
+                    ..Default::default()
+                }),
+            );
+        }
+
+        content = content
+            .push(header)
+            .push(status_view)
+            .push(mfa_banner)
+            .push(action_section)
             .spacing(30)
             .padding(30)
             .align_x(Alignment::Center)

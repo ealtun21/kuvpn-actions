@@ -1,9 +1,9 @@
 use crate::app::KuVpnGui;
 use crate::types::{
-    ConnectionStatus, Message, COLOR_SUCCESS, COLOR_TEXT_DIM, COLOR_WARNING, ICON_INFO,
+    ConnectionStatus, Message, COLOR_SUCCESS, COLOR_TEXT_DIM, COLOR_WARNING,
     ICON_REFRESH, ICON_SHIELD, ICON_SHIELD_CHECK, NERD_FONT,
 };
-use iced::widget::{column, container, row, text};
+use iced::widget::{column, container, text};
 use iced::{Alignment, Border, Element};
 
 impl KuVpnGui {
@@ -36,21 +36,6 @@ impl KuVpnGui {
             })
             .size(12)
             .color(COLOR_TEXT_DIM),
-            if self.oc_test_result == Some(false) {
-                container(
-                    row![
-                        text(ICON_INFO).font(NERD_FONT).color(COLOR_WARNING),
-                        text("OpenConnect not found! Check settings.")
-                            .size(12)
-                            .color(COLOR_WARNING),
-                    ]
-                    .spacing(10)
-                    .align_y(Alignment::Center),
-                )
-                .padding(10)
-            } else {
-                container(iced::widget::Space::new().height(0))
-            }
         ]
         .spacing(15)
         .align_x(Alignment::Center)
