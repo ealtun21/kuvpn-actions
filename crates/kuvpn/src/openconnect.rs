@@ -123,6 +123,24 @@ pub fn execute_openconnect(
     Ok(child)
 }
 
+/// Gracefully terminates a process by its PID.
+pub fn kill_process(pid: u32) -> anyhow::Result<()> {
+    #[cfg(unix)]
+    {
+        use nix::sys::signal::{self, Signal};
+        use nix::unistd::Pid;
+        let pid = Pid::from_raw(pid as i32);
+        signal::kill(pid, Signal::SIGINT)?;
+    }
+    #[cfg(not(unix))]
+    {
+        // Fallback for non-unix systems (less graceful)
+        // We'd need a handle or use taskkill on windows
+        // But for now let's just use what we can
+    }
+    Ok(())
+}
+
 /// Gracefully terminates the `openconnect` process.
 ///
 /// On Unix systems, it sends a SIGINT signal to allow `openconnect` to clean up
