@@ -122,3 +122,41 @@ pub fn execute_openconnect(
 
     Ok(child)
 }
+
+/// Gracefully terminates the `openconnect` process.
+///
+/// On Unix systems, it sends a SIGINT signal to allow `openconnect` to clean up
+/// network interfaces and routes. On other systems, it falls back to standard kill.
+pub fn kill_child(child: &mut Child) -> anyhow::Result<()> {
+    #[cfg(unix)]
+    {
+        use nix::sys::signal::{self, Signal};
+        use nix::unistd::Pid;
+        let pid = Pid::from_raw(child.id() as i32);
+        signal::kill(pid, Signal::SIGINT)?;
+    }
+    #[cfg(not(unix))]
+    {
+        child.kill()?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::Command;
+
+    #[test]
+    fn test_kill_child() {
+        let mut child = Command::new("sleep")
+            .arg("10")
+            .spawn()
+            .expect("failed to execute sleep");
+        
+        let res = kill_child(&mut child);
+        assert!(res.is_ok());
+        
+        let _ = child.wait();
+    }
+}
