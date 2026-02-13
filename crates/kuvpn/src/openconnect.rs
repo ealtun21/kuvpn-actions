@@ -79,7 +79,7 @@ pub fn locate_openconnect(user_path: &str) -> Option<PathBuf> {
 pub fn execute_openconnect(
     cookie_value: String,
     url: String,
-    run_command: &Option<String>,
+    _run_command: &Option<String>,
     openconnect_path: &Path,
     stdout: Stdio,
     stderr: Stdio,
@@ -90,7 +90,7 @@ pub fn execute_openconnect(
         let mut default_tools = vec!["doas", "sudo", "pkexec"];
 
         // If a custom run command is provided, check its availability and prioritize it.
-        if let Some(custom_command) = run_command {
+        if let Some(custom_command) = _run_command {
             info!("Custom run command provided: {}", custom_command);
             if which(custom_command).is_ok() {
                 info!("Custom command found: {}", custom_command);

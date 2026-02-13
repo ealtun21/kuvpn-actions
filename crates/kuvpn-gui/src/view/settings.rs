@@ -116,21 +116,30 @@ impl KuVpnGui {
                 ]
                 .spacing(10)
                 .align_y(Alignment::Center),
-                row![
-                    text("Elevation:").width(Length::Fixed(120.0)),
-                    pick_list(
-                        vec!["pkexec".to_string(), "sudo".to_string(), "doas".to_string()],
-                        Some(self.settings.escalation_tool.clone()),
-                        if is_locked {
-                            |_| Message::Tick
-                        } else {
-                            Message::EscalationToolChanged
-                        }
-                    )
-                    .width(Length::Fill),
-                ]
-                .spacing(10)
-                .align_y(Alignment::Center),
+                {
+                    #[cfg(not(windows))]
+                    {
+                        row![
+                            text("Elevation:").width(Length::Fixed(120.0)),
+                            pick_list(
+                                vec!["pkexec".to_string(), "sudo".to_string(), "doas".to_string()],
+                                Some(self.settings.escalation_tool.clone()),
+                                if is_locked {
+                                    |_| Message::Tick
+                                } else {
+                                    Message::EscalationToolChanged
+                                }
+                            )
+                            .width(Length::Fill),
+                        ]
+                        .spacing(10)
+                        .align_y(Alignment::Center)
+                    }
+                    #[cfg(windows)]
+                    {
+                        iced::widget::space::Space::new(Length::Shrink, Length::Shrink)
+                    }
+                },
                 column![
                     row![
                         text("Login Mode:").width(Length::Fixed(120.0)),
