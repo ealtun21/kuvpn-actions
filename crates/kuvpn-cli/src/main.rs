@@ -7,7 +7,7 @@ mod args;
 
 use args::Args;
 use clap::Parser;
-use kuvpn::{init_logger, run_login_and_get_dsid, SessionConfig, VpnSession, ConnectionStatus};
+use kuvpn::{init_logger, run_login_and_get_dsid, ParsedLog, SessionConfig, VpnSession, ConnectionStatus};
 use log::{error, info};
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -48,6 +48,7 @@ fn main() -> ExitCode {
             args.email,
             &kuvpn::utils::TerminalCredentialsProvider,
             None,
+            None,
         ) {
             Ok(dsid) => {
                 println!("{}", dsid);
@@ -81,28 +82,25 @@ fn main() -> ExitCode {
 
     loop {
         while let Ok(log_msg) = log_rx.try_recv() {
-            let parts: Vec<&str> = log_msg.splitn(2, '|').collect();
-            if parts.len() == 2 {
-                match parts[0] {
-                    "Error" => error!("{}", parts[1]),
-                    "Warn" => log::warn!("{}", parts[1]),
-                    "Info" => info!("{}", parts[1]),
-                    _ => info!("{}", parts[1]),
+            if let Some(parsed) = ParsedLog::parse(&log_msg) {
+                match parsed.level {
+                    log::Level::Error => error!("{}", parsed.message),
+                    log::Level::Warn => log::warn!("{}", parsed.message),
+                    _ => info!("{}", parsed.message),
                 }
             } else {
                 info!("{}", log_msg);
             }
         }
 
-        let status = session.status();
-        if status == ConnectionStatus::Disconnected {
-            break;
-        }
-        if status == ConnectionStatus::Error {
-            if let Some(err) = session.last_error() {
-                error!("Session Error: {}", err);
+        if session.is_finished() {
+            if session.status() == ConnectionStatus::Error {
+                if let Some(err) = session.last_error() {
+                    error!("Session Error: {}", err);
+                }
+                return ExitCode::FAILURE;
             }
-            return ExitCode::FAILURE;
+            break;
         }
 
         std::thread::sleep(std::time::Duration::from_millis(100));

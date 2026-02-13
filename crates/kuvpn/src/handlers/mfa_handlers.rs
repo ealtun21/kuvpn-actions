@@ -1,4 +1,4 @@
-use crate::utils::CredentialsProvider;
+use crate::utils::{CancellationToken, CredentialsProvider};
 use headless_chrome::Tab;
 use std::collections::HashSet;
 use std::thread::sleep;
@@ -8,6 +8,7 @@ use std::time::Duration;
 pub fn handle_authenticator_push_approval(
     tab: &Tab,
     provider: &dyn CredentialsProvider,
+    cancel_token: Option<&CancellationToken>,
 ) -> anyhow::Result<bool> {
     let is_push_page = tab.evaluate(
         r#"(function() {
@@ -39,6 +40,13 @@ pub fn handle_authenticator_push_approval(
 
         let prev_url = tab.get_url();
         loop {
+            if let Some(token) = cancel_token {
+                if token.is_cancelled() {
+                    provider.on_mfa_complete();
+                    return Err(anyhow::anyhow!("Operation cancelled by user"));
+                }
+            }
+
             sleep(Duration::from_secs(1));
 
             let still_showing = tab
@@ -144,6 +152,7 @@ pub fn handle_use_app_instead(tab: &Tab) -> anyhow::Result<bool> {
 pub fn handle_authenticator_ngc_push(
     tab: &Tab,
     provider: &dyn CredentialsProvider,
+    cancel_token: Option<&CancellationToken>,
 ) -> anyhow::Result<bool> {
     let is_ngc_push = tab.evaluate(
         r#"(function() {
@@ -175,6 +184,13 @@ pub fn handle_authenticator_ngc_push(
 
         let prev_url = tab.get_url();
         loop {
+            if let Some(token) = cancel_token {
+                if token.is_cancelled() {
+                    provider.on_mfa_complete();
+                    return Err(anyhow::anyhow!("Operation cancelled by user"));
+                }
+            }
+
             sleep(Duration::from_millis(400));
 
             let still_showing = tab

@@ -4,6 +4,7 @@ use crate::handlers::{auth_handlers::*, mfa_handlers::*, page_detection::is_inpu
 use crate::utils::{CancellationToken, CredentialsProvider};
 use headless_chrome::{Browser, Tab};
 use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -41,6 +42,7 @@ fn try_handle_page(
     handled: &mut HashSet<&'static str>,
     email: Option<&String>,
     provider: &dyn CredentialsProvider,
+    cancel_token: Option<&CancellationToken>,
 ) -> anyhow::Result<bool> {
     if !handled.contains("pick_account") && handle_pick_account(tab)? {
         handled.insert("pick_account");
@@ -93,7 +95,7 @@ fn try_handle_page(
         return Ok(true);
     }
 
-    if !handled.contains("ngc_push") && handle_authenticator_ngc_push(tab, provider)? {
+    if !handled.contains("ngc_push") && handle_authenticator_ngc_push(tab, provider, cancel_token)? {
         handled.insert("ngc_push");
         return Ok(true);
     }
@@ -117,7 +119,7 @@ fn try_handle_page(
         return Ok(true);
     }
 
-    if !handled.contains("push") && handle_authenticator_push_approval(tab, provider)? {
+    if !handled.contains("push") && handle_authenticator_push_approval(tab, provider, cancel_token)? {
         handled.insert("push");
         return Ok(true);
     }
@@ -140,13 +142,21 @@ pub fn run_login_and_get_dsid(
     email: Option<String>,
     provider: &dyn CredentialsProvider,
     cancel_token: Option<CancellationToken>,
+    browser_pid_out: Option<Arc<Mutex<Option<u32>>>>,
 ) -> anyhow::Result<String> {
     const MAX_RETRIES: usize = 10;
 
-    let browser = match create_browser(user_agent, headless) {
+    let browser = match create_browser(user_agent, headless, no_auto_login) {
         Ok(b) => b,
         Err(e) => return Err(anyhow::anyhow!(format!("Failed to create browser: {e}"))),
     };
+
+    // Store the browser PID so it can be force-killed on cancel
+    if let Some(ref pid_holder) = browser_pid_out {
+        if let Some(pid) = browser.get_process_id() {
+            *pid_holder.lock().unwrap() = Some(pid);
+        }
+    }
 
     // Try to get the first tab, if it's not there yet, create one.
     // This avoids leaving an empty "New Tab" or "Home Page" open.
@@ -167,12 +177,15 @@ pub fn run_login_and_get_dsid(
         }
     };
 
+    tab.set_default_timeout(Duration::from_secs(30));
+
     // Navigate to the target URL and wait for the page to load.
     log::info!("[*] Navigating to: {}", url);
     tab.navigate_to(url)?;
-    
-    // wait_until_navigated can sometimes hang if the page is complex.
-    let _ = tab.wait_until_navigated();
+
+    if let Err(e) = tab.wait_until_navigated() {
+        log::warn!("[!] Initial navigation wait timed out: {}, continuing...", e);
+    }
 
     let mut handled: HashSet<&'static str> = HashSet::new();
     let mut last_url = "".to_string();
@@ -211,7 +224,7 @@ pub fn run_login_and_get_dsid(
 
         if !no_auto_login {
             // try_handle_page can also fail if browser is closed
-            match try_handle_page(&tab, &mut handled, email.as_ref(), provider) {
+            match try_handle_page(&tab, &mut handled, email.as_ref(), provider, cancel_token.as_ref()) {
                 Ok(true) => {
                     retries = 0;
                 }

@@ -18,5 +18,5 @@ pub use openconnect::{
     execute_openconnect, get_openconnect_pid, is_openconnect_running, is_vpn_interface_up,
     kill_process, locate_openconnect,
 };
-pub use session::{ConnectionStatus, SessionConfig, VpnSession};
+pub use session::{ConnectionStatus, ParsedLog, SessionConfig, VpnSession};
 pub use utils::get_user_data_dir;
