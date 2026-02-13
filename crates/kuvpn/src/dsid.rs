@@ -11,18 +11,20 @@ use std::time::Duration;
 /// cookies/session data to the profile directory on disk.
 /// Without this, Browser::drop sends SIGKILL and cookies are lost.
 fn close_all_tabs(browser: &Browser) {
+    // If we can't get the lock quickly, it's likely something is wrong/stuck.
     if let Ok(tabs) = browser.get_tabs().lock() {
         for tab in tabs.iter() {
+            // We don't want to hang here if the browser is already dead.
+            // tab.close(true) sends a message and waits for a response.
             let _ = tab.close(true);
         }
     }
-    // Brief wait for Chrome to flush profile data before process is killed
-    sleep(Duration::from_millis(300));
+    sleep(Duration::from_millis(200));
 }
 
 /// Extracts DSID cookie from the browser.
 fn poll_dsid(tab: &Tab, domain: &str) -> anyhow::Result<Option<String>> {
-    let cookies = tab.get_cookies()?;
+    let cookies = tab.get_cookies().map_err(|e| anyhow::anyhow!("Browser error: {}", e))?;
     if let Some(cookie) = cookies
         .iter()
         .find(|c| c.name == "DSID" && c.domain.contains(domain))
@@ -146,14 +148,34 @@ pub fn run_login_and_get_dsid(
         Err(e) => return Err(anyhow::anyhow!(format!("Failed to create browser: {e}"))),
     };
 
-    let tab = browser.new_tab()?;
+    // Try to get the first tab, if it's not there yet, create one.
+    // This avoids leaving an empty "New Tab" or "Home Page" open.
+    let tab = {
+        let mut initial_tab = None;
+        for _ in 0..10 {
+            if let Ok(tabs) = browser.get_tabs().lock() {
+                if let Some(t) = tabs.first() {
+                    initial_tab = Some(std::sync::Arc::clone(t));
+                    break;
+                }
+            }
+            sleep(Duration::from_millis(200));
+        }
+        match initial_tab {
+            Some(t) => t,
+            None => browser.new_tab()?,
+        }
+    };
 
     // Navigate to the target URL and wait for the page to load.
+    log::info!("[*] Navigating to: {}", url);
     tab.navigate_to(url)?;
-    tab.wait_until_navigated()?;
+    
+    // wait_until_navigated can sometimes hang if the page is complex.
+    let _ = tab.wait_until_navigated();
 
     let mut handled: HashSet<&'static str> = HashSet::new();
-    let mut last_url = tab.get_url();
+    let mut last_url = "".to_string();
     let mut retries = 0;
 
     loop {
@@ -165,25 +187,47 @@ pub fn run_login_and_get_dsid(
             }
         }
 
-        if let Some(dsid) = poll_dsid(&tab, domain)? {
-            log::info!("[✓] Found valid DSID, quitting.");
-            close_all_tabs(&browser);
-            return Ok(dsid);
+        // Use poll_dsid as a heartbeat too. If it fails, the browser is likely gone.
+        let dsid_result = poll_dsid(&tab, domain);
+        match dsid_result {
+            Ok(Some(dsid)) => {
+                log::info!("[✓] Found valid DSID, quitting.");
+                close_all_tabs(&browser);
+                return Ok(dsid);
+            }
+            Ok(None) => {} // Keep going
+            Err(e) => {
+                log::warn!("[!] Browser heartbeat lost (manual close?): {}", e);
+                return Err(e);
+            }
         }
 
         let current_url = tab.get_url();
         if current_url != last_url {
-            log::info!("[*] Page navigated to: {}", current_url);
+            log::info!("[*] Page: {}", current_url);
             last_url = current_url;
             retries = 0;
         }
 
         if !no_auto_login {
-            let handled_something = try_handle_page(&tab, &mut handled, email.as_ref(), provider)?;
-            if handled_something {
-                retries = 0;
-            } else {
-                retries += 1;
+            // try_handle_page can also fail if browser is closed
+            match try_handle_page(&tab, &mut handled, email.as_ref(), provider) {
+                Ok(true) => {
+                    retries = 0;
+                }
+                Ok(false) => {
+                    retries += 1;
+                }
+                Err(e) => {
+                    log::warn!("[!] Handler error: {}", e);
+                    // If it's a fatal error (like invalid username), return it.
+                    // Otherwise it might just be the browser closing.
+                    if e.to_string().contains("Invalid username") {
+                        close_all_tabs(&browser);
+                        return Err(e);
+                    }
+                    return Err(e);
+                }
             }
 
             if retries > MAX_RETRIES {
