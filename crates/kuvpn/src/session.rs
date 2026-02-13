@@ -1,5 +1,5 @@
 use crate::utils::{CancellationToken, CredentialsProvider};
-use crate::openconnect::{locate_openconnect, execute_openconnect, is_openconnect_running, is_vpn_interface_up, VpnProcess};
+use crate::openconnect::{locate_openconnect, execute_openconnect, is_vpn_interface_up, VpnProcess};
 use crate::dsid::run_login_and_get_dsid;
 use std::process::Stdio;
 use std::io::{BufRead, BufReader};
@@ -231,14 +231,19 @@ impl VpnSession {
                     log("Error|VPN tunnel failed to establish within timeout".to_string());
                     if let Some(ref mut p) = process { let _ = p.kill(); }
                     return;
-                } else if process.is_some() && !is_openconnect_running() && start_time.elapsed() > Duration::from_secs(3) {
-                    // Process died before interface came up - fail fast
-                    *status.lock().unwrap() = ConnectionStatus::Error;
-                    *last_error.lock().unwrap() = Some(
-                        "OpenConnect process exited before tunnel was established".to_string()
-                    );
-                    log("Error|OpenConnect process exited before tunnel was established".to_string());
-                    return;
+                } else if let Some(ref mut p) = process {
+                    // Check if our spawned process (sudo/doas/pkexec) is still alive.
+                    // This is the key check: if sudo is waiting for a password, the process
+                    // is still alive and we should keep waiting. Only fail if the process
+                    // has actually exited (e.g. wrong password, permission denied).
+                    if !p.is_process_alive() {
+                        *status.lock().unwrap() = ConnectionStatus::Error;
+                        *last_error.lock().unwrap() = Some(
+                            "OpenConnect process exited before tunnel was established".to_string()
+                        );
+                        log("Error|OpenConnect process exited before tunnel was established".to_string());
+                        return;
+                    }
                 }
 
                 thread::sleep(Duration::from_millis(1000));
@@ -249,6 +254,14 @@ impl VpnSession {
             if let Some(ref mut p) = process {
                 let _ = p.kill();
                 let _ = p.wait();
+            } else {
+                // We don't own the process (already-connected path).
+                // Use PID-based kill as fallback.
+                use crate::openconnect::{get_openconnect_pid, kill_process};
+                if let Some(pid) = get_openconnect_pid() {
+                    log("Info|Sending stop signal to openconnect...".to_string());
+                    let _ = kill_process(pid);
+                }
             }
 
             *status.lock().unwrap() = ConnectionStatus::Disconnected;

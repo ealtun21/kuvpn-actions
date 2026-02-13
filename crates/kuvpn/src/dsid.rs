@@ -2,10 +2,23 @@ use crate::browser::create_browser;
 use crate::handlers::page_detection::{is_incorrect_password_visible, is_invalid_username_visible};
 use crate::handlers::{auth_handlers::*, mfa_handlers::*, page_detection::is_input_visible};
 use crate::utils::{CancellationToken, CredentialsProvider};
-use headless_chrome::Tab;
+use headless_chrome::{Browser, Tab};
 use std::collections::HashSet;
 use std::thread::sleep;
 use std::time::Duration;
+
+/// Closes all browser tabs so Chrome exits gracefully and flushes
+/// cookies/session data to the profile directory on disk.
+/// Without this, Browser::drop sends SIGKILL and cookies are lost.
+fn close_all_tabs(browser: &Browser) {
+    if let Ok(tabs) = browser.get_tabs().lock() {
+        for tab in tabs.iter() {
+            let _ = tab.close(true);
+        }
+    }
+    // Brief wait for Chrome to flush profile data before process is killed
+    sleep(Duration::from_millis(300));
+}
 
 /// Extracts DSID cookie from the browser.
 fn poll_dsid(tab: &Tab, domain: &str) -> anyhow::Result<Option<String>> {
@@ -147,14 +160,14 @@ pub fn run_login_and_get_dsid(
         if let Some(token) = &cancel_token {
             if token.is_cancelled() {
                 log::info!("[!] Cancellation requested, closing browser.");
-                let _ = tab.close(true);
+                close_all_tabs(&browser);
                 return Err(anyhow::anyhow!("Operation cancelled by user"));
             }
         }
 
         if let Some(dsid) = poll_dsid(&tab, domain)? {
             log::info!("[✓] Found valid DSID, quitting.");
-            tab.close(true)?;
+            close_all_tabs(&browser);
             return Ok(dsid);
         }
 
@@ -174,7 +187,7 @@ pub fn run_login_and_get_dsid(
             }
 
             if retries > MAX_RETRIES {
-                tab.close(true)?;
+                close_all_tabs(&browser);
                 return Err(anyhow::anyhow!(format!(
                     "Max retries reached. Could not find a handler for the current page: {}",
                     last_url
