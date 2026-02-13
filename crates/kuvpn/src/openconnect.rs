@@ -39,6 +39,30 @@ impl VpnProcess {
         }
     }
 
+    /// Checks if the spawned process (sudo/doas/pkexec) is still alive.
+    /// This is different from is_openconnect_running() - it checks the actual
+    /// child process we spawned, not searching by process name.
+    pub fn is_process_alive(&mut self) -> bool {
+        match self {
+            VpnProcess::Unix(_child) => {
+                #[cfg(unix)]
+                {
+                    // try_wait returns Ok(None) if the process is still running
+                    match _child.try_wait() {
+                        Ok(None) => true,  // still running
+                        _ => false,         // exited or error
+                    }
+                }
+                #[cfg(not(unix))]
+                false
+            }
+            VpnProcess::Windows { ref interface_name } => {
+                // On Windows we don't have a child handle, fall back to interface check
+                is_vpn_interface_up(interface_name) || is_openconnect_running()
+            }
+        }
+    }
+
     pub fn wait(&mut self) -> anyhow::Result<()> {
         match self {
             VpnProcess::Unix(child) => {
