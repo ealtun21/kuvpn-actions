@@ -1,5 +1,5 @@
 use crate::utils::{CancellationToken, CredentialsProvider};
-use crate::openconnect::{locate_openconnect, execute_openconnect, is_vpn_interface_up, VpnProcess};
+use crate::openconnect::{locate_openconnect, execute_openconnect, is_openconnect_running, is_vpn_interface_up, VpnProcess};
 use crate::dsid::run_login_and_get_dsid;
 use std::process::Stdio;
 use std::io::{BufRead, BufReader};
@@ -93,8 +93,16 @@ impl VpnSession {
 
             let interface_name = &config.interface_name;
 
-            // Check if our VPN interface is already up (external openconnect)
-            let already_connected = is_vpn_interface_up(interface_name);
+            // Check if VPN is already connected.
+            // On Unix, we use the named TUN interface (precise).
+            // On Windows, we fall back to process-name detection since
+            // --interface is not passed on Windows.
+            let is_vpn_connected = || -> bool {
+                is_vpn_interface_up(interface_name) || is_openconnect_running()
+            };
+
+            // Check if already connected
+            let already_connected = is_vpn_connected();
             let mut process: Option<VpnProcess> = None;
 
             if already_connected {
@@ -212,7 +220,7 @@ impl VpnSession {
                     break;
                 }
 
-                let interface_up = is_vpn_interface_up(interface_name);
+                let interface_up = is_vpn_connected();
 
                 if interface_up {
                     if !connected_detected {

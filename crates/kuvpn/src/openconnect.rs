@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Child, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 #[cfg(unix)]
 use std::process::Command;
 use which::which;
@@ -13,6 +15,9 @@ pub enum VpnProcess {
     Unix(Child),
     Windows {
         interface_name: String,
+        /// Set to true when the runas background thread finishes
+        /// (openconnect exited or elevation was denied).
+        thread_finished: Arc<AtomicBool>,
     },
 }
 
@@ -56,9 +61,14 @@ impl VpnProcess {
                 #[cfg(not(unix))]
                 false
             }
-            VpnProcess::Windows { ref interface_name } => {
-                // On Windows we don't have a child handle, fall back to interface check
-                is_vpn_interface_up(interface_name) || is_openconnect_running()
+            VpnProcess::Windows { ref thread_finished, .. } => {
+                // If the runas thread is still running, the process is alive
+                // (UAC prompt showing, or openconnect actively running).
+                // Only check process list after the thread has finished.
+                if !thread_finished.load(Ordering::SeqCst) {
+                    return true;
+                }
+                is_openconnect_running()
             }
         }
     }
@@ -69,8 +79,9 @@ impl VpnProcess {
                 child.wait()?;
                 Ok(())
             }
-            VpnProcess::Windows { ref interface_name } => {
-                while is_vpn_interface_up(interface_name) {
+            VpnProcess::Windows { ref thread_finished, .. } => {
+                // Wait until the runas thread finishes (openconnect exits)
+                while !thread_finished.load(Ordering::SeqCst) {
                     std::thread::sleep(std::time::Duration::from_millis(500));
                 }
                 Ok(())
@@ -181,8 +192,6 @@ pub fn execute_openconnect(
         let mut cmd = AdminCommand::new(openconnect_path.to_str().unwrap());
         cmd.arg("--protocol")
             .arg("nc")
-            .arg("--interface")
-            .arg(&interface_name_owned)
             .arg("-C")
             .arg(format!("DSID={}", cookie_value));
 
@@ -190,6 +199,10 @@ pub fn execute_openconnect(
 
         // runas 1.2.0 might only have status() which blocks.
         // We run it in a thread so we don't block the caller.
+        // The thread_finished flag lets the watchdog know when the process exits.
+        let thread_finished = Arc::new(AtomicBool::new(false));
+        let finished_clone = Arc::clone(&thread_finished);
+
         std::thread::spawn(move || {
             match cmd.status() {
                 Ok(status) => {
@@ -201,9 +214,10 @@ pub fn execute_openconnect(
                     log::error!("Failed to run elevated OpenConnect: {}", e);
                 }
             }
+            finished_clone.store(true, Ordering::SeqCst);
         });
 
-        Ok(VpnProcess::Windows { interface_name: interface_name_owned })
+        Ok(VpnProcess::Windows { interface_name: interface_name_owned, thread_finished })
     }
 }
 
