@@ -1,18 +1,15 @@
 use futures::SinkExt;
 use iced::{Subscription, Task};
-use std::io::{BufRead, BufReader};
-use std::process::Stdio;
 use std::sync::{Arc, Mutex};
-use tokio::sync::{mpsc, oneshot};
 use tray_icon::{
     menu::{MenuEvent, MenuItem},
     TrayIcon, TrayIconEvent,
 };
 
 use crate::config::GuiSettings;
-use crate::logger::{GUI_LOGGER, LOGGER_INIT};
 use crate::provider::{GuiInteraction, GuiProvider};
 use crate::types::{ConnectionStatus, InputRequest, InputRequestWrapper, Message};
+use kuvpn::{VpnSession, SessionConfig};
 
 pub struct KuVpnGui {
     // Settings
@@ -25,12 +22,13 @@ pub struct KuVpnGui {
     pub status: ConnectionStatus,
     pub pending_request: Option<InputRequest>,
     pub current_input: String,
-    pub cancel_tx: Option<oneshot::Sender<()>>,
-    pub cancel_token: Option<kuvpn::utils::CancellationToken>,
     pub mfa_info: Option<String>,
     pub rotation: f32,
     pub oc_test_result: Option<bool>,
     
+    // VPN Session
+    pub session: Option<Arc<VpnSession>>,
+
     // Tray & Window state
     pub tray_icon: Option<TrayIcon>,
     pub show_item: Option<MenuItem>,
@@ -150,20 +148,8 @@ impl KuVpnGui {
                 self.save_settings();
                 Task::none()
             }
-            Message::LogLevelSliderChanged(val) => {
-                self.settings.log_level_val = val;
-                if let Ok(mut guard) = GUI_LOGGER.user_level.lock() {
-                    *guard = match val.round() as i32 {
-                        0 => log::LevelFilter::Off,
-                        1 => log::LevelFilter::Error,
-                        2 => log::LevelFilter::Warn,
-                        3 => log::LevelFilter::Info,
-                        4 => log::LevelFilter::Debug,
-                        5 => log::LevelFilter::Trace,
-                        _ => log::LevelFilter::Info,
-                    };
-                }
-                self.save_settings();
+            Message::LogLevelSliderChanged(_) => {
+                // Log level filtering removed, we show all session updates
                 Task::none()
             }
             Message::OpenConnectPathChanged(p) => {
@@ -196,37 +182,9 @@ impl KuVpnGui {
                 }
                 Task::none()
             }
-            Message::Watchdog => {
-                #[cfg(windows)]
-                {
-                    let is_running = kuvpn::is_openconnect_running();
-                    if self.status == ConnectionStatus::Connecting && is_running {
-                        return self.update(Message::StatusChanged(ConnectionStatus::Connected));
-                    } else if self.status == ConnectionStatus::Connected && !is_running {
-                        return self.update(Message::StatusChanged(ConnectionStatus::Disconnected));
-                    }
-                }
-                Task::none()
-            }
-            // Clean up required, barely understandable code.
+            // ConnectPressed handled above
             Message::ConnectPressed => {
-                if self.status == ConnectionStatus::Disconnected {
-                    // Cancel any orphaned tokens (though status should prevent this, safety first)
-                    if let Some(token) = &self.cancel_token {
-                        token.cancel();
-                    }
-                    if let Some(tx) = self.cancel_tx.take() {
-                        let _ = tx.send(());
-                    }
-
-                    self.status = ConnectionStatus::Connecting;
-                    self.logs.clear();
-                    self.logs
-                        .push("[*] Accessing campus gateway...".to_string());
-
-                    let url = self.settings.url.clone();
-                    let domain = self.settings.domain.clone();
-
+                if self.status == ConnectionStatus::Disconnected || self.status == ConnectionStatus::Error {
                     let (headless, no_auto_login) =
                         match self.settings.login_mode_val.round() as i32 {
                             0 => (true, false),  // Full Automatic
@@ -234,221 +192,131 @@ impl KuVpnGui {
                             _ => (false, true),  // Manual
                         };
 
-                    let escalation_tool = self.settings.escalation_tool.clone();
-                    let openconnect_path = if self.settings.openconnect_path.is_empty() {
-                        "openconnect".to_string()
-                    } else {
-                        self.settings.openconnect_path.clone()
-                    };
-                    let email = if self.settings.email.is_empty() {
-                        None
-                    } else {
-                        Some(self.settings.email.clone())
+                    let config = SessionConfig {
+                        url: self.settings.url.clone(),
+                        domain: self.settings.domain.clone(),
+                        user_agent: "Mozilla/5.0".to_string(),
+                        headless,
+                        no_auto_login,
+                        email: if self.settings.email.is_empty() { None } else { Some(self.settings.email.clone()) },
+                        openconnect_path: if self.settings.openconnect_path.is_empty() { "openconnect".to_string() } else { self.settings.openconnect_path.clone() },
+                        escalation_tool: Some(self.settings.escalation_tool.clone()),
                     };
 
-                    let (cancel_tx, mut cancel_rx) = oneshot::channel();
-                    self.cancel_tx = Some(cancel_tx);
-                    let cancel_token = kuvpn::utils::CancellationToken::new();
-                    self.cancel_token = Some(cancel_token.clone());
-                    let cancel_token_clone = cancel_token.clone();
+                    let session = Arc::new(VpnSession::new(config));
+                    self.session = Some(Arc::clone(&session));
+                    self.status = ConnectionStatus::Connecting;
+                    self.logs.clear();
+
+                    let (log_tx, log_rx) = crossbeam_channel::unbounded();
+                    session.set_logs_tx(log_tx.clone());
+
+                    // Initialize global logger once
+                    crate::logger::LOGGER_INIT.call_once(|| {
+                        let _ = log::set_logger(&crate::logger::GUI_LOGGER);
+                        log::set_max_level(log::LevelFilter::Trace);
+                    });
+
+                    // Bridge global logger to our log stream
+                    let (gui_tx, mut gui_rx) = tokio::sync::mpsc::channel(100);
+                    if let Ok(mut guard) = crate::logger::GUI_LOGGER.tx.lock() {
+                        *guard = Some(gui_tx);
+                    }
 
                     return Task::stream(iced::stream::channel(
                         100,
                         move |mut output: iced::futures::channel::mpsc::Sender<Message>| async move {
-                            let (log_tx, mut log_rx) = mpsc::channel(100);
-                            let (interaction_tx, mut interaction_rx) = mpsc::channel(10);
-                            let (child_tx, mut child_rx) = mpsc::channel::<u32>(1);
-
-                            if let Ok(mut guard) = GUI_LOGGER.tx.lock() {
-                                *guard = Some(log_tx.clone());
-                            }
-
-                            LOGGER_INIT.call_once(|| {
-                                let _ = log::set_logger(&GUI_LOGGER);
-                                log::set_max_level(log::LevelFilter::Trace);
+                            use futures::SinkExt;
+                            let (interaction_tx, mut interaction_rx) = tokio::sync::mpsc::channel(10);
+                            
+                            let provider = Arc::new(GuiProvider {
+                                interaction_tx,
+                                cancel_token: kuvpn::utils::CancellationToken::new(), 
                             });
 
-                            let url_c = url.clone();
-                            let domain_c = domain.clone();
-                            let log_tx_c = log_tx.clone();
-                            let cancel_token_thread = cancel_token_clone.clone();
-
-                            std::thread::spawn(move || {
-                                let provider = GuiProvider {
-                                    interaction_tx,
-                                    cancel_token: cancel_token_thread,
-                                };
-                                let dsid_res = kuvpn::run_login_and_get_dsid(
-                                    headless,
-                                    &url_c,
-                                    &domain_c,
-                                    "Mozilla/5.0",
-                                    no_auto_login,
-                                    email,
-                                    &provider,
-                                    Some(cancel_token_clone),
-                                );
-
-                                let dsid = match dsid_res {
-                                    Ok(d) => d,
-                                    Err(e) => {
-                                        let _ = log_tx_c.blocking_send(format!("Error|{}", e));
-                                        return;
-                                    }
-                                };
-
-                                let _ = log_tx_c.blocking_send(
-                                    "Info|Initializing Koç University tunnel...".to_string(),
-                                );
-                                let final_oc_path =
-                                    match kuvpn::locate_openconnect(&openconnect_path) {
-                                        Some(p) => p,
-                                        None => {
-                                            let _ = log_tx_c.blocking_send(format!(
-                                                "Error|Could not locate '{}'",
-                                                openconnect_path
-                                            ));
-                                            return;
-                                        }
-                                    };
-
-                                match kuvpn::execute_openconnect(
-                                    dsid,
-                                    url_c,
-                                    &Some(escalation_tool),
-                                    &final_oc_path,
-                                    Stdio::piped(),
-                                    Stdio::piped(),
-                                ) {
-                                    Ok(mut child) => {
-                                        let stdout = child.stdout.take().unwrap();
-                                        let stderr = child.stderr.take().unwrap();
-                                        let pid = child.id();
-
-                                        let _ = child_tx.blocking_send(pid);
-
-                                        let log_tx_stdout = log_tx_c.clone();
-                                        std::thread::spawn(move || {
-                                            let reader = BufReader::new(stdout);
-                                            for line in reader.lines() {
-                                                if let Ok(l) = line {
-                                                    let _ = log_tx_stdout
-                                                        .blocking_send(format!("Info|{}", l));
-                                                }
-                                            }
-                                        });
-
-                                        let log_tx_stderr = log_tx_c.clone();
-                                        std::thread::spawn(move || {
-                                            let reader = BufReader::new(stderr);
-                                            for line in reader.lines() {
-                                                if let Ok(l) = line {
-                                                    let _ = log_tx_stderr
-                                                        .blocking_send(format!("Warn|{}", l));
-                                                }
-                                            }
-                                        });
-
-                                        let _ = child.wait();
-                                    }
-                                    Err(e) => {
-                                        let _ = log_tx_c.blocking_send(format!("Error|{}", e));
-                                    }
-                                }
-                            });
-
-                            let mut active_pid: Option<u32> = None;
+                            let session_c = Arc::clone(&session);
+                            let _join_handle = session.connect(provider);
 
                             loop {
-                                tokio::select! {
-                                    res = log_rx.recv() => {
-                                        // TODO, use connection watcher and do not use log based anything, anywhere.
-                                        if let Some(log) = res {
-                                            if log.contains("Established") ||
-                                               log.contains("Connected as") ||
-                                               log.contains("Connected to HTTPS") ||
-                                               log.contains("Session established") {
-                                                let _ = output.send(Message::StatusChanged(ConnectionStatus::Connected)).await;
-                                            }
-                                            let _ = output.send(Message::LogAppended(log)).await;
-                                        } else {
-                                            break;
-                                        }
-                                    }
-                                    res = interaction_rx.recv() => {
-                                        match res {
-                                            Some(GuiInteraction::Request(req)) => {
-                                                let _ = output.send(Message::RequestInput(Arc::new(InputRequestWrapper(Mutex::new(Some(req)))))).await;
-                                            }
-                                            Some(GuiInteraction::MfaPush(code)) => {
-                                                let _ = output.send(Message::MfaPushReceived(code)).await;
-                                            }
-                                            Some(GuiInteraction::MfaComplete) => {
-                                                let _ = output.send(Message::MfaCompleteReceived).await;
-                                            }
-                                            None => break,
-                                        }
-                                    }
-                                    child_res = child_rx.recv() => {
-                                        active_pid = child_res;
-                                    }
-                                    _ = &mut cancel_rx => {
-                                        cancel_token.cancel();
-                                        if let Some(pid) = active_pid.take() {
-                                            let _ = kuvpn::kill_process(pid);
-                                        }
-                                        break;
-                                    }
+                                // Poll logs from session
+                                while let Ok(log_msg) = log_rx.try_recv() {
+                                    let _ = output.send(Message::LogAppended(log_msg)).await;
                                 }
+
+                                // Poll logs from global logger
+                                while let Ok(log_msg) = gui_rx.try_recv() {
+                                    let _ = output.send(Message::LogAppended(log_msg)).await;
+                                }
+
+                                // Poll status
+                                let current_status = session_c.status();
+                                let _ = output.send(Message::StatusChanged(current_status)).await;
+
+                                if current_status == ConnectionStatus::Disconnected || current_status == ConnectionStatus::Error {
+                                    break;
+                                }
+
+                                // Poll interactions
+                                match interaction_rx.try_recv() {
+                                    Ok(GuiInteraction::Request(req)) => {
+                                        let _ = output.send(Message::RequestInput(Arc::new(InputRequestWrapper(Mutex::new(Some(req)))))).await;
+                                    }
+                                    Ok(GuiInteraction::MfaPush(code)) => {
+                                        let _ = output.send(Message::MfaPushReceived(code)).await;
+                                    }
+                                    Ok(GuiInteraction::MfaComplete) => {
+                                        let _ = output.send(Message::MfaCompleteReceived).await;
+                                    }
+                                    Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => break,
+                                    Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {}
+                                }
+
+                                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                             }
-                            let _ = output.send(Message::ConnectionFinished(None)).await;
+                            let _ = output.send(Message::ConnectionFinished(session_c.last_error())).await;
                         },
                     ));
                 }
                 Task::none()
             }
             Message::DisconnectPressed => {
-                if let Some(token) = self.cancel_token.take() {
-                    token.cancel();
-                }
-                if let Some(tx) = self.cancel_tx.take() {
-                    let _ = tx.send(());
+                if let Some(session) = &self.session {
+                    session.cancel();
                 }
                 Task::none()
             }
-            // TODO: Clean up, causes lag, scrolling does not follow last messege, can not copy text.
-            Message::LogAppended(raw_log) => {
-                let parts: Vec<&str> = raw_log.splitn(2, '|').collect();
-                if parts.len() < 2 {
-                    return Task::none();
-                }
-                let lvl_str = parts[0];
-                let log_msg = parts[1];
-
-                let record_level = match lvl_str {
-                    "Error" => log::Level::Error,
-                    "Warn" => log::Level::Warn,
-                    "Info" => log::Level::Info,
-                    "Debug" => log::Level::Debug,
-                    "Trace" => log::Level::Trace,
-                    _ => log::Level::Info,
-                };
-
-                // User visibility filtering
-                let user_filter = if let Ok(guard) = GUI_LOGGER.user_level.lock() {
-                    *guard
-                } else {
-                    log::LevelFilter::Info
-                };
-
-                if record_level <= user_filter {
-                    self.logs.push(format!("[*] {}", log_msg));
-                    if self.logs.len() > 500 {
-                        self.logs.remove(0);
-                    }
-                }
-                Task::none()
-            }
+                        Message::LogAppended(raw_log) => {
+                            let parts: Vec<&str> = raw_log.splitn(2, '|').collect();
+                            if parts.len() < 2 {
+                                return Task::none();
+                            }
+                            let lvl_str = parts[0];
+                            let log_msg = parts[1];
+            
+                            let record_level = match lvl_str {
+                                "Error" => log::Level::Error,
+                                "Warn" => log::Level::Warn,
+                                "Info" => log::Level::Info,
+                                "Debug" => log::Level::Debug,
+                                "Trace" => log::Level::Trace,
+                                _ => log::Level::Info,
+                            };
+            
+                            let user_filter = if let Ok(guard) = crate::logger::GUI_LOGGER.user_level.lock() {
+                                *guard
+                            } else {
+                                log::LevelFilter::Info
+                            };
+            
+                            if record_level <= user_filter {
+                                self.logs.push(format!("[*] {}", log_msg));
+                                if self.logs.len() > 500 {
+                                    self.logs.remove(0);
+                                }
+                            }
+                            Task::none()
+                        }
+            
             Message::MfaPushReceived(code) => {
                 self.mfa_info = Some(code);
                 if !self.is_visible {
@@ -531,10 +399,6 @@ impl KuVpnGui {
                 self.settings = GuiSettings::default();
                 self.save_settings();
                 self.oc_test_result = None;
-                // We also need to update the log level filter immediately
-                if let Ok(mut guard) = GUI_LOGGER.user_level.lock() {
-                    *guard = log::LevelFilter::Error; // Default
-                }
                 Task::none()
             }
             Message::TestOpenConnect => {
@@ -559,8 +423,6 @@ impl KuVpnGui {
                 iced::time::every(std::time::Duration::from_millis(16)).map(|_| Message::Tick),
             );
         }
-
-        subs.push(iced::time::every(std::time::Duration::from_secs(1)).map(|_| Message::Watchdog));
 
         // GTK Event Loop pump (for Tray Icon on Linux)
         #[cfg(target_os = "linux")]
@@ -604,8 +466,7 @@ impl Default for KuVpnGui {
     fn default() -> Self {
         let settings = GuiSettings::load();
 
-        // Ensure logger is synced with loaded settings
-        if let Ok(mut guard) = GUI_LOGGER.user_level.lock() {
+        if let Ok(mut guard) = crate::logger::GUI_LOGGER.user_level.lock() {
             *guard = match settings.log_level_val.round() as i32 {
                 0 => log::LevelFilter::Off,
                 1 => log::LevelFilter::Error,
@@ -625,11 +486,10 @@ impl Default for KuVpnGui {
             status: ConnectionStatus::Disconnected,
             pending_request: None,
             current_input: String::new(),
-            cancel_tx: None,
-            cancel_token: None,
             mfa_info: None,
             rotation: 0.0,
             oc_test_result: None,
+            session: None,
             tray_icon: None,
             show_item: None,
             connect_item: None,

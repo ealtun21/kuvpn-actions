@@ -7,24 +7,12 @@ mod args;
 
 use args::Args;
 use clap::Parser;
-use kuvpn::init_logger;
-use kuvpn::run_login_and_get_dsid;
-use kuvpn::{execute_openconnect, locate_openconnect};
+use kuvpn::{init_logger, run_login_and_get_dsid, SessionConfig, VpnSession, ConnectionStatus};
 use log::{error, info};
-use std::process::{ExitCode, Stdio};
+use std::process::ExitCode;
+use std::sync::Arc;
 
 /// The main entry point of the application.
-///
-/// This function performs the following steps:
-/// 1. Parses command-line arguments and initializes logging.
-/// 2. If the user requested a session clean-up, it removes the session data directory.
-/// 3. Creates a browser instance to retrieve the DSID cookie from the given URL.
-/// 4. If only the DSID is required, it prints the value and exits.
-/// 5. Otherwise, locates the `openconnect` executable and executes it with elevated privileges.
-///
-/// # Returns
-///
-/// An `ExitCode` indicating success (`ExitCode::SUCCESS`) or failure (`ExitCode::FAILURE`).
 fn main() -> ExitCode {
     // Parse command-line arguments.
     let args = Args::parse();
@@ -44,63 +32,73 @@ fn main() -> ExitCode {
         }
     }
 
-    let dsid = match run_login_and_get_dsid(
-        !args.disable_headless,
-        &args.url,
-        &args.domain,
-        "Mozilla/5.0",
-        args.no_auto_login,
-        args.email,
-        &kuvpn::utils::TerminalCredentialsProvider,
-        None,
-    ) {
-        Ok(dsid) => dsid,
-        Err(e) => {
-            error!("Login process failed: {}", e);
-            return ExitCode::FAILURE;
-        }
-    };
-
     if args.get_dsid {
-        println!("{}", dsid);
-        return ExitCode::SUCCESS;
+        match run_login_and_get_dsid(
+            !args.disable_headless,
+            &args.url,
+            &args.domain,
+            "Mozilla/5.0",
+            args.no_auto_login,
+            args.email,
+            &kuvpn::utils::TerminalCredentialsProvider,
+            None,
+        ) {
+            Ok(dsid) => {
+                println!("{}", dsid);
+                return ExitCode::SUCCESS;
+            }
+            Err(e) => {
+                error!("Login process failed: {}", e);
+                return ExitCode::FAILURE;
+            }
+        }
     }
 
-    // Locate the `openconnect` executable.
-    let openconnect_path = match locate_openconnect(&args.openconnect_path) {
-        Some(path) => {
-            info!("OpenConnect located at: {}", path.display());
-            path
-        }
-        None => {
-            error!(
-                "Cannot locate openconnect (checked path '{}', PATH, and /sbin). \
-                Please install it or specify --openconnect-path .",
-                args.openconnect_path
-            );
-            return ExitCode::FAILURE;
-        }
+    let config = SessionConfig {
+        url: args.url.clone(),
+        domain: args.domain.clone(),
+        user_agent: "Mozilla/5.0".to_string(),
+        headless: !args.disable_headless,
+        no_auto_login: args.no_auto_login,
+        email: args.email.clone(),
+        openconnect_path: args.openconnect_path.clone(),
+        escalation_tool: args.run_command.clone(),
     };
 
-    // Execute `openconnect` with the retrieved DSID and specified URL.
-    match execute_openconnect(
-        dsid,
-        args.url,
-        &args.run_command,
-        &openconnect_path,
-        Stdio::inherit(),
-        Stdio::inherit(),
-    ) {
-        Ok(mut child) => {
-            // Wait for the child process to finish.
-            // Since we piped stdout/stderr, we might want to display them.
-            // For now, let's just wait and see.
-            let _ = child.wait();
+    let session = VpnSession::new(config);
+    let (log_tx, log_rx) = crossbeam_channel::unbounded();
+    session.set_logs_tx(log_tx);
+
+    let provider = Arc::new(kuvpn::utils::TerminalCredentialsProvider);
+    let _join_handle = session.connect(provider);
+
+    loop {
+        while let Ok(log_msg) = log_rx.try_recv() {
+            let parts: Vec<&str> = log_msg.splitn(2, '|').collect();
+            if parts.len() == 2 {
+                match parts[0] {
+                    "Error" => error!("{}", parts[1]),
+                    "Warn" => log::warn!("{}", parts[1]),
+                    "Info" => info!("{}", parts[1]),
+                    _ => info!("{}", parts[1]),
+                }
+            } else {
+                info!("{}", log_msg);
+            }
         }
-        Err(e) => {
-            error!("Error executing openconnect: {}", e);
+
+        let status = session.status();
+        if status == ConnectionStatus::Disconnected {
+            break;
+        }
+        if status == ConnectionStatus::Error {
+            if let Some(err) = session.last_error() {
+                error!("Session Error: {}", err);
+            }
             return ExitCode::FAILURE;
         }
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
     }
 
     ExitCode::SUCCESS
