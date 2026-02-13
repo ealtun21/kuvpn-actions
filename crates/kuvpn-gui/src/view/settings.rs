@@ -97,11 +97,7 @@ impl KuVpnGui {
                     slider(
                         0.0..=5.0,
                         self.settings.log_level_val,
-                        if is_locked {
-                            |_| Message::Tick
-                        } else {
-                            Message::LogLevelSliderChanged
-                        }
+                        Message::LogLevelSliderChanged
                     )
                     .step(1.0)
                     .width(Length::Fill),

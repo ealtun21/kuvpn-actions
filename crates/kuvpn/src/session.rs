@@ -67,6 +67,15 @@ impl VpnSession {
     }
 
     pub fn connect(&self, provider: Arc<dyn CredentialsProvider>) -> thread::JoinHandle<()> {
+        {
+            let mut s = self.status.lock().unwrap();
+            if *s != ConnectionStatus::Disconnected && *s != ConnectionStatus::Error {
+                return thread::spawn(|| {});
+            }
+            *s = ConnectionStatus::Connecting;
+            *self.last_error.lock().unwrap() = None;
+        }
+
         let status = Arc::clone(&self.status);
         let config = SessionConfig {
             url: self.config.url.clone(),
@@ -89,21 +98,11 @@ impl VpnSession {
                 }
             };
 
-            {
-                let mut s = status.lock().unwrap();
-                if *s != ConnectionStatus::Disconnected && *s != ConnectionStatus::Error {
-                    return;
-                }
-                
-                // Smart check: don't start if already running
-                if is_openconnect_running() {
-                    log("Info|OpenConnect is already running.".to_string());
-                    *s = ConnectionStatus::Connected;
-                    return;
-                }
-
-                *s = ConnectionStatus::Connecting;
-                *last_error.lock().unwrap() = None;
+            // Smart check: don't start if already running
+            if is_openconnect_running() {
+                log("Info|OpenConnect is already running.".to_string());
+                *status.lock().unwrap() = ConnectionStatus::Connected;
+                return;
             }
 
             log("Info|Accessing campus gateway...".to_string());
@@ -210,21 +209,22 @@ impl VpnSession {
 
                 let is_running = is_openconnect_running();
                 
-                if !is_running {
-                    if !connected_detected && start_time.elapsed() > Duration::from_secs(15) {
-                         let mut s = status.lock().unwrap();
-                         *s = ConnectionStatus::Error;
-                         *last_error.lock().unwrap() = Some("OpenConnect failed to start or exited early".to_string());
-                         log("Error|OpenConnect failed to start or exited early".to_string());
-                         return;
+                if is_running {
+                    if !connected_detected {
+                        connected_detected = true;
+                        *status.lock().unwrap() = ConnectionStatus::Connected;
+                        log("Info|Connected.".to_string());
                     }
+                } else if connected_detected {
+                    // We were connected, but now the process is gone
                     break;
-                }
-
-                if !connected_detected && start_time.elapsed() > Duration::from_secs(3) {
-                    connected_detected = true;
-                    *status.lock().unwrap() = ConnectionStatus::Connected;
-                    log("Info|Connected.".to_string());
+                } else if start_time.elapsed() > Duration::from_secs(15) {
+                    // We never managed to start the process within 15 seconds
+                    let mut s = status.lock().unwrap();
+                    *s = ConnectionStatus::Error;
+                    *last_error.lock().unwrap() = Some("OpenConnect failed to start or exited early".to_string());
+                    log("Error|OpenConnect failed to start or exited early".to_string());
+                    return;
                 }
 
                 thread::sleep(Duration::from_millis(1000));
