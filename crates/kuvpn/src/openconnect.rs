@@ -2,6 +2,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use which::which;
 
+#[cfg(windows)]
+use runas::Command as AdminCommand;
+
 /// Attempts to locate the `openconnect` executable.
 ///
 /// The search is performed in three steps:
@@ -43,7 +46,6 @@ pub fn locate_openconnect(user_path: &str) -> Option<PathBuf> {
 
     #[cfg(windows)]
     {
-        // Check for bundled openconnect relative to the executable
         if let Ok(exe_path) = std::env::current_exe() {
             if let Some(parent) = exe_path.parent() {
                 let bundled_path = parent.join("openconnect").join("openconnect.exe");
@@ -143,30 +145,32 @@ pub fn execute_openconnect(
 
     #[cfg(windows)]
     {
-        log::info!("Running openconnect on Windows: {:?}", openconnect_path);
-        
-        let mut cmd = Command::new(openconnect_path);
+        log::info!("Requesting Admin elevation for OpenConnect...");
+
+        let mut cmd = AdminCommand::new(openconnect_path.to_str().unwrap());
         cmd.arg("--protocol")
             .arg("nc")
             .arg("-C")
-            .arg(format!("DSID={}", cookie_value))
-            .arg(url);
+            .arg(format!("DSID={}", cookie_value));
 
-        // Check for vpnc-script.js in the same directory as openconnect.exe
-        if let Some(parent) = openconnect_path.parent() {
-            let script_path = parent.join("vpnc-script.js");
-            if script_path.exists() {
-                log::info!("Found vpnc-script.js at {:?}", script_path);
-                cmd.arg("-s").arg(script_path);
-            } else {
-                log::warn!("vpnc-script.js NOT found in {:?}", parent);
-            }
+        cmd.arg(url);
+
+        // runas uses .status() which returns a Result<ExitStatus, io::Error>
+        // This will block until the UAC prompt is accepted or rejected.
+        let status = cmd
+            .status()
+            .map_err(|e| anyhow::anyhow!("UAC Elevation failed or was denied: {}", e))?;
+
+        if !status.success() {
+            return Err(anyhow::anyhow!(
+                "OpenConnect started but returned an error exit code."
+            ));
         }
 
-        return cmd.stdout(stdout)
-            .stderr(stderr)
-            .spawn()
-            .map_err(anyhow::Error::from);
+        // We return a dummy child process because runas doesn't provide a handle.
+        // On Windows, your GUI will track the connection state by checking
+        // if 'openconnect.exe' is in the process list.
+        Ok(Command::new("cmd").arg("/c").arg("exit 0").spawn()?)
     }
 }
 
@@ -181,15 +185,12 @@ pub fn kill_process(pid: u32) -> anyhow::Result<()> {
     }
     #[cfg(windows)]
     {
-        use std::process::Command;
-        // Use taskkill /F /PID <pid> as a fallback on Windows
-        // Ideally we'd use GenerateConsoleCtrlEvent but that's complex
-        Command::new("taskkill")
+        // Must use elevated taskkill to kill an elevated openconnect
+        AdminCommand::new("taskkill")
             .arg("/F")
             .arg("/PID")
             .arg(pid.to_string())
-            .spawn()?
-            .wait()?;
+            .status()?;
     }
     Ok(())
 }
@@ -206,9 +207,16 @@ pub fn kill_child(child: &mut Child) -> anyhow::Result<()> {
         let pid = Pid::from_raw(child.id() as i32);
         signal::kill(pid, Signal::SIGINT)?;
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        child.kill()?;
+        // On Windows, if we don't have the PID of the elevated process,
+        // we kill by image name to ensure the VPN closes.
+        AdminCommand::new("taskkill")
+            .arg("/F")
+            .arg("/IM")
+            .arg("openconnect.exe")
+            .arg("/T")
+            .status()?;
     }
     Ok(())
 }
