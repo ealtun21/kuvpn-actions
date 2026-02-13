@@ -25,7 +25,6 @@ use std::time::Duration;
 /// A `Result` containing the configured `Browser` instance on success, or an error on failure.
 pub fn create_browser(agent: &str, headless: bool) -> Result<Browser, Box<dyn Error>> {
     let user_agent = OsString::from(format!("--user-agent={agent}"));
-    let body = OsString::from("--app=data:text/html,");
     let window = OsString::from("--new-window");
 
     let mut attempts = 0;
@@ -40,7 +39,6 @@ pub fn create_browser(agent: &str, headless: bool) -> Result<Browser, Box<dyn Er
             .window_size(Some((800, 800)))
             .enable_gpu(false)
             .args(vec![
-                body.as_os_str(),
                 window.as_os_str(),
                 user_agent.as_os_str(),
             ])
