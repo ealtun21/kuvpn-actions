@@ -272,8 +272,12 @@ pub fn is_vpn_interface_up(interface_name: &str) -> bool {
     }
     #[cfg(windows)]
     {
+        use std::os::windows::process::CommandExt;
         use std::process::{Command as StdCommand, Stdio as StdStdio};
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
         let output = StdCommand::new("netsh")
+            .creation_flags(CREATE_NO_WINDOW)
             .args(["interface", "show", "interface"])
             .stdout(StdStdio::piped())
             .stderr(StdStdio::null())
@@ -337,7 +341,11 @@ pub fn kill_process(pid: u32) -> anyhow::Result<()> {
     }
     #[cfg(windows)]
     {
-        AdminCommand::new("taskkill")
+        use std::os::windows::process::CommandExt;
+        use std::process::Command as StdCommand;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        StdCommand::new("taskkill")
+            .creation_flags(CREATE_NO_WINDOW)
             .arg("/F")
             .arg("/PID")
             .arg(pid.to_string())

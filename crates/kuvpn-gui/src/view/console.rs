@@ -1,6 +1,6 @@
 use crate::app::KuVpnGui;
-use crate::types::{Message, COLOR_TEXT_DIM, ICON_TERMINAL, NERD_FONT};
-use iced::widget::{column, container, row, scrollable, text};
+use crate::types::{COLOR_TEXT_DIM, ICON_TERMINAL_SVG, Message};
+use iced::widget::{column, container, row, scrollable, svg, text};
 use iced::{Border, Color, Element, Font, Length};
 
 impl KuVpnGui {
@@ -8,11 +8,13 @@ impl KuVpnGui {
         container(
             column![
                 row![
-                    text(ICON_TERMINAL).font(NERD_FONT).color(COLOR_TEXT_DIM),
+                    svg(svg::Handle::from_memory(ICON_TERMINAL_SVG))
+                        .width(14)
+                        .height(14)
+                        .style(|_, _| svg::Style { color: Some(COLOR_TEXT_DIM) }),
                     text("SESSION LOGS")
                         .size(12)
-                        .color(COLOR_TEXT_DIM)
-                        .font(NERD_FONT),
+                        .color(COLOR_TEXT_DIM),
                 ]
                 .spacing(10),
                 scrollable(

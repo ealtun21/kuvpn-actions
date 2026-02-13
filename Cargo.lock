@@ -2724,12 +2724,15 @@ dependencies = [
  "crossbeam-channel",
  "env_logger",
  "headless_chrome",
+ "libc",
  "log",
  "nix",
+ "once_cell",
  "rpassword",
  "runas",
  "sysinfo",
  "which 8.0.0",
+ "windows 0.58.0",
 ]
 
 [[package]]

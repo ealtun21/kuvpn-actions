@@ -1,6 +1,6 @@
 use crate::app::KuVpnGui;
-use crate::types::{Message, COLOR_WARNING, ICON_PHONE, NERD_FONT};
-use iced::widget::{column, container, row, text};
+use crate::types::{Message, COLOR_WARNING, ICON_PHONE_SVG};
+use iced::widget::{column, container, row, svg, text};
 use iced::{Alignment, Border, Color, Element, Length};
 
 impl KuVpnGui {
@@ -8,16 +8,15 @@ impl KuVpnGui {
         if let Some(mfa) = &self.mfa_info {
             container(
                 row![
-                    text(ICON_PHONE)
-                        .font(NERD_FONT)
-                        .size(40)
-                        .color(COLOR_WARNING),
+                    svg(svg::Handle::from_memory(ICON_PHONE_SVG))
+                        .width(40)
+                        .height(40)
+                        .style(|_, _| svg::Style { color: Some(COLOR_WARNING) }),
                     column![
                         text("Approval Required")
                             .size(14)
-                            .color(COLOR_WARNING)
-                            .font(NERD_FONT),
-                        text(mfa).size(22).color(Color::WHITE).font(NERD_FONT),
+                            .color(COLOR_WARNING),
+                        text(mfa).size(22).color(Color::WHITE),
                     ]
                     .spacing(5)
                 ]

@@ -2,11 +2,10 @@
 
 ## KUVPN GUI
 
-- Font is not working, tested in appimage, it's not actually reading the font, using the system font of that name, Needs fixing, broken on windows, some random icons are showing up that are complety differnt than linux. 
-
-- cleanup kuvpn-gui's openconnect handling code, as on windows builds it has no idea when it's connecting due to no child being passing in lib, we gonna have to do something about how it understands, may require some extra functions on lib to handle that. 
-
-- Cleanup browser handling,
+- [x] Switch icons from Nerd Font to vector/SVG assets (cross-platform font rendering is unreliable).
+- [x] Cleanup browser handling.
+- [x] Add connecting/disconnecting animation to status icon.
+- [ ] GUI visual improvements (backlog - get stability first).
 
 ## KUVPN LIB - REFACTORING
 
@@ -16,7 +15,17 @@
 - [x] Improve OpenConnect process management on Windows.
 - [x] Ensure browser is strictly closed before starting OpenConnect.
 - [x] Refactor `run_login_and_get_dsid` to be more robust and less reliant on generic retries.
+- [x] Replace process-name detection with TUN interface detection (`--interface kuvpn0`).
+- [x] Fix GUI/CLI openconnect connection tracking (now uses `is_vpn_interface_up()`).
+- [x] Cleanup openconnect.rs and VpnProcess::Windows (now stores interface_name).
+- [x] Deduplicate log level / login mode matching in GUI code.
+- [x] Hide OpenConnect console window on Windows.
+- [x] Improve browser robustness (handle manual closure, prevent 'session crashed' bubbles).
+- [x] Fix Windows focus flicker caused by background connection checks.
+- [x] Fix Windows visibility toggle spawning multiple windows.
+- [x] Implement single-instance check for the application.
 
-# KUVPN LIB
+## BACKLOG
 
-- cleanup kuvpn/src/openconnect.rs, and modify the rest of the crates to handle it, as openconnect is now workin on window build.
+- macOS builds (not complete yet)
+- Investigate native `--interface` support on newer Windows OpenConnect builds.
