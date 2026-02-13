@@ -144,16 +144,26 @@ pub fn execute_openconnect(
     #[cfg(windows)]
     {
         log::info!("Running openconnect on Windows: {:?}", openconnect_path);
-        // On Windows, we might need to use 'runas' to elevate if not already elevated.
-        // However, Command::new doesn't easily support 'runas' for child processes with piped I/O.
-        // For now, we assume the app is run as Admin or openconnect.exe has manifest for elevation.
-        return Command::new(openconnect_path)
-            .arg("--protocol")
+        
+        let mut cmd = Command::new(openconnect_path);
+        cmd.arg("--protocol")
             .arg("nc")
             .arg("-C")
             .arg(format!("DSID={}", cookie_value))
-            .arg(url)
-            .stdout(stdout)
+            .arg(url);
+
+        // Check for vpnc-script.js in the same directory as openconnect.exe
+        if let Some(parent) = openconnect_path.parent() {
+            let script_path = parent.join("vpnc-script.js");
+            if script_path.exists() {
+                log::info!("Found vpnc-script.js at {:?}", script_path);
+                cmd.arg("-s").arg(script_path);
+            } else {
+                log::warn!("vpnc-script.js NOT found in {:?}", parent);
+            }
+        }
+
+        return cmd.stdout(stdout)
             .stderr(stderr)
             .spawn()
             .map_err(anyhow::Error::from);
