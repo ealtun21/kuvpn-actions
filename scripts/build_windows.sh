@@ -41,43 +41,68 @@ mkdir -p "$OC_DIR"
 
 if [ ! -f "$OC_DIR/openconnect.exe" ]; then
     echo "Downloading OpenConnect bundle..."
-    # We use the openconnect-gui installer and extract it
     wget -q -O /tmp/oc_setup.exe "$OPENCONNECT_URL"
-    # Use 7z to extract if available, else skip bundling for now
     if command -v 7z >/dev/null 2>&1; then
-        7z e -y /tmp/oc_setup.exe -o"$OC_DIR" "openconnect.exe" "*.dll" || true
+        echo "Extracting OpenConnect files..."
+        rm -rf /tmp/oc_extract
+        mkdir -p /tmp/oc_extract
+        7z x -y /tmp/oc_setup.exe -o/tmp/oc_extract > /dev/null || true
+        
+        find /tmp/oc_extract -name "openconnect.exe" -exec cp {} "$OC_DIR/" \;
+        find /tmp/oc_extract -name "*.dll" -exec cp {} "$OC_DIR/" \;
+        find /tmp/oc_extract -name "vpnc-script.js" -exec cp {} "$OC_DIR/" \;
+        
+        TAP_EXE=$(find /tmp/oc_extract -name "tap-windows*.exe" | head -n 1)
+        if [ -n "$TAP_EXE" ]; then
+            cp "$TAP_EXE" "$OC_DIR/tap-setup.exe"
+            echo "Found and bundled TAP installer: $TAP_EXE"
+        else
+            echo "Warning: TAP installer not found in OpenConnect bundle."
+        fi
+        rm -rf /tmp/oc_extract
     else
         echo "Warning: 7z not found. Skipping OpenConnect bundling."
     fi
 fi
 
-# 3. Generate Installer with Inno Setup (requires Wine)
+# 3. Download and bundle Wintun driver
+if [ ! -f "$OC_DIR/wintun.dll" ]; then
+    echo "Preparing Wintun driver..."
+    WINTUN_URL="https://www.wintun.net/builds/wintun-0.14.1.zip"
+    wget -q -O /tmp/wintun.zip "$WINTUN_URL"
+    if command -v unzip >/dev/null 2>&1; then
+        rm -rf /tmp/wintun_extract
+        mkdir -p /tmp/wintun_extract
+        unzip -q /tmp/wintun.zip -d /tmp/wintun_extract
+        cp /tmp/wintun_extract/wintun/bin/amd64/wintun.dll "$OC_DIR/"
+        echo "Bundled wintun.dll"
+        rm -rf /tmp/wintun_extract
+    else
+        echo "Warning: unzip not found. Skipping Wintun bundling."
+    fi
+fi
+
+# 4. Generate Installer with Inno Setup (requires Wine)
 if command -v wine >/dev/null 2>&1; then
     echo "Generating Windows Installer with Inno Setup..."
     
-    # Download and install Inno Setup
     ISCC_PATH="/root/.wine/drive_c/Program Files (x86)/Inno Setup 6/ISCC.exe"
     if [ ! -f "$ISCC_PATH" ]; then
         echo "Inno Setup not found. Installing via Wine (with Xvfb)..."
         wget -q -O /tmp/is_setup.exe "$INNO_SETUP_URL"
-        # Run silent install with Xvfb
         xvfb-run -a env WINEDEBUG=-all wine /tmp/is_setup.exe /VERYSILENT /SUPPRESSMSGBOXES /ALLUSERS /NOICONS || true
-        # Wait for ISCC
         for i in {1..15}; do
             [ -f "$ISCC_PATH" ] && break
             sleep 2
         done
     fi
 
-    # If ISCC is available on host or in container
     if [ -f "$ISCC_PATH" ] || command -v iscc >/dev/null 2>&1; then
         ISCC_CMD="iscc"
         [ -f "$ISCC_PATH" ] && ISCC_CMD="WINEDEBUG=-all wine \"$ISCC_PATH\""
-        
         eval $ISCC_CMD packaging/windows/kuvpn.iss
     else
         echo "Warning: ISCC not found. Skipping installer generation."
-        echo "You can manually run Inno Setup on packaging/windows/kuvpn.iss"
     fi
 else
     echo "Warning: Wine not found. Skipping installer generation."
