@@ -148,8 +148,20 @@ impl KuVpnGui {
                 self.save_settings();
                 Task::none()
             }
-            Message::LogLevelSliderChanged(_) => {
-                // Log level filtering removed, we show all session updates
+            Message::LogLevelSliderChanged(val) => {
+                self.settings.log_level_val = val;
+                if let Ok(mut guard) = crate::logger::GUI_LOGGER.user_level.lock() {
+                    *guard = match val.round() as i32 {
+                        0 => log::LevelFilter::Off,
+                        1 => log::LevelFilter::Error,
+                        2 => log::LevelFilter::Warn,
+                        3 => log::LevelFilter::Info,
+                        4 => log::LevelFilter::Debug,
+                        5 => log::LevelFilter::Trace,
+                        _ => log::LevelFilter::Info,
+                    };
+                }
+                self.save_settings();
                 Task::none()
             }
             Message::OpenConnectPathChanged(p) => {
