@@ -34,8 +34,10 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "..\..\target\release\kuvpn-gui.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\..\target\release\kuvpn-cli.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\target\x86_64-pc-windows-gnu\release\kuvpn-gui.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\target\x86_64-pc-windows-gnu\release\kuvpn-cli.exe"; DestDir: "{app}"; Flags: ignoreversion
+; Bundle OpenConnect binaries if present in the 'openconnect' subdirectory
+Source: "openconnect\*"; DestDir: "{app}\openconnect"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]
@@ -43,4 +45,10 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipfsrequest
+; Optional: Install Wintun driver if bundled
+; Filename: "{app}\openconnect\wintun-install.exe"; Parameters: "/S"; StatusMsg: "Installing Wintun driver..."; Check: Is64BitInstallMode
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+// You can add logic here to detect if OpenConnect is already installed
+// or to prompt the user to install it.

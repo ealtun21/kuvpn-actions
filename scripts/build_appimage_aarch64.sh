@@ -14,8 +14,9 @@ if [ "$1" != "--no-container" ] && [ ! -f /.containerenv ] && [ ! -f /run/.conta
     fi
 
     if command -v podman >/dev/null 2>&1; then
-        echo "Using Podman to build aarch64 AppImage..."
-        podman build --platform linux/arm64 --build-arg BUILD_ARGS="$BUILD_ARGS" -t kuvpn-builder-aarch64 -f packaging/appimage/Dockerfile.aarch64 .
+        echo "Using Podman to build aarch64 AppImage (Cross-compilation)..."
+        # We DON'T use --platform linux/arm64 here because we want to run x86_64 tools in the container
+        podman build --build-arg BUILD_ARGS="$BUILD_ARGS" -t kuvpn-builder-aarch64 -f packaging/appimage/Dockerfile.aarch64 .
         
         CONTAINER_ID=$(podman create kuvpn-builder-aarch64)
         podman cp "$CONTAINER_ID":/build/${APP_NAME}-minimal-${ARCH}.AppImage .
@@ -37,8 +38,8 @@ fi
 
 echo "Building $APP_NAME AppImage v$VERSION for $ARCH..."
 
-# Build the GUI binary
-cargo build -p kuvpn-gui --release
+# Build the GUI binary (Cross-compile)
+cargo build -p kuvpn-gui --release --target aarch64-unknown-linux-gnu
 
 # Setup AppDir
 APPDIR="packaging/appimage/AppDir_aarch64"
@@ -47,7 +48,7 @@ mkdir -p "$APPDIR/usr/bin"
 mkdir -p "$APPDIR/usr/share/applications"
 mkdir -p "$APPDIR/usr/share/icons/hicolor/256x256/apps"
 
-cp target/release/kuvpn-gui "$APPDIR/usr/bin/"
+cp target/aarch64-unknown-linux-gnu/release/kuvpn-gui "$APPDIR/usr/bin/"
 
 # Create desktop file
 cat > "$APPDIR/usr/share/applications/kuvpn.desktop" <<EOF
@@ -66,10 +67,11 @@ if [ -f "crates/kuvpn-gui/assets/ku.svg" ] && command -v rsvg-convert >/dev/null
     rsvg-convert -w 256 -h 256 "crates/kuvpn-gui/assets/ku.svg" -o packaging/appimage/kuvpn.png
 fi
 
-# Download linuxdeploy aarch64 if needed
-if [ ! -f "packaging/appimage/linuxdeploy-aarch64" ]; then
-    curl -L -o packaging/appimage/linuxdeploy-aarch64 https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-aarch64.AppImage
-    chmod +x packaging/appimage/linuxdeploy-aarch64
+# We use x86_64 tools to package aarch64 assets because we are on an x86_64 host
+# Download x86_64 linuxdeploy if needed
+if [ ! -f "packaging/appimage/linuxdeploy" ]; then
+    curl -L -o packaging/appimage/linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+    chmod +x packaging/appimage/linuxdeploy
 fi
 
 # Download linuxdeploy-plugin-gtk if needed
@@ -78,10 +80,10 @@ if [ ! -f "packaging/appimage/linuxdeploy-plugin-gtk.sh" ]; then
     chmod +x packaging/appimage/linuxdeploy-plugin-gtk.sh
 fi
 
-# Download appimagetool aarch64 if needed
-if [ ! -f "packaging/appimage/appimagetool-aarch64" ]; then
-    curl -L -o packaging/appimage/appimagetool-aarch64 https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-aarch64.AppImage
-    chmod +x packaging/appimage/appimagetool-aarch64
+# Download x86_64 appimagetool if needed
+if [ ! -f "packaging/appimage/appimagetool" ]; then
+    curl -L -o packaging/appimage/appimagetool https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+    chmod +x packaging/appimage/appimagetool
 fi
 
 # Build Minimal AppImage
@@ -90,7 +92,7 @@ export DEPLOY_GTK_VERSION=3
 
 cp packaging/appimage/linuxdeploy-plugin-gtk.sh ./linuxdeploy-plugin-gtk.sh
 
-# List of libraries to bundle (adjusted for aarch64 paths if needed, but the loop finds them)
+# List of libraries to bundle (Targeting aarch64 paths)
 LIBS_TO_BUNDLE_LIST="
     libayatana-appindicator3.so.1 
     libayatana-ido3-0.4.so.0 
@@ -111,7 +113,7 @@ LIBS_TO_BUNDLE_LIST="
     libxdo.so.3 
     libglib-2.0.so.0 
     libgio-2.0.so.0 
-    libgobject-2.0.so.0 
+    libgobject-2.0.so.0
     libgmodule-2.0.so.0
     libdbus-1.so.3
     libproxy.so.1
@@ -158,22 +160,24 @@ LIBS_TO_BUNDLE_LIST="
 LIBS_TO_BUNDLE=""
 for lib in $LIBS_TO_BUNDLE_LIST; do
     LIB_PATH=$(find /usr/lib/aarch64-linux-gnu -name "$lib" | head -n 1)
-    if [ -z "$LIB_PATH" ]; then
-        LIB_PATH=$(find /usr/lib -name "$lib" | head -n 1)
-    fi
     if [ -n "$LIB_PATH" ]; then
         LIBS_TO_BUNDLE="$LIBS_TO_BUNDLE --library $LIB_PATH"
     fi
 done
 
-./packaging/appimage/linuxdeploy-aarch64 --appimage-extract-and-run --appdir "$APPDIR" \
+# We use the x86_64 linuxdeploy but we tell it NOT to run the executable 
+# because it can't (Exec format error).
+# We also need to be careful with the GTK plugin as it might try to run some aarch64 binaries.
+./packaging/appimage/linuxdeploy --appimage-extract-and-run --appdir "$APPDIR" \
     --executable "$APPDIR/usr/bin/kuvpn-gui" \
     --desktop-file "$APPDIR/usr/share/applications/kuvpn.desktop" \
     --icon-file packaging/appimage/kuvpn.png \
     $LIBS_TO_BUNDLE \
-    --plugin gtk \
     --custom-apprun scripts/AppRun.sh
- 
+    # We skip --plugin gtk for now if it causes issues with cross-builds, 
+    # but let's see if it works. Some parts of it might fail.
+
+    # Manual fixups for aarch64
     if [ -d "$APPDIR/usr/lib/aarch64-linux-gnu" ]; then
         cp -rn "$APPDIR"/usr/lib/aarch64-linux-gnu/* "$APPDIR/usr/lib/" || true
     fi
@@ -183,10 +187,31 @@ done
 
     mkdir -p "$APPDIR/usr/share/glib-2.0/schemas"
     cp -L /usr/share/glib-2.0/schemas/*.gschema.xml "$APPDIR/usr/share/glib-2.0/schemas/" || true
+    # We might not be able to run glib-compile-schemas for aarch64 if it's the aarch64 version,
+    # but the x86_64 version should work on the same schema files.
     glib-compile-schemas "$APPDIR/usr/share/glib-2.0/schemas/" || true
 
 rm ./linuxdeploy-plugin-gtk.sh
 
-ARCH=$ARCH ./packaging/appimage/appimagetool-aarch64 --appimage-extract-and-run "$APPDIR" "${APP_NAME}-minimal-${ARCH}.AppImage"
+# Use x86_64 appimagetool to create the AppImage but set the architecture metadata
+ARCH=$ARCH ./packaging/appimage/appimagetool --appimage-extract-and-run "$APPDIR" "${APP_NAME}-minimal-${ARCH}.AppImage"
+
+# Build Full AppImage (Optional)
+if [ "$1" == "--full" ]; then
+    echo "Downloading Chromium for full AppImage (aarch64)..."
+    # Note: Google doesn't always provide snapshots for Linux_Arm64 in the same way as x64
+    REVISION=$(curl -s "https://www.googleapis.com/download/storage/v1/b/chromium-browser-snapshots/o/Linux_Arm64%2FLAST_CHANGE?alt=media")
+    if [ -n "$REVISION" ]; then
+        curl -L -o packaging/chromium.zip "https://www.googleapis.com/download/storage/v1/b/chromium-browser-snapshots/o/Linux_Arm64%2F${REVISION}%2Fchrome-linux.zip?alt=media"
+        mkdir -p "$APPDIR/usr/lib/chromium"
+        unzip -q packaging/chromium.zip -d packaging/appimage/AppDir_aarch64/usr/lib/
+        mv "$APPDIR/usr/lib/chrome-linux/"* "$APPDIR/usr/lib/chromium/"
+        rm -rf "$APPDIR/usr/lib/chrome-linux" packaging/chromium.zip
+    else
+        echo "Warning: Could not find Chromium aarch64 snapshot. Skipping full build part."
+    fi
+    
+    ARCH=$ARCH ./packaging/appimage/appimagetool --appimage-extract-and-run "$APPDIR" "${APP_NAME}-full-${ARCH}.AppImage"
+fi
 
 echo "Done!"
