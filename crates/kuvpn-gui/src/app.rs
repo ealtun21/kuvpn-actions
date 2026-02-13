@@ -8,7 +8,7 @@ use tray_icon::{
 
 use crate::config::GuiSettings;
 use crate::provider::{GuiInteraction, GuiProvider};
-use crate::types::{ConnectionStatus, InputRequest, InputRequestWrapper, Message};
+use crate::types::{ConnectionStatus, InputRequest, InputRequestWrapper, Message, log_level_from_slider, login_mode_flags};
 use kuvpn::{VpnSession, SessionConfig};
 
 pub struct KuVpnGui {
@@ -151,15 +151,7 @@ impl KuVpnGui {
             Message::LogLevelSliderChanged(val) => {
                 self.settings.log_level_val = val;
                 if let Ok(mut guard) = crate::logger::GUI_LOGGER.user_level.lock() {
-                    *guard = match val.round() as i32 {
-                        0 => log::LevelFilter::Off,
-                        1 => log::LevelFilter::Error,
-                        2 => log::LevelFilter::Warn,
-                        3 => log::LevelFilter::Info,
-                        4 => log::LevelFilter::Debug,
-                        5 => log::LevelFilter::Trace,
-                        _ => log::LevelFilter::Info,
-                    };
+                    *guard = log_level_from_slider(val);
                 }
                 self.save_settings();
                 Task::none()
@@ -197,12 +189,7 @@ impl KuVpnGui {
             // ConnectPressed handled above
             Message::ConnectPressed => {
                 if self.status == ConnectionStatus::Disconnected || self.status == ConnectionStatus::Error {
-                    let (headless, no_auto_login) =
-                        match self.settings.login_mode_val.round() as i32 {
-                            0 => (true, false),  // Full Automatic
-                            1 => (false, false), // Visual Automatic
-                            _ => (false, true),  // Manual
-                        };
+                    let (headless, no_auto_login) = login_mode_flags(self.settings.login_mode_val);
 
                     let config = SessionConfig {
                         url: self.settings.url.clone(),
@@ -213,6 +200,7 @@ impl KuVpnGui {
                         email: if self.settings.email.is_empty() { None } else { Some(self.settings.email.clone()) },
                         openconnect_path: if self.settings.openconnect_path.is_empty() { "openconnect".to_string() } else { self.settings.openconnect_path.clone() },
                         escalation_tool: Some(self.settings.escalation_tool.clone()),
+                        interface_name: "kuvpn0".to_string(),
                     };
 
                     let session = Arc::new(VpnSession::new(config));
@@ -479,15 +467,7 @@ impl Default for KuVpnGui {
         let settings = GuiSettings::load();
 
         if let Ok(mut guard) = crate::logger::GUI_LOGGER.user_level.lock() {
-            *guard = match settings.log_level_val.round() as i32 {
-                0 => log::LevelFilter::Off,
-                1 => log::LevelFilter::Error,
-                2 => log::LevelFilter::Warn,
-                3 => log::LevelFilter::Info,
-                4 => log::LevelFilter::Debug,
-                5 => log::LevelFilter::Trace,
-                _ => log::LevelFilter::Info,
-            };
+            *guard = log_level_from_slider(settings.log_level_val);
         }
 
         Self {
