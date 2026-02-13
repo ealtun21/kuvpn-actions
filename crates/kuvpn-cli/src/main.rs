@@ -18,6 +18,12 @@ fn main() -> ExitCode {
     let args = Args::parse();
     init_logger(args.level.clone().into());
 
+    // Ensure only one instance is running
+    if let Err(e) = kuvpn::utils::ensure_single_instance() {
+        error!("{}", e);
+        return ExitCode::FAILURE;
+    }
+
     // Handle the clean session option.
     if args.clean {
         match kuvpn::utils::wipe_user_data_dir() {

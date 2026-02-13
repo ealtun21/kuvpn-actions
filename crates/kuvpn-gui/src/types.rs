@@ -1,17 +1,9 @@
-use iced::{Color, Font};
+use iced::Color;
 use std::sync::{Arc, Mutex};
 use tokio::sync::oneshot;
 use tray_icon::{menu::MenuEvent, TrayIconEvent};
 
 // --- Constants & Styling ---
-pub const NERD_FONT: Font = Font {
-    family: iced::font::Family::Name("JetBrainsMono Nerd Font"),
-    weight: iced::font::Weight::Normal,
-    stretch: iced::font::Stretch::Normal,
-    style: iced::font::Style::Normal,
-};
-pub const NERD_FONT_BYTES: &[u8] =
-    include_bytes!("../assets/JetBrainsMonoNerdFontMono-Regular.ttf");
 pub const KU_LOGO_BYTES: &[u8] = include_bytes!("../assets/ku.svg");
 
 // Colors (Refined Koç University Palette)
@@ -23,16 +15,17 @@ pub const COLOR_WARNING: Color = Color::from_rgb(0.80, 0.60, 0.30);
 pub const COLOR_TEXT: Color = Color::from_rgb(0.85, 0.85, 0.85);
 pub const COLOR_TEXT_DIM: Color = Color::from_rgb(0.50, 0.50, 0.50);
 
-// Icons (Nerd Font)
-pub const ICON_SETTINGS: &str = "\u{f013}";
-pub const ICON_SHIELD: &str = "\u{f132}";
-pub const ICON_SHIELD_CHECK: &str = "\u{f0568}";
-pub const ICON_LOCK: &str = "\u{f023}";
-pub const ICON_PHONE: &str = "\u{f095}";
-pub const ICON_TERMINAL: &str = "\u{f120}";
-pub const ICON_INFO: &str = "\u{f05a}";
-pub const ICON_REFRESH: &str = "\u{f021}";
-pub const ICON_TRASH: &str = "\u{f1f8}";
+// Icons (SVG Paths - using simple geometries)
+pub const ICON_SETTINGS_SVG: &[u8] = r#"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>"#.as_bytes();
+pub const ICON_SHIELD_SVG: &[u8] = r#"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>"#.as_bytes();
+pub const ICON_SHIELD_CHECK_SVG: &[u8] = r#"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="M9 12l2 2 4-4"></path></svg>"#.as_bytes();
+pub const ICON_LOCK_SVG: &[u8] = r#"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>"#.as_bytes();
+pub const ICON_PHONE_SVG: &[u8] = r#"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>"#.as_bytes();
+pub const ICON_TERMINAL_SVG: &[u8] = r#"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>"#.as_bytes();
+pub const ICON_INFO_SVG: &[u8] = r#"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>"#.as_bytes();
+pub const ICON_REFRESH_SVG: &[u8] = r#"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>"#.as_bytes();
+pub const ICON_TRASH_SVG: &[u8] = r#"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>"#.as_bytes();
+pub const ICON_POWER_SVG: &[u8] = r#"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>"#.as_bytes();
 
 pub use kuvpn::ConnectionStatus;
 

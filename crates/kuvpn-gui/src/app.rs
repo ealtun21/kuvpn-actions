@@ -181,7 +181,7 @@ impl KuVpnGui {
                 Task::none()
             }
             Message::Tick => {
-                if self.status == ConnectionStatus::Connecting {
+                if self.status == ConnectionStatus::Connecting || self.status == ConnectionStatus::Disconnecting {
                     self.rotation += 0.1;
                 }
                 Task::none()
@@ -418,7 +418,7 @@ impl KuVpnGui {
     pub fn subscription(&self) -> Subscription<Message> {
         let mut subs = vec![];
 
-        if self.status == ConnectionStatus::Connecting {
+        if self.status == ConnectionStatus::Connecting || self.status == ConnectionStatus::Disconnecting {
             subs.push(
                 iced::time::every(std::time::Duration::from_millis(16)).map(|_| Message::Tick),
             );

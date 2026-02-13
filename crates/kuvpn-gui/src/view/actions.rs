@@ -1,5 +1,5 @@
 use crate::app::KuVpnGui;
-use crate::types::{ConnectionStatus, Message, KU_LOGO_BYTES, NERD_FONT};
+use crate::types::{ConnectionStatus, Message, KU_LOGO_BYTES, ICON_POWER_SVG};
 use iced::widget::{button, row, svg, text};
 use iced::{Alignment, Element, Length};
 
@@ -10,8 +10,9 @@ impl KuVpnGui {
                 row![
                     svg(svg::Handle::from_memory(KU_LOGO_BYTES))
                         .width(20)
-                        .height(20),
-                    text("JOIN NETWORK").font(NERD_FONT).size(16),
+                        .height(20)
+                        .style(|_, _| svg::Style { color: Some(iced::Color::WHITE) }),
+                    text("JOIN NETWORK").size(16),
                 ]
                 .spacing(10)
                 .align_y(Alignment::Center),
@@ -24,13 +25,15 @@ impl KuVpnGui {
             _ => {
                 button(
                     row![
-                        text("\u{f011}").font(NERD_FONT), // Power icon
+                        svg(svg::Handle::from_memory(ICON_POWER_SVG))
+                            .width(16)
+                            .height(16)
+                            .style(|_, _| svg::Style { color: Some(crate::types::COLOR_TEXT) }),
                         text(if self.status == ConnectionStatus::Connecting {
                             "CANCEL"
                         } else {
                             "DISCONNECT"
                         })
-                        .font(NERD_FONT)
                         .size(16),
                     ]
                     .spacing(10)
