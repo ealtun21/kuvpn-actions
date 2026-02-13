@@ -4,7 +4,12 @@ use tokio::sync::oneshot;
 use tray_icon::{menu::MenuEvent, TrayIconEvent};
 
 // --- Constants & Styling ---
-pub const NERD_FONT: Font = Font::with_name("JetBrainsMono Nerd Font Mono");
+pub const NERD_FONT: Font = Font {
+    family: iced::font::Family::Name("JetBrainsMono Nerd Font Mono"),
+    weight: iced::font::Weight::Normal,
+    stretch: iced::font::Stretch::Normal,
+    style: iced::font::Style::Normal,
+};
 pub const NERD_FONT_BYTES: &[u8] =
     include_bytes!("../assets/JetBrainsMonoNerdFontMono-Regular.ttf");
 pub const KU_LOGO_BYTES: &[u8] = include_bytes!("../assets/ku.svg");
@@ -59,6 +64,7 @@ pub enum Message {
     ConnectionFinished(Option<String>),
     StatusChanged(ConnectionStatus),
     Tick,
+    Watchdog,
     TrayEvent(TrayIconEvent),
     MenuEvent(MenuEvent),
     CloseToTrayToggled(bool),
