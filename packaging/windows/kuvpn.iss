@@ -44,8 +44,8 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-; Optional: Install Wintun driver if bundled
-; Filename: "{app}\openconnect\wintun-install.exe"; Parameters: "/S"; StatusMsg: "Installing Wintun driver..."; Check: Is64BitInstallMode
+; Install TAP driver bundled with OpenConnect
+Filename: "{app}\openconnect\tap-setup.exe"; Parameters: "/S"; StatusMsg: "Installing TAP network driver..."; Flags: runascurrentuser waituntilterminated
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [Code]
