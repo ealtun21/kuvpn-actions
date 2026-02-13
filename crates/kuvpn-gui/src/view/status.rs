@@ -4,7 +4,7 @@ use crate::types::{
     ICON_SHIELD, ICON_SHIELD_CHECK, NERD_FONT,
 };
 use iced::widget::{column, container, text};
-use iced::{Alignment, Border, Element};
+use iced::{Alignment, Border, Element, Color};
 
 impl KuVpnGui {
     pub fn view_status_circle(&self) -> Element<'_, Message> {
@@ -12,6 +12,8 @@ impl KuVpnGui {
             ConnectionStatus::Disconnected => (COLOR_TEXT_DIM, ICON_SHIELD, "Public Access"),
             ConnectionStatus::Connecting => (COLOR_WARNING, ICON_REFRESH, "Joining Campus..."),
             ConnectionStatus::Connected => (COLOR_SUCCESS, ICON_SHIELD_CHECK, "KU Network Active"),
+            ConnectionStatus::Disconnecting => (COLOR_WARNING, ICON_REFRESH, "Disconnecting..."),
+            ConnectionStatus::Error => (Color::from_rgb(0.8, 0.2, 0.2), ICON_SHIELD, "Connection Error"),
         };
 
         let icon_display = text(icon).font(NERD_FONT).size(80).color(color);
@@ -29,10 +31,10 @@ impl KuVpnGui {
                     ..Default::default()
                 }),
             text(status_text).size(18).font(NERD_FONT).color(color),
-            text(if self.status == ConnectionStatus::Connected {
-                "Internal Resources Available"
-            } else {
-                "Koç University Access Restricted"
+            text(match self.status {
+                ConnectionStatus::Connected => "Internal Resources Available",
+                ConnectionStatus::Error => "Something went wrong. Check logs.",
+                _ => "Koç University Access Restricted",
             })
             .size(12)
             .color(COLOR_TEXT_DIM),

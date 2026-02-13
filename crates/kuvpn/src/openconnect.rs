@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
+#[cfg(unix)]
+use std::process::Command;
 use which::which;
 
 #[cfg(windows)]
@@ -7,21 +9,51 @@ use runas::Command as AdminCommand;
 #[cfg(windows)]
 use sysinfo::System;
 
+pub enum VpnProcess {
+    Unix(Child),
+    Windows, // On Windows we track via process list because runas is tricky
+}
+
+impl VpnProcess {
+    pub fn kill(&mut self) -> anyhow::Result<()> {
+        match self {
+            VpnProcess::Unix(_child) => {
+                #[cfg(unix)]
+                {
+                    use nix::sys::signal::{self, Signal};
+                    use nix::unistd::Pid;
+                    let pid = Pid::from_raw(_child.id() as i32);
+                    let _ = signal::kill(pid, Signal::SIGINT);
+                    let _ = _child.wait();
+                }
+                Ok(())
+            }
+            VpnProcess::Windows => {
+                if let Some(pid) = get_openconnect_pid() {
+                    kill_process(pid)?;
+                }
+                Ok(())
+            }
+        }
+    }
+
+    pub fn wait(&mut self) -> anyhow::Result<()> {
+        match self {
+            VpnProcess::Unix(child) => {
+                child.wait()?;
+                Ok(())
+            }
+            VpnProcess::Windows => {
+                while is_openconnect_running() {
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
 /// Attempts to locate the `openconnect` executable.
-///
-/// The search is performed in three steps:
-/// 1. Check if the provided `user_path` directly points to an existing file.
-/// 2. Use the system's PATH (via the `which` crate) to locate `openconnect`.
-/// 3. Fallback: Check common sbin directories (e.g., `/sbin`, `/usr/sbin`, `/usr/local/sbin`).
-///
-/// # Arguments
-///
-/// * `user_path` - A string slice that holds the user-provided path to `openconnect`.
-///
-/// # Returns
-///
-/// * `Some(PathBuf)` if the executable is found.
-/// * `None` if the executable cannot be located.
 pub fn locate_openconnect(user_path: &str) -> Option<PathBuf> {
     // Step 1: Check if `user_path` directly points to an existing file.
     let candidate = Path::new(user_path);
@@ -69,26 +101,10 @@ pub fn locate_openconnect(user_path: &str) -> Option<PathBuf> {
         }
     }
 
-    // Return None if `openconnect` could not be found.
     None
 }
 
-/// Executes the `openconnect` command with elevated privileges using an available escalation tool.
-///
-/// The function supports a custom run command if provided; otherwise, it defaults to a list of
-/// common escalation tools (`doas`, `sudo`, `pkexec`). It constructs the appropriate command-line
-/// arguments and executes `openconnect` with the DSID and VPN URL.
-///
-/// # Arguments
-///
-/// * `cookie_value` - The DSID cookie value to be passed to `openconnect`.
-/// * `url` - The VPN URL to connect to.
-/// * `run_command` - An optional custom command for elevated privilege execution.
-/// * `openconnect_path` - The resolved path to the `openconnect` executable.
-///
-/// # Returns
-///
-/// A `Result` indicating success or failure of the command execution.
+/// Executes the `openconnect` command.
 pub fn execute_openconnect(
     cookie_value: String,
     url: String,
@@ -96,30 +112,17 @@ pub fn execute_openconnect(
     openconnect_path: &Path,
     _stdout: Stdio,
     _stderr: Stdio,
-) -> anyhow::Result<Child> {
+) -> anyhow::Result<VpnProcess> {
     #[cfg(unix)]
     {
-        // Default list of privilege escalation tools.
         let mut default_tools = vec!["doas", "sudo", "pkexec"];
 
-        // If a custom run command is provided, check its availability and prioritize it.
         if let Some(custom_command) = _run_command {
-            log::info!("Custom run command provided: {}", custom_command);
             if which(custom_command).is_ok() {
-                log::info!("Custom command found: {}", custom_command);
                 default_tools.insert(0, custom_command.as_str());
-            } else {
-                log::info!(
-                    "Custom command '{}' not found, falling back to default tools.",
-                    custom_command
-                );
             }
-        } else {
-            log::info!("No custom run command provided, defaulting to built-in tools.");
         }
 
-        // Identify the first available escalation tool from the list.
-        log::info!("Checking for available tools/commands: {:?}", default_tools);
         let command_to_run = default_tools
             .iter()
             .find_map(|&tool| which(tool).ok().map(|_| tool))
@@ -127,12 +130,7 @@ pub fn execute_openconnect(
                 "No available tool for running openconnect (sudo/doas/pkexec not found)"
             ))?;
 
-        log::info!(
-            "Running openconnect using {} for elevated privileges or execution",
-            command_to_run
-        );
-
-        return Command::new(command_to_run)
+        let child = Command::new(command_to_run)
             .arg(openconnect_path)
             .arg("--protocol")
             .arg("nc")
@@ -141,8 +139,9 @@ pub fn execute_openconnect(
             .arg(url)
             .stdout(_stdout)
             .stderr(_stderr)
-            .spawn()
-            .map_err(anyhow::Error::from);
+            .spawn()?;
+
+        return Ok(VpnProcess::Unix(child));
     }
 
     #[cfg(windows)]
@@ -157,26 +156,26 @@ pub fn execute_openconnect(
 
         cmd.arg(url);
 
-        // runas uses .status() which returns a Result<ExitStatus, io::Error>
-        // This will block until the UAC prompt is accepted or rejected.
-        let status = cmd
-            .status()
-            .map_err(|e| anyhow::anyhow!("UAC Elevation failed or was denied: {}", e))?;
+        // runas 1.2.0 might only have status() which blocks.
+        // We run it in a thread so we don't block the caller.
+        std::thread::spawn(move || {
+            match cmd.status() {
+                Ok(status) => {
+                    if !status.success() {
+                        log::error!("OpenConnect process exited with failure.");
+                    }
+                }
+                Err(e) => {
+                    log::error!("Failed to run elevated OpenConnect: {}", e);
+                }
+            }
+        });
 
-        if !status.success() {
-            return Err(anyhow::anyhow!(
-                "OpenConnect started but returned an error exit code."
-            ));
-        }
-
-        // We return a dummy child process because runas doesn't provide a handle.
-        // On Windows, your GUI will track the connection state by checking
-        // if 'openconnect.exe' is in the process list.
-        Ok(Command::new("cmd").arg("/c").arg("exit 0").spawn()?)
+        Ok(VpnProcess::Windows)
     }
 }
 
-/// Checks if an openconnect process is currently running (useful for Windows)
+/// Checks if an openconnect process is currently running
 pub fn is_openconnect_running() -> bool {
     #[cfg(windows)]
     {
@@ -192,7 +191,6 @@ pub fn is_openconnect_running() -> bool {
     }
     #[cfg(unix)]
     {
-        // On Unix we usually have the Child handle, but for completeness:
         let candidate = which("pgrep");
         if let Ok(pgrep) = candidate {
             let status = Command::new(pgrep)
@@ -246,11 +244,10 @@ pub fn kill_process(pid: u32) -> anyhow::Result<()> {
         use nix::sys::signal::{self, Signal};
         use nix::unistd::Pid;
         let pid = Pid::from_raw(pid as i32);
-        signal::kill(pid, Signal::SIGINT)?;
+        let _ = signal::kill(pid, Signal::SIGINT);
     }
     #[cfg(windows)]
     {
-        // Must use elevated taskkill to kill an elevated openconnect
         AdminCommand::new("taskkill")
             .arg("/F")
             .arg("/PID")
@@ -258,49 +255,4 @@ pub fn kill_process(pid: u32) -> anyhow::Result<()> {
             .status()?;
     }
     Ok(())
-}
-
-/// Gracefully terminates the `openconnect` process.
-///
-/// On Unix systems, it sends a SIGINT signal to allow `openconnect` to clean up
-/// network interfaces and routes. On other systems, it falls back to standard kill.
-pub fn kill_child(_child: &mut Child) -> anyhow::Result<()> {
-    #[cfg(unix)]
-    {
-        use nix::sys::signal::{self, Signal};
-        use nix::unistd::Pid;
-        let pid = Pid::from_raw(_child.id() as i32);
-        signal::kill(pid, Signal::SIGINT)?;
-    }
-    #[cfg(windows)]
-    {
-        // On Windows, if we don't have the PID of the elevated process,
-        // we kill by image name to ensure the VPN closes.
-        AdminCommand::new("taskkill")
-            .arg("/F")
-            .arg("/IM")
-            .arg("openconnect.exe")
-            .arg("/T")
-            .status()?;
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::process::Command;
-
-    #[test]
-    fn test_kill_child() {
-        let mut child = Command::new("sleep")
-            .arg("10")
-            .spawn()
-            .expect("failed to execute sleep");
-
-        let res = kill_child(&mut child);
-        assert!(res.is_ok());
-
-        let _ = child.wait();
-    }
 }

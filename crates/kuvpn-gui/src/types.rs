@@ -5,7 +5,7 @@ use tray_icon::{menu::MenuEvent, TrayIconEvent};
 
 // --- Constants & Styling ---
 pub const NERD_FONT: Font = Font {
-    family: iced::font::Family::Name("JetBrainsMono Nerd Font Mono"),
+    family: iced::font::Family::Name("JetBrainsMono Nerd Font"),
     weight: iced::font::Weight::Normal,
     stretch: iced::font::Stretch::Normal,
     style: iced::font::Style::Normal,
@@ -34,12 +34,7 @@ pub const ICON_INFO: &str = "\u{f05a}";
 pub const ICON_REFRESH: &str = "\u{f021}";
 pub const ICON_TRASH: &str = "\u{f1f8}";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ConnectionStatus {
-    Disconnected,
-    Connecting,
-    Connected,
-}
+pub use kuvpn::ConnectionStatus;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -64,7 +59,6 @@ pub enum Message {
     ConnectionFinished(Option<String>),
     StatusChanged(ConnectionStatus),
     Tick,
-    Watchdog,
     TrayEvent(TrayIconEvent),
     MenuEvent(MenuEvent),
     CloseToTrayToggled(bool),

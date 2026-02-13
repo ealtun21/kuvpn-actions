@@ -8,6 +8,15 @@
 
 - Cleanup browser handling,
 
+## KUVPN LIB - REFACTORING
+
+- [x] Create a `VpnSession` manager in the library to unify connection logic.
+- [x] Implement robust connection state tracking (Connected/Disconnected/Connecting) in the library.
+- [x] Remove log-based state detection.
+- [x] Improve OpenConnect process management on Windows.
+- [x] Ensure browser is strictly closed before starting OpenConnect.
+- [x] Refactor `run_login_and_get_dsid` to be more robust and less reliant on generic retries.
+
 # KUVPN LIB
 
 - cleanup kuvpn/src/openconnect.rs, and modify the rest of the crates to handle it, as openconnect is now workin on window build.

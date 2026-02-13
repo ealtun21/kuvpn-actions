@@ -6,7 +6,7 @@ use iced::{Alignment, Element, Length};
 impl KuVpnGui {
     pub fn view_actions(&self) -> Element<'_, Message> {
         match self.status {
-            ConnectionStatus::Disconnected => button(
+            ConnectionStatus::Disconnected | ConnectionStatus::Error => button(
                 row![
                     svg(svg::Handle::from_memory(KU_LOGO_BYTES))
                         .width(20)
