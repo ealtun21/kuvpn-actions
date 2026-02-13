@@ -3,7 +3,9 @@ use crate::types::{
     ConnectionStatus, Message, COLOR_ACCENT, COLOR_SURFACE, COLOR_TEXT_DIM, ICON_INFO, ICON_TRASH,
     NERD_FONT,
 };
-use iced::widget::{button, checkbox, column, container, pick_list, row, slider, text, text_input};
+use iced::widget::{button, checkbox, column, container, row, slider, text, text_input};
+#[cfg(not(windows))]
+use iced::widget::pick_list;
 use iced::{Alignment, Border, Element, Length};
 
 impl KuVpnGui {
@@ -137,7 +139,7 @@ impl KuVpnGui {
                     }
                     #[cfg(windows)]
                     {
-                        iced::widget::space::Space::new(Length::Shrink, Length::Shrink)
+                        iced::widget::Space::new().width(Length::Shrink).height(Length::Shrink)
                     }
                 },
                 column![
