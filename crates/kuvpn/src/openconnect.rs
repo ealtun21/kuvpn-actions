@@ -11,7 +11,9 @@ use sysinfo::System;
 
 pub enum VpnProcess {
     Unix(Child),
-    Windows, // On Windows we track via process list because runas is tricky
+    Windows {
+        interface_name: String,
+    },
 }
 
 impl VpnProcess {
@@ -28,7 +30,7 @@ impl VpnProcess {
                 }
                 Ok(())
             }
-            VpnProcess::Windows => {
+            VpnProcess::Windows { .. } => {
                 if let Some(pid) = get_openconnect_pid() {
                     kill_process(pid)?;
                 }
@@ -43,8 +45,8 @@ impl VpnProcess {
                 child.wait()?;
                 Ok(())
             }
-            VpnProcess::Windows => {
-                while is_openconnect_running() {
+            VpnProcess::Windows { ref interface_name } => {
+                while is_vpn_interface_up(interface_name) {
                     std::thread::sleep(std::time::Duration::from_millis(500));
                 }
                 Ok(())
@@ -112,6 +114,7 @@ pub fn execute_openconnect(
     openconnect_path: &Path,
     _stdout: Stdio,
     _stderr: Stdio,
+    interface_name: &str,
 ) -> anyhow::Result<VpnProcess> {
     #[cfg(unix)]
     {
@@ -134,6 +137,8 @@ pub fn execute_openconnect(
             .arg(openconnect_path)
             .arg("--protocol")
             .arg("nc")
+            .arg("--interface")
+            .arg(interface_name)
             .arg("-C")
             .arg(format!("DSID={}", cookie_value))
             .arg(url)
@@ -148,9 +153,12 @@ pub fn execute_openconnect(
     {
         log::info!("Requesting Admin elevation for OpenConnect...");
 
+        let interface_name_owned = interface_name.to_string();
         let mut cmd = AdminCommand::new(openconnect_path.to_str().unwrap());
         cmd.arg("--protocol")
             .arg("nc")
+            .arg("--interface")
+            .arg(&interface_name_owned)
             .arg("-C")
             .arg(format!("DSID={}", cookie_value));
 
@@ -171,7 +179,7 @@ pub fn execute_openconnect(
             }
         });
 
-        Ok(VpnProcess::Windows)
+        Ok(VpnProcess::Windows { interface_name: interface_name_owned })
     }
 }
 
@@ -201,6 +209,48 @@ pub fn is_openconnect_running() -> bool {
             return status.map(|s| s.success()).unwrap_or(false);
         }
         false
+    }
+}
+
+/// Checks if the named VPN TUN/TAP interface is up and active.
+/// More reliable than process-name detection because it verifies
+/// the tunnel itself exists, not just that a process is running.
+pub fn is_vpn_interface_up(interface_name: &str) -> bool {
+    #[cfg(unix)]
+    {
+        // Check /sys/class/net/<interface_name> existence
+        let sys_path = format!("/sys/class/net/{}", interface_name);
+        let path = std::path::Path::new(&sys_path);
+        if !path.exists() {
+            return false;
+        }
+        // TUN devices report "unknown" when active, "down" when inactive
+        let operstate_path = format!("{}/operstate", sys_path);
+        if let Ok(state) = std::fs::read_to_string(&operstate_path) {
+            return state.trim() != "down";
+        }
+        true
+    }
+    #[cfg(windows)]
+    {
+        use std::process::{Command as StdCommand, Stdio as StdStdio};
+        let output = StdCommand::new("netsh")
+            .args(["interface", "show", "interface"])
+            .stdout(StdStdio::piped())
+            .stderr(StdStdio::null())
+            .output();
+        match output {
+            Ok(out) => {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                for line in stdout.lines() {
+                    if line.contains(interface_name) && line.contains("Connected") {
+                        return true;
+                    }
+                }
+                false
+            }
+            Err(_) => false,
+        }
     }
 }
 
