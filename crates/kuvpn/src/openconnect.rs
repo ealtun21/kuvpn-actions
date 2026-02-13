@@ -44,6 +44,16 @@ pub fn locate_openconnect(user_path: &str) -> Option<PathBuf> {
 
     #[cfg(windows)]
     {
+        // Check for bundled openconnect relative to the executable
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(parent) = exe_path.parent() {
+                let bundled_path = parent.join("openconnect").join("openconnect.exe");
+                if bundled_path.exists() && bundled_path.is_file() {
+                    return Some(bundled_path);
+                }
+            }
+        }
+
         let common_paths = [
             "C:\\Program Files\\OpenConnect\\openconnect.exe",
             "C:\\Program Files (x86)\\OpenConnect\\openconnect.exe",
