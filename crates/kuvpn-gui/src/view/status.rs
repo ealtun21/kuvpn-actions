@@ -1,7 +1,7 @@
 use crate::app::KuVpnGui;
 use crate::types::{
-    ConnectionStatus, Message, COLOR_SUCCESS, COLOR_TEXT_DIM, COLOR_WARNING,
-    ICON_REFRESH, ICON_SHIELD, ICON_SHIELD_CHECK, NERD_FONT,
+    ConnectionStatus, Message, COLOR_SUCCESS, COLOR_TEXT_DIM, COLOR_WARNING, ICON_REFRESH,
+    ICON_SHIELD, ICON_SHIELD_CHECK, NERD_FONT,
 };
 use iced::widget::{column, container, text};
 use iced::{Alignment, Border, Element};
