@@ -133,9 +133,7 @@ pub fn run_login_and_get_dsid(
         Err(e) => return Err(anyhow::anyhow!(format!("Failed to create browser: {e}"))),
     };
 
-    // Use the initial tab provided by the browser.
-    #[allow(deprecated)]
-    let tab = browser.wait_for_initial_tab()?;
+    let tab = browser.new_tab()?;
 
     // Navigate to the target URL and wait for the page to load.
     tab.navigate_to(url)?;
