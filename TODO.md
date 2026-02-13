@@ -2,16 +2,17 @@
 
 ## KUVPN GUI
 
-- Add Windows Support, involves making an installer that can install both the application, and openconnect too, since unlike linux on windows it's much harder to install, we just bundle a way to install that. (IN PROGRESS: Groundwork done, cross-platform code guards added, installer script and CI workflow implemented)
-    - Diffiucult, may be in backlog till other are done.
-    - Windows: Bundle openconnect.exe and its dependencies (like wintun.dll) using NSIS or Inno Setup. Since OpenConnect on Windows requires a virtual network adapter, the installer will likely need admin privileges.
+- Font is not working, tested in appimage, it's not actually reading the font, using the system font of that name, Needs fixing (IN PROGRESS: Attempted fix by using internal font name 'JetBrainsMono NFM') (Broken, icons look odd in both windows and linux builds, some linux it works, if the font seems to already exist)
 
-- Add warning if openconnect can not be found to GUI ui, telling user to install or select the path from the config and OC (DONE)
+- Update code base for windows support, 
+    - Getting DSID works (DONE)
+    - No need to ship chromium for windows, as it works fine with edge, which is shipped by default. (DONE)
+    - Remove the need to for escelation for running openconnect ( sudo, doas, etc. ), for windows, we want to use run openconnect as admin, may need extra dependcncies, we'll add them only for windows
+    - App open in a cmd, add build option for windows to avoid that.
+    - Current installers ships openconnect with the binary after installer, however the code isn't able to test it, may be releated to path for windows, or commands being nix, thisd will be needed to look into.
+    - Check if openconnect is getting installed correctly.
+    - Sign binary in a way that windows isn't complaining about not knowing what it is (after everything else is done)
+    - Remove building cli for windows, we don't really need a cli, the gui is enough.
 
-- Font is not working, tested in appimage, it's not actually reading the font, using the system font of that name, Needs fixing (IN PROGRESS: Attempted fix by using internal font name 'JetBrainsMono NFM')
+- Modify appimage builder for linux to put appimages inside dist folder instead of just in source path.
 
-- Refactor GUI into file, oversized main.rs is hard to maintain. (DONE)
-
-- Make another script to build aarch64 appimages, another script. (DONE)
-
-- Crosscompile to macos ( not sure how possible, may need to use github workflow instead)
