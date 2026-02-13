@@ -18,26 +18,28 @@ if [ "$1" != "--no-container" ] && [ ! -f /.containerenv ] && [ ! -f /run/.conta
         podman build --build-arg BUILD_ARGS="$BUILD_ARGS" -t kuvpn-builder -f packaging/appimage/Dockerfile .
         
         CONTAINER_ID=$(podman create kuvpn-builder)
-        podman cp "$CONTAINER_ID":/build/${APP_NAME}-minimal-${ARCH}.AppImage .
+        mkdir -p dist
+        podman cp "$CONTAINER_ID":/build/${APP_NAME}-minimal-${ARCH}.AppImage dist/
         if [ "$1" == "--full" ]; then
-             podman cp "$CONTAINER_ID":/build/${APP_NAME}-full-${ARCH}.AppImage .
+             podman cp "$CONTAINER_ID":/build/${APP_NAME}-full-${ARCH}.AppImage dist/
         fi
         podman rm "$CONTAINER_ID"
         
-        echo "Successfully built and extracted AppImage(s)."
+        echo "Successfully built and extracted AppImage(s) to dist/."
         exit 0
     elif command -v docker >/dev/null 2>&1; then
         echo "Using Docker to build AppImage for maximum compatibility..."
         docker build --build-arg BUILD_ARGS="$BUILD_ARGS" -t kuvpn-builder -f packaging/appimage/Dockerfile .
         
         CONTAINER_ID=$(docker create kuvpn-builder)
-        docker cp "$CONTAINER_ID":/build/${APP_NAME}-minimal-${ARCH}.AppImage .
+        mkdir -p dist
+        docker cp "$CONTAINER_ID":/build/${APP_NAME}-minimal-${ARCH}.AppImage dist/
         if [ "$1" == "--full" ]; then
-             docker cp "$CONTAINER_ID":/build/${APP_NAME}-full-${ARCH}.AppImage .
+             docker cp "$CONTAINER_ID":/build/${APP_NAME}-full-${ARCH}.AppImage dist/
         fi
         docker rm "$CONTAINER_ID"
         
-        echo "Successfully built and extracted AppImage(s)."
+        echo "Successfully built and extracted AppImage(s) to dist/."
         exit 0
     else
         echo "Neither Podman nor Docker found. Building on host (may have compatibility issues)..."
@@ -220,7 +222,8 @@ done
 
 rm ./linuxdeploy-plugin-gtk.sh
 
-ARCH=$ARCH ./packaging/appimage/appimagetool --appimage-extract-and-run "$APPDIR" "${APP_NAME}-minimal-${ARCH}.AppImage"
+mkdir -p dist
+ARCH=$ARCH ./packaging/appimage/appimagetool --appimage-extract-and-run "$APPDIR" "dist/${APP_NAME}-minimal-${ARCH}.AppImage"
 
 # Build Full AppImage (Optional)
 if [ "$1" == "--full" ]; then
@@ -232,7 +235,7 @@ if [ "$1" == "--full" ]; then
     mv "$APPDIR/usr/lib/chrome-linux/"* "$APPDIR/usr/lib/chromium/"
     rm -rf "$APPDIR/usr/lib/chrome-linux" packaging/chromium.zip
     
-    ARCH=$ARCH ./packaging/appimage/appimagetool --appimage-extract-and-run "$APPDIR" "${APP_NAME}-full-${ARCH}.AppImage"
+    ARCH=$ARCH ./packaging/appimage/appimagetool --appimage-extract-and-run "$APPDIR" "dist/${APP_NAME}-full-${ARCH}.AppImage"
 fi
 
 echo "Done!"
