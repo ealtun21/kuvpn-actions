@@ -13,17 +13,18 @@ use std::time::Duration;
 /// - **Custom user agent** as specified by the `agent` parameter.
 /// - **Custom user data directory** for isolated session data.
 /// - **Custom window size** of 800x800 pixels.
-/// - **Sandbox disabled** and an infinite idle timeout.
+/// - **Sandbox disabled** and an appropriate idle timeout based on mode.
 ///
 /// # Arguments
 ///
 /// * `agent` - A string slice representing the desired user agent.
 /// * `headless` - Whether to run the browser in headless mode.
+/// * `manual_mode` - Whether manual user interaction is expected (use longer timeout).
 ///
 /// # Returns
 ///
 /// A `Result` containing the configured `Browser` instance on success, or an error on failure.
-pub fn create_browser(agent: &str, headless: bool) -> Result<Browser, Box<dyn Error>> {
+pub fn create_browser(agent: &str, headless: bool, manual_mode: bool) -> Result<Browser, Box<dyn Error>> {
     let user_agent = OsString::from(format!("--user-agent={agent}"));
     let window = OsString::from("--new-window");
     let no_first_run = OsString::from("--no-first-run");
@@ -34,11 +35,20 @@ pub fn create_browser(agent: &str, headless: bool) -> Result<Browser, Box<dyn Er
     loop {
         let user_data_dir = crate::utils::get_user_data_dir()?;
 
+        // Timeout based on mode:
+        // - Headless (auto): 2 minutes - the flow is fully automated, shouldn't take long
+        // - Manual mode: 10 minutes - user might interact slowly or be away from screen
+        let idle_timeout = if manual_mode {
+            Duration::from_secs(600) // 10 minutes for manual modes
+        } else {
+            Duration::from_secs(120) // 2 minutes for headless mode
+        };
+
         let mut options = LaunchOptions::default_builder();
         let mut launch_options = options
             .headless(headless)
             .sandbox(false)
-            .idle_browser_timeout(Duration::MAX)
+            .idle_browser_timeout(idle_timeout)
             .window_size(Some((800, 800)))
             .enable_gpu(false)
             .args(vec![

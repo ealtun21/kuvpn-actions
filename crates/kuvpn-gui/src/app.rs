@@ -36,6 +36,8 @@ pub struct KuVpnGui {
     pub disconnect_item: Option<MenuItem>,
     pub window_id: Option<iced::window::Id>,
     pub is_visible: bool,
+    pub window_close_pending: bool,
+    pub last_tray_click: Option<std::time::Instant>,
 }
 
 impl KuVpnGui {
@@ -65,6 +67,7 @@ impl KuVpnGui {
                 if self.window_id == Some(id) {
                     self.window_id = None;
                     self.is_visible = false;
+                    self.window_close_pending = false;
                 }
                 Task::none()
             }
@@ -80,6 +83,14 @@ impl KuVpnGui {
             Message::TrayEvent(event) => {
                 match event {
                     TrayIconEvent::Click { .. } => {
+                        // Debounce rapid clicks (Windows fires multiple events)
+                        let now = std::time::Instant::now();
+                        if let Some(last) = self.last_tray_click {
+                            if now.duration_since(last) < std::time::Duration::from_millis(300) {
+                                return Task::none();
+                            }
+                        }
+                        self.last_tray_click = Some(now);
                         return self.update(Message::ToggleVisibility {
                             from_close_request: false,
                         });
@@ -106,11 +117,17 @@ impl KuVpnGui {
             }
             Message::ToggleVisibility { from_close_request } => {
                 log::info!(
-                    "ToggleVisibility called. visible={}, close_to_tray={}, from_close_request={}",
+                    "ToggleVisibility called. visible={}, close_to_tray={}, from_close_request={}, close_pending={}",
                     self.is_visible,
                     self.settings.close_to_tray,
-                    from_close_request
+                    from_close_request,
+                    self.window_close_pending
                 );
+
+                // Ignore toggles while a close is in-flight
+                if self.window_close_pending {
+                    return Task::none();
+                }
 
                 if self.is_visible {
                     if from_close_request && !self.settings.close_to_tray {
@@ -119,11 +136,14 @@ impl KuVpnGui {
                     }
                     log::info!("Closing window to hide");
                     self.is_visible = false;
-                    if let Some(id) = self.window_id.take() {
+                    self.window_close_pending = true;
+                    if let Some(id) = self.window_id {
                         return iced::window::close(id);
                     }
                 } else {
                     log::info!("Opening window to show");
+                    // Set visible immediately to prevent double-open
+                    self.is_visible = true;
                     let (id, task) = iced::window::open(iced::window::Settings {
                         exit_on_close_request: false,
                         size: iced::Size::new(480.0, 820.0),
@@ -254,7 +274,7 @@ impl KuVpnGui {
                                 let current_status = session_c.status();
                                 let _ = output.send(Message::StatusChanged(current_status)).await;
 
-                                if current_status == ConnectionStatus::Disconnected || current_status == ConnectionStatus::Error {
+                                if session_c.is_finished() {
                                     break;
                                 }
 
@@ -287,45 +307,23 @@ impl KuVpnGui {
                 }
                 Task::none()
             }
-                        Message::LogAppended(raw_log) => {
-                            let parts: Vec<&str> = raw_log.splitn(2, '|').collect();
-                            if parts.len() < 2 {
-                                return Task::none();
-                            }
-                            let lvl_str = parts[0];
-                            let log_msg = parts[1];
-            
-                            let record_level = match lvl_str {
-                                "Error" => log::Level::Error,
-                                "Warn" => log::Level::Warn,
-                                "Info" => log::Level::Info,
-                                "Debug" => log::Level::Debug,
-                                "Trace" => log::Level::Trace,
-                                _ => log::Level::Info,
-                            };
-            
-                            let user_filter = if let Ok(guard) = crate::logger::GUI_LOGGER.user_level.lock() {
-                                *guard
-                            } else {
-                                log::LevelFilter::Info
-                            };
-            
-                            if record_level <= user_filter {
-                                let prefix = match lvl_str {
-                                    "Error" => "ERR",
-                                    "Warn" => "WRN",
-                                    "Info" => "INF",
-                                    "Debug" => "DBG",
-                                    "Trace" => "TRC",
-                                    _ => "INF",
-                                };
-                                self.logs.push(format!("[{}] {}", prefix, log_msg));
-                                if self.logs.len() > 500 {
-                                    self.logs.remove(0);
-                                }
-                            }
-                            Task::none()
+            Message::LogAppended(raw_log) => {
+                if let Some(parsed) = kuvpn::ParsedLog::parse(&raw_log) {
+                    let user_filter = if let Ok(guard) = crate::logger::GUI_LOGGER.user_level.lock() {
+                        *guard
+                    } else {
+                        log::LevelFilter::Info
+                    };
+
+                    if parsed.level <= user_filter {
+                        self.logs.push(format!("[{}] {}", parsed.prefix(), parsed.message));
+                        if self.logs.len() > 500 {
+                            self.logs.remove(0);
                         }
+                    }
+                }
+                Task::none()
+            }
             
             Message::MfaPushReceived(code) => {
                 self.mfa_info = Some(code);
@@ -498,6 +496,8 @@ impl Default for KuVpnGui {
             disconnect_item: None,
             window_id: None,
             is_visible: false,
+            window_close_pending: false,
+            last_tray_click: None,
         }
     }
 }
