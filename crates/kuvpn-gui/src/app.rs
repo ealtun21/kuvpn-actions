@@ -126,6 +126,8 @@ impl KuVpnGui {
                     log::info!("Opening window to show");
                     let (id, task) = iced::window::open(iced::window::Settings {
                         exit_on_close_request: false,
+                        size: iced::Size::new(480.0, 820.0),
+                        min_size: Some(iced::Size::new(400.0, 600.0)),
                         ..Default::default()
                     });
                     self.window_id = Some(id);
@@ -309,7 +311,15 @@ impl KuVpnGui {
                             };
             
                             if record_level <= user_filter {
-                                self.logs.push(format!("[*] {}", log_msg));
+                                let prefix = match lvl_str {
+                                    "Error" => "ERR",
+                                    "Warn" => "WRN",
+                                    "Info" => "INF",
+                                    "Debug" => "DBG",
+                                    "Trace" => "TRC",
+                                    _ => "INF",
+                                };
+                                self.logs.push(format!("[{}] {}", prefix, log_msg));
                                 if self.logs.len() > 500 {
                                     self.logs.remove(0);
                                 }

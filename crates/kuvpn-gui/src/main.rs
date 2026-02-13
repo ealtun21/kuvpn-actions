@@ -56,6 +56,8 @@ pub fn main() -> iced::Result {
 
             let (id, task) = iced::window::open(iced::window::Settings {
                 exit_on_close_request: false,
+                size: iced::Size::new(480.0, 820.0),
+                min_size: Some(iced::Size::new(400.0, 600.0)),
                 ..Default::default()
             });
 

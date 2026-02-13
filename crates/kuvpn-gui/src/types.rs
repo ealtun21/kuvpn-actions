@@ -1,4 +1,5 @@
-use iced::Color;
+use iced::widget::button;
+use iced::{Border, Color};
 use std::sync::{Arc, Mutex};
 use tokio::sync::oneshot;
 use tray_icon::{menu::MenuEvent, TrayIconEvent};
@@ -111,5 +112,83 @@ pub fn login_mode_name(val: f32) -> &'static str {
         0 => "Full Automatic (Headless + Auto-Login)",
         1 => "Visual Automatic (Browser + Auto-Login)",
         _ => "Manual Mode (Browser + Manual Entry)",
+    }
+}
+
+// --- Custom Button Styles ---
+
+pub fn btn_primary(_theme: &iced::Theme, status: button::Status) -> button::Style {
+    let base = button::Style {
+        background: Some(COLOR_ACCENT.into()),
+        text_color: Color::WHITE,
+        border: Border {
+            radius: 8.0.into(),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    match status {
+        button::Status::Hovered => button::Style {
+            background: Some(Color::from_rgb(0.60, 0.06, 0.19).into()),
+            ..base
+        },
+        button::Status::Pressed => button::Style {
+            background: Some(Color::from_rgb(0.40, 0.0, 0.10).into()),
+            ..base
+        },
+        _ => base,
+    }
+}
+
+pub fn btn_secondary(_theme: &iced::Theme, status: button::Status) -> button::Style {
+    let base = button::Style {
+        background: Some(Color::TRANSPARENT.into()),
+        text_color: COLOR_TEXT,
+        border: Border {
+            color: Color::from_rgb(0.25, 0.25, 0.25),
+            width: 1.0,
+            radius: 8.0.into(),
+        },
+        ..Default::default()
+    };
+    match status {
+        button::Status::Hovered => button::Style {
+            background: Some(COLOR_SURFACE.into()),
+            border: Border {
+                color: Color::from_rgb(0.35, 0.35, 0.35),
+                width: 1.0,
+                radius: 8.0.into(),
+            },
+            ..base
+        },
+        button::Status::Pressed => button::Style {
+            background: Some(Color::from_rgb(0.08, 0.08, 0.08).into()),
+            ..base
+        },
+        _ => base,
+    }
+}
+
+pub fn btn_danger(_theme: &iced::Theme, status: button::Status) -> button::Style {
+    let base_color = Color::from_rgb(0.8, 0.2, 0.2);
+    let base = button::Style {
+        background: Some(base_color.into()),
+        text_color: Color::WHITE,
+        border: Border {
+            radius: 8.0.into(),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    match status {
+        button::Status::Hovered => button::Style {
+            background: Some(Color::from_rgb(0.9, 0.25, 0.25).into()),
+            ..base
+        },
+        button::Status::Pressed => button::Style {
+            background: Some(Color::from_rgb(0.65, 0.15, 0.15).into()),
+            ..base
+        },
+        _ => base,
     }
 }
