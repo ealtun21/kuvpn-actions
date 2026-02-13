@@ -30,8 +30,7 @@ pub struct KuVpnGui {
     pub mfa_info: Option<String>,
     pub rotation: f32,
     pub oc_test_result: Option<bool>,
-    pub last_status: ConnectionStatus,
-
+    
     // Tray & Window state
     pub tray_icon: Option<TrayIcon>,
     pub show_item: Option<MenuItem>,
@@ -209,6 +208,7 @@ impl KuVpnGui {
                 }
                 Task::none()
             }
+            // Clean up required, barely understandable code.
             Message::ConnectPressed => {
                 if self.status == ConnectionStatus::Disconnected {
                     // Cancel any orphaned tokens (though status should prevent this, safety first)
@@ -288,7 +288,6 @@ impl KuVpnGui {
                                     &provider,
                                     Some(cancel_token_clone),
                                 );
-                                // ...
 
                                 let dsid = match dsid_res {
                                     Ok(d) => d,
@@ -363,6 +362,7 @@ impl KuVpnGui {
                             loop {
                                 tokio::select! {
                                     res = log_rx.recv() => {
+                                        // TODO, use connection watcher and do not use log based anything, anywhere.
                                         if let Some(log) = res {
                                             if log.contains("Established") ||
                                                log.contains("Connected as") ||
@@ -416,6 +416,7 @@ impl KuVpnGui {
                 }
                 Task::none()
             }
+            // TODO: Clean up, causes lag, scrolling does not follow last messege, can not copy text.
             Message::LogAppended(raw_log) => {
                 let parts: Vec<&str> = raw_log.splitn(2, '|').collect();
                 if parts.len() < 2 {
@@ -629,7 +630,6 @@ impl Default for KuVpnGui {
             mfa_info: None,
             rotation: 0.0,
             oc_test_result: None,
-            last_status: ConnectionStatus::Disconnected,
             tray_icon: None,
             show_item: None,
             connect_item: None,
