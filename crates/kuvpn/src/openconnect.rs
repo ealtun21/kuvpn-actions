@@ -1,4 +1,3 @@
-use log::info;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use which::which;
@@ -101,9 +100,9 @@ pub fn execute_openconnect(
 
         // If a custom run command is provided, check its availability and prioritize it.
         if let Some(custom_command) = _run_command {
-            info!("Custom run command provided: {}", custom_command);
+            log::info!("Custom run command provided: {}", custom_command);
             if which(custom_command).is_ok() {
-                info!("Custom command found: {}", custom_command);
+                log::info!("Custom command found: {}", custom_command);
                 default_tools.insert(0, custom_command.as_str());
             } else {
                 log::info!(
