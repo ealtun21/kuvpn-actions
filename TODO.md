@@ -5,7 +5,7 @@
 - [x] Switch icons from Nerd Font to vector/SVG assets (cross-platform font rendering is unreliable).
 - [x] Cleanup browser handling.
 - [x] Add connecting/disconnecting animation to status icon.
-- [ ] GUI visual improvements (backlog - get stability first).
+- [x] GUI visual improvements (custom button styles, color-coded logs, settings sections, status glow, larger window).
 
 ## KUVPN LIB - REFACTORING
 

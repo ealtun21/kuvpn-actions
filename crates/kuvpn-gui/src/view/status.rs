@@ -4,7 +4,7 @@ use crate::types::{
     ICON_SHIELD_SVG, Message,
 };
 use iced::widget::{column, container, svg, text};
-use iced::{Alignment, Border, Color, Element};
+use iced::{Alignment, Border, Color, Element, Shadow, Vector};
 use kuvpn::ConnectionStatus;
 
 impl KuVpnGui {
@@ -31,6 +31,29 @@ impl KuVpnGui {
             ),
         };
 
+        let glow = match self.status {
+            ConnectionStatus::Disconnected => Shadow {
+                color: Color::TRANSPARENT,
+                offset: Vector::ZERO,
+                blur_radius: 0.0,
+            },
+            ConnectionStatus::Connected => Shadow {
+                color: Color::from_rgba(0.42, 0.55, 0.35, 0.4),
+                offset: Vector::ZERO,
+                blur_radius: 25.0,
+            },
+            ConnectionStatus::Connecting | ConnectionStatus::Disconnecting => Shadow {
+                color: Color::from_rgba(0.80, 0.60, 0.30, 0.35),
+                offset: Vector::ZERO,
+                blur_radius: 20.0,
+            },
+            ConnectionStatus::Error => Shadow {
+                color: Color::from_rgba(0.8, 0.2, 0.2, 0.35),
+                offset: Vector::ZERO,
+                blur_radius: 20.0,
+            },
+        };
+
         let mut icon_display = svg(svg::Handle::from_memory(icon_svg))
             .width(80)
             .height(80)
@@ -46,10 +69,11 @@ impl KuVpnGui {
                 .center_y(180)
                 .style(move |_| container::Style {
                     border: Border {
-                        color: color,
-                        width: 2.0,
+                        color,
+                        width: 2.5,
                         radius: 90.0.into(),
                     },
+                    shadow: glow,
                     ..Default::default()
                 }),
             text(status_text).size(18).color(color),
