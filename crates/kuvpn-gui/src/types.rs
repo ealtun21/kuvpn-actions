@@ -80,3 +80,43 @@ pub struct InputRequest {
 
 #[derive(Debug)]
 pub struct InputRequestWrapper(pub Mutex<Option<InputRequest>>);
+
+pub fn log_level_from_slider(val: f32) -> log::LevelFilter {
+    match val.round() as i32 {
+        0 => log::LevelFilter::Off,
+        1 => log::LevelFilter::Error,
+        2 => log::LevelFilter::Warn,
+        3 => log::LevelFilter::Info,
+        4 => log::LevelFilter::Debug,
+        5 => log::LevelFilter::Trace,
+        _ => log::LevelFilter::Info,
+    }
+}
+
+pub fn log_level_name(val: f32) -> &'static str {
+    match val.round() as i32 {
+        0 => "Off",
+        1 => "Error",
+        2 => "Warn",
+        3 => "Info",
+        4 => "Debug",
+        5 => "Trace",
+        _ => "Info",
+    }
+}
+
+pub fn login_mode_flags(val: f32) -> (bool, bool) {
+    match val.round() as i32 {
+        0 => (true, false),  // Full Automatic
+        1 => (false, false), // Visual Automatic
+        _ => (false, true),  // Manual
+    }
+}
+
+pub fn login_mode_name(val: f32) -> &'static str {
+    match val.round() as i32 {
+        0 => "Full Automatic (Headless + Auto-Login)",
+        1 => "Visual Automatic (Browser + Auto-Login)",
+        _ => "Manual Mode (Browser + Manual Entry)",
+    }
+}

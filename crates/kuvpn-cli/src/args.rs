@@ -73,4 +73,8 @@ pub struct Args {
     /// Email for login (optional)
     #[arg(long, default_value = None)]
     pub email: Option<String>,
+
+    /// Name for the TUN/TAP interface created by openconnect
+    #[arg(long, default_value = "kuvpn0")]
+    pub interface_name: String,
 }

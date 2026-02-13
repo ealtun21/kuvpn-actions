@@ -1,7 +1,7 @@
 use crate::app::KuVpnGui;
 use crate::types::{
     ConnectionStatus, Message, COLOR_ACCENT, COLOR_SURFACE, COLOR_TEXT_DIM, ICON_INFO, ICON_TRASH,
-    NERD_FONT,
+    NERD_FONT, log_level_name, login_mode_name, ICON_REFRESH,
 };
 #[cfg(not(windows))]
 use iced::widget::pick_list;
@@ -101,15 +101,7 @@ impl KuVpnGui {
                     )
                     .step(1.0)
                     .width(Length::Fill),
-                    text(match self.settings.log_level_val.round() as i32 {
-                        0 => "Off",
-                        1 => "Error",
-                        2 => "Warn",
-                        3 => "Info",
-                        4 => "Debug",
-                        5 => "Trace",
-                        _ => "Info",
-                    })
+                    text(log_level_name(self.settings.log_level_val))
                     .width(Length::Fixed(60.0)),
                 ]
                 .spacing(10)
@@ -157,11 +149,7 @@ impl KuVpnGui {
                     ]
                     .spacing(10)
                     .align_y(Alignment::Center),
-                    text(match self.settings.login_mode_val.round() as i32 {
-                        0 => "Full Automatic (Headless + Auto-Login)",
-                        1 => "Visual Automatic (Browser + Auto-Login)",
-                        _ => "Manual Mode (Browser + Manual Entry)",
-                    })
+                    text(login_mode_name(self.settings.login_mode_val))
                     .size(12)
                     .color(COLOR_TEXT_DIM)
                     .width(Length::Fill)
@@ -188,7 +176,7 @@ impl KuVpnGui {
                     .style(button::secondary),
                     button(
                         row![
-                            text("\u{f021}").font(NERD_FONT), // Refresh icon for reset
+                            text(ICON_REFRESH).font(NERD_FONT),
                             text("RESET TO DEFAULTS").font(NERD_FONT).size(12),
                         ]
                         .spacing(10)

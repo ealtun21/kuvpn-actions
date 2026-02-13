@@ -63,6 +63,7 @@ fn main() -> ExitCode {
         email: args.email.clone(),
         openconnect_path: args.openconnect_path.clone(),
         escalation_tool: args.run_command.clone(),
+        interface_name: args.interface_name.clone(),
     };
 
     let session = VpnSession::new(config);
