@@ -1,5 +1,5 @@
 use crate::app::KuVpnGui;
-use crate::types::{ConnectionStatus, Message, KU_LOGO_BYTES, ICON_POWER_SVG};
+use crate::types::{ConnectionStatus, Message, KU_LOGO_BYTES, ICON_POWER_SVG, btn_primary, btn_danger};
 use iced::widget::{button, row, svg, text};
 use iced::{Alignment, Element, Length};
 
@@ -20,7 +20,7 @@ impl KuVpnGui {
             .padding(15)
             .width(Length::Fixed(220.0))
             .on_press(Message::ConnectPressed)
-            .style(button::primary)
+            .style(btn_primary)
             .into(),
             _ => {
                 button(
@@ -42,7 +42,7 @@ impl KuVpnGui {
                 .padding(15)
                 .width(Length::Fixed(220.0))
                 .on_press(Message::DisconnectPressed)
-                .style(button::secondary)
+                .style(btn_danger)
                 .into()
             }
         }
