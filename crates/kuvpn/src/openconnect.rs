@@ -4,6 +4,8 @@ use which::which;
 
 #[cfg(windows)]
 use runas::Command as AdminCommand;
+#[cfg(windows)]
+use sysinfo::System;
 
 /// Attempts to locate the `openconnect` executable.
 ///
@@ -92,8 +94,8 @@ pub fn execute_openconnect(
     url: String,
     _run_command: &Option<String>,
     openconnect_path: &Path,
-    stdout: Stdio,
-    stderr: Stdio,
+    _stdout: Stdio,
+    _stderr: Stdio,
 ) -> anyhow::Result<Child> {
     #[cfg(unix)]
     {
@@ -137,8 +139,8 @@ pub fn execute_openconnect(
             .arg("-C")
             .arg(format!("DSID={}", cookie_value))
             .arg(url)
-            .stdout(stdout)
-            .stderr(stderr)
+            .stdout(_stdout)
+            .stderr(_stderr)
             .spawn()
             .map_err(anyhow::Error::from);
     }
@@ -174,6 +176,69 @@ pub fn execute_openconnect(
     }
 }
 
+/// Checks if an openconnect process is currently running (useful for Windows)
+pub fn is_openconnect_running() -> bool {
+    #[cfg(windows)]
+    {
+        let mut sys = System::new_all();
+        sys.refresh_all();
+        for process in sys.processes().values() {
+            let name = process.name().to_string_lossy().to_lowercase();
+            if name.contains("openconnect") {
+                return true;
+            }
+        }
+        false
+    }
+    #[cfg(unix)]
+    {
+        // On Unix we usually have the Child handle, but for completeness:
+        let candidate = which("pgrep");
+        if let Ok(pgrep) = candidate {
+            let status = Command::new(pgrep)
+                .arg("openconnect")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
+            return status.map(|s| s.success()).unwrap_or(false);
+        }
+        false
+    }
+}
+
+/// Gets the PID of the running openconnect process
+pub fn get_openconnect_pid() -> Option<u32> {
+    #[cfg(windows)]
+    {
+        let mut sys = System::new_all();
+        sys.refresh_all();
+        for (pid, process) in sys.processes() {
+            let name = process.name().to_string_lossy().to_lowercase();
+            if name.contains("openconnect") {
+                return Some(pid.as_u32());
+            }
+        }
+        None
+    }
+    #[cfg(unix)]
+    {
+        let candidate = which("pgrep");
+        if let Ok(pgrep) = candidate {
+            let output = Command::new(pgrep)
+                .arg("openconnect")
+                .output()
+                .ok()?;
+            if output.status.success() {
+                let s = String::from_utf8_lossy(&output.stdout);
+                if let Some(line) = s.lines().next() {
+                    return line.parse().ok();
+                }
+            }
+        }
+        None
+    }
+}
+
 /// Gracefully terminates a process by its PID.
 pub fn kill_process(pid: u32) -> anyhow::Result<()> {
     #[cfg(unix)]
@@ -199,12 +264,12 @@ pub fn kill_process(pid: u32) -> anyhow::Result<()> {
 ///
 /// On Unix systems, it sends a SIGINT signal to allow `openconnect` to clean up
 /// network interfaces and routes. On other systems, it falls back to standard kill.
-pub fn kill_child(child: &mut Child) -> anyhow::Result<()> {
+pub fn kill_child(_child: &mut Child) -> anyhow::Result<()> {
     #[cfg(unix)]
     {
         use nix::sys::signal::{self, Signal};
         use nix::unistd::Pid;
-        let pid = Pid::from_raw(child.id() as i32);
+        let pid = Pid::from_raw(_child.id() as i32);
         signal::kill(pid, Signal::SIGINT)?;
     }
     #[cfg(windows)]
