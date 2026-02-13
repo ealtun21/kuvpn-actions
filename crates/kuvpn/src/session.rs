@@ -16,6 +16,43 @@ pub enum ConnectionStatus {
     Error,
 }
 
+/// Parsed log message from the "Level|message" format used by the session log channel.
+#[derive(Debug, Clone)]
+pub struct ParsedLog {
+    pub level: log::Level,
+    pub message: String,
+}
+
+impl ParsedLog {
+    /// Parses a "Level|message" string. Returns None if format is invalid.
+    pub fn parse(raw: &str) -> Option<Self> {
+        let (level_str, message) = raw.split_once('|')?;
+        let level = match level_str {
+            "Error" => log::Level::Error,
+            "Warn" => log::Level::Warn,
+            "Info" => log::Level::Info,
+            "Debug" => log::Level::Debug,
+            "Trace" => log::Level::Trace,
+            _ => return None,
+        };
+        Some(Self {
+            level,
+            message: message.to_string(),
+        })
+    }
+
+    /// Returns a short prefix for display (e.g. "ERR", "INF").
+    pub fn prefix(&self) -> &'static str {
+        match self.level {
+            log::Level::Error => "ERR",
+            log::Level::Warn => "WRN",
+            log::Level::Info => "INF",
+            log::Level::Debug => "DBG",
+            log::Level::Trace => "TRC",
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct SessionConfig {
     pub url: String,
@@ -35,6 +72,7 @@ pub struct VpnSession {
     cancel_token: CancellationToken,
     last_error: Arc<Mutex<Option<String>>>,
     logs_tx: Arc<Mutex<Option<crossbeam_channel::Sender<String>>>>,
+    browser_pid: Arc<Mutex<Option<u32>>>,
 }
 
 impl VpnSession {
@@ -45,6 +83,7 @@ impl VpnSession {
             cancel_token: CancellationToken::new(),
             last_error: Arc::new(Mutex::new(None)),
             logs_tx: Arc::new(Mutex::new(None)),
+            browser_pid: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -60,11 +99,38 @@ impl VpnSession {
         self.last_error.lock().unwrap().clone()
     }
 
+    /// Returns true if the session has reached a terminal state.
+    pub fn is_finished(&self) -> bool {
+        let s = self.status();
+        s == ConnectionStatus::Disconnected || s == ConnectionStatus::Error
+    }
+
     pub fn cancel(&self) {
         self.cancel_token.cancel();
         let mut status = self.status.lock().unwrap();
         if *status == ConnectionStatus::Connected || *status == ConnectionStatus::Connecting {
             *status = ConnectionStatus::Disconnecting;
+        }
+        drop(status);
+
+        // Force-kill the browser process to unblock any pending CDP calls
+        if let Some(pid) = self.browser_pid.lock().unwrap().take() {
+            log::info!("[*] Force-killing browser process (PID: {})", pid);
+            #[cfg(unix)]
+            {
+                use nix::sys::signal::{self, Signal};
+                use nix::unistd::Pid;
+                let _ = signal::kill(Pid::from_raw(pid as i32), Signal::SIGTERM);
+            }
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                const CREATE_NO_WINDOW: u32 = 0x08000000;
+                let _ = std::process::Command::new("taskkill")
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .args(["/F", "/PID", &pid.to_string()])
+                    .status();
+            }
         }
     }
 
@@ -83,6 +149,7 @@ impl VpnSession {
         let cancel_token = self.cancel_token.clone();
         let last_error = Arc::clone(&self.last_error);
         let logs_tx = Arc::clone(&self.logs_tx);
+        let browser_pid = Arc::clone(&self.browser_pid);
 
         thread::spawn(move || {
             let log = |msg: String| {
@@ -121,9 +188,15 @@ impl VpnSession {
                     config.email.clone(),
                     provider.as_ref(),
                     Some(cancel_token.clone()),
+                    Some(Arc::clone(&browser_pid)),
                 ) {
-                    Ok(d) => d,
+                    Ok(d) => {
+                        // Browser is done, clear PID so cancel() won't kill a dead process
+                        *browser_pid.lock().unwrap() = None;
+                        d
+                    }
                     Err(e) => {
+                        *browser_pid.lock().unwrap() = None;
                         let mut s = status.lock().unwrap();
                         if *s != ConnectionStatus::Disconnecting {
                             *s = ConnectionStatus::Error;

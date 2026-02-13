@@ -62,6 +62,7 @@ pub fn main() -> iced::Result {
             });
 
             gui.window_id = Some(id);
+            gui.is_visible = true;
 
             (
                 gui,
