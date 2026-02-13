@@ -30,6 +30,7 @@ pub struct KuVpnGui {
     pub mfa_info: Option<String>,
     pub rotation: f32,
     pub oc_test_result: Option<bool>,
+    pub last_status: ConnectionStatus,
 
     // Tray & Window state
     pub tray_icon: Option<TrayIcon>,
@@ -193,6 +194,18 @@ impl KuVpnGui {
             Message::Tick => {
                 if self.status == ConnectionStatus::Connecting {
                     self.rotation += 0.1;
+                }
+                Task::none()
+            }
+            Message::Watchdog => {
+                #[cfg(windows)]
+                {
+                    let is_running = kuvpn::is_openconnect_running();
+                    if self.status == ConnectionStatus::Connecting && is_running {
+                        return self.update(Message::StatusChanged(ConnectionStatus::Connected));
+                    } else if self.status == ConnectionStatus::Connected && !is_running {
+                        return self.update(Message::StatusChanged(ConnectionStatus::Disconnected));
+                    }
                 }
                 Task::none()
             }
@@ -502,7 +515,15 @@ impl KuVpnGui {
                 Task::none()
             }
             Message::StatusChanged(status) => {
-                self.status = status;
+                if self.status != status {
+                    self.status = status;
+                    if let Some(item) = &self.connect_item {
+                        let _ = item.set_enabled(status == ConnectionStatus::Disconnected);
+                    }
+                    if let Some(item) = &self.disconnect_item {
+                        let _ = item.set_enabled(status == ConnectionStatus::Connected);
+                    }
+                }
                 Task::none()
             }
             Message::ResetSettings => {
@@ -537,6 +558,8 @@ impl KuVpnGui {
                 iced::time::every(std::time::Duration::from_millis(16)).map(|_| Message::Tick),
             );
         }
+
+        subs.push(iced::time::every(std::time::Duration::from_secs(1)).map(|_| Message::Watchdog));
 
         // GTK Event Loop pump (for Tray Icon on Linux)
         #[cfg(target_os = "linux")]
@@ -606,6 +629,7 @@ impl Default for KuVpnGui {
             mfa_info: None,
             rotation: 0.0,
             oc_test_result: None,
+            last_status: ConnectionStatus::Disconnected,
             tray_icon: None,
             show_item: None,
             connect_item: None,

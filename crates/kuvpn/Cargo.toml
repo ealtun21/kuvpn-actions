@@ -18,8 +18,6 @@ which = "8.0.0"
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31.1", features = ["signal", "process"] }
 
-[target.'cfg(darwin)'.dependencies]
-runas = "1.2.0"
-
 [target.'cfg(windows)'.dependencies]
 runas = "1.2.0"
+sysinfo = "0.33.1"

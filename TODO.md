@@ -6,7 +6,7 @@
 
 - cleanup kuvpn-gui's openconnect handling code, as on windows builds it has no idea when it's connecting due to no child being passing in lib, we gonna have to do something about how it understands, may require some extra functions on lib to handle that. 
 
-
+- Cleanup browser handling,
 
 # KUVPN LIB
 
