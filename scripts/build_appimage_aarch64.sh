@@ -19,13 +19,14 @@ if [ "$1" != "--no-container" ] && [ ! -f /.containerenv ] && [ ! -f /run/.conta
         podman build --build-arg BUILD_ARGS="$BUILD_ARGS" -t kuvpn-builder-aarch64 -f packaging/appimage/Dockerfile.aarch64 .
         
         CONTAINER_ID=$(podman create kuvpn-builder-aarch64)
-        podman cp "$CONTAINER_ID":/build/${APP_NAME}-minimal-${ARCH}.AppImage .
+        mkdir -p dist
+        podman cp "$CONTAINER_ID":/build/${APP_NAME}-minimal-${ARCH}.AppImage dist/
         if [ "$1" == "--full" ]; then
-             podman cp "$CONTAINER_ID":/build/${APP_NAME}-full-${ARCH}.AppImage .
+             podman cp "$CONTAINER_ID":/build/${APP_NAME}-full-${ARCH}.AppImage dist/
         fi
         podman rm "$CONTAINER_ID"
         
-        echo "Successfully built and extracted aarch64 AppImage(s)."
+        echo "Successfully built and extracted aarch64 AppImage(s) to dist/."
         exit 0
     else
         echo "Podman not found or already in container. Building on host..."
@@ -194,7 +195,8 @@ done
 rm ./linuxdeploy-plugin-gtk.sh
 
 # Use x86_64 appimagetool to create the AppImage but set the architecture metadata
-ARCH=$ARCH ./packaging/appimage/appimagetool --appimage-extract-and-run "$APPDIR" "${APP_NAME}-minimal-${ARCH}.AppImage"
+mkdir -p dist
+ARCH=$ARCH ./packaging/appimage/appimagetool --appimage-extract-and-run "$APPDIR" "dist/${APP_NAME}-minimal-${ARCH}.AppImage"
 
 # Build Full AppImage (Optional)
 if [ "$1" == "--full" ]; then
@@ -211,7 +213,7 @@ if [ "$1" == "--full" ]; then
         echo "Warning: Could not find Chromium aarch64 snapshot. Skipping full build part."
     fi
     
-    ARCH=$ARCH ./packaging/appimage/appimagetool --appimage-extract-and-run "$APPDIR" "${APP_NAME}-full-${ARCH}.AppImage"
+    ARCH=$ARCH ./packaging/appimage/appimagetool --appimage-extract-and-run "$APPDIR" "dist/${APP_NAME}-full-${ARCH}.AppImage"
 fi
 
 echo "Done!"

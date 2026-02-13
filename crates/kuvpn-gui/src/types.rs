@@ -4,7 +4,7 @@ use tokio::sync::oneshot;
 use tray_icon::{menu::MenuEvent, TrayIconEvent};
 
 // --- Constants & Styling ---
-pub const NERD_FONT: Font = Font::with_name("JetBrainsMono NFM");
+pub const NERD_FONT: Font = Font::with_name("JetBrainsMono Nerd Font Mono");
 pub const NERD_FONT_BYTES: &[u8] =
     include_bytes!("../assets/JetBrainsMonoNerdFontMono-Regular.ttf");
 pub const KU_LOGO_BYTES: &[u8] = include_bytes!("../assets/ku.svg");
