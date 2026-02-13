@@ -26,6 +26,9 @@ use std::time::Duration;
 pub fn create_browser(agent: &str, headless: bool) -> Result<Browser, Box<dyn Error>> {
     let user_agent = OsString::from(format!("--user-agent={agent}"));
     let window = OsString::from("--new-window");
+    let no_first_run = OsString::from("--no-first-run");
+    let no_default_browser_check = OsString::from("--no-default-browser-check");
+    let disable_session_crashed_bubble = OsString::from("--disable-session-crashed-bubble");
 
     let mut attempts = 0;
     loop {
@@ -41,6 +44,9 @@ pub fn create_browser(agent: &str, headless: bool) -> Result<Browser, Box<dyn Er
             .args(vec![
                 window.as_os_str(),
                 user_agent.as_os_str(),
+                no_first_run.as_os_str(),
+                no_default_browser_check.as_os_str(),
+                disable_session_crashed_bubble.as_os_str(),
             ])
             .user_data_dir(Some(user_data_dir));
 
