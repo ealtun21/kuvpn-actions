@@ -190,6 +190,7 @@ pub fn execute_openconnect(
 
         let interface_name_owned = interface_name.to_string();
         let mut cmd = AdminCommand::new(openconnect_path.to_str().unwrap());
+        cmd.show(false);
         cmd.arg("--protocol")
             .arg("nc")
             .arg("-C")
