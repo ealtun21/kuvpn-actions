@@ -1,5 +1,5 @@
 use crate::app::KuVpnGui;
-use crate::types::{Message, ICON_SETTINGS, ICON_TERMINAL, KU_LOGO_BYTES, NERD_FONT};
+use crate::types::{Message, ICON_SETTINGS_SVG, ICON_TERMINAL_SVG, KU_LOGO_BYTES};
 use iced::widget::{button, row, svg, text};
 use iced::{Alignment, Element, Length};
 
@@ -8,14 +8,25 @@ impl KuVpnGui {
         row![
             svg(svg::Handle::from_memory(KU_LOGO_BYTES))
                 .width(32)
-                .height(32),
-            text("KUVPN").size(24).font(NERD_FONT).width(Length::Fill),
-            button(text(ICON_SETTINGS).font(NERD_FONT).size(24))
-                .on_press(Message::ToggleAdvanced)
-                .style(button::text),
-            button(text(ICON_TERMINAL).font(NERD_FONT).size(24))
-                .on_press(Message::ToggleConsole)
-                .style(button::text),
+                .height(32)
+                .style(|_, _| svg::Style { color: Some(iced::Color::WHITE) }),
+            text("KUVPN").size(24).width(Length::Fill),
+            button(
+                svg(svg::Handle::from_memory(ICON_SETTINGS_SVG))
+                    .width(24)
+                    .height(24)
+                    .style(|_, _| svg::Style { color: Some(crate::types::COLOR_TEXT) })
+            )
+            .on_press(Message::ToggleAdvanced)
+            .style(button::text),
+            button(
+                svg(svg::Handle::from_memory(ICON_TERMINAL_SVG))
+                    .width(24)
+                    .height(24)
+                    .style(|_, _| svg::Style { color: Some(crate::types::COLOR_TEXT) })
+            )
+            .on_press(Message::ToggleConsole)
+            .style(button::text),
         ]
         .spacing(15)
         .align_y(Alignment::Center)

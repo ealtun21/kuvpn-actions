@@ -8,7 +8,7 @@ pub mod status;
 
 use crate::app::KuVpnGui;
 use crate::types::{Message, COLOR_BG, COLOR_TEXT};
-use iced::widget::{column, container, row, scrollable, stack, text};
+use iced::widget::{column, container, row, scrollable, stack, svg, text};
 use iced::{Alignment, Element, Length};
 
 impl KuVpnGui {
@@ -24,9 +24,12 @@ impl KuVpnGui {
             content = content.push(
                 container(
                     row![
-                        text(crate::types::ICON_INFO)
-                            .font(crate::types::NERD_FONT)
-                            .color(crate::types::COLOR_WARNING),
+                        svg(svg::Handle::from_memory(crate::types::ICON_INFO_SVG))
+                            .width(16)
+                            .height(16)
+                            .style(|_, _| svg::Style {
+                                color: Some(crate::types::COLOR_WARNING)
+                            }),
                         text("OpenConnect not found! Please install it or set path in Settings.")
                             .size(14)
                             .color(crate::types::COLOR_WARNING),

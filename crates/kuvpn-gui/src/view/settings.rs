@@ -1,12 +1,13 @@
 use crate::app::KuVpnGui;
 use crate::types::{
-    ConnectionStatus, Message, COLOR_ACCENT, COLOR_SURFACE, COLOR_TEXT_DIM, ICON_INFO, ICON_TRASH,
-    NERD_FONT, log_level_name, login_mode_name, ICON_REFRESH,
+    COLOR_ACCENT, COLOR_SURFACE, COLOR_TEXT_DIM, ICON_INFO_SVG, ICON_REFRESH_SVG, ICON_TRASH_SVG,
+    Message, log_level_name, login_mode_name,
 };
 #[cfg(not(windows))]
 use iced::widget::pick_list;
-use iced::widget::{button, checkbox, column, container, row, slider, text, text_input};
+use iced::widget::{button, checkbox, column, container, row, slider, svg, text, text_input};
 use iced::{Alignment, Border, Element, Length};
+use kuvpn::ConnectionStatus;
 
 impl KuVpnGui {
     pub fn view_advanced_settings(&self) -> Element<'_, Message> {
@@ -15,7 +16,10 @@ impl KuVpnGui {
         let locked_hint = if is_locked {
             container(
                 row![
-                    text(ICON_INFO).font(NERD_FONT).color(COLOR_ACCENT),
+                    svg(svg::Handle::from_memory(ICON_INFO_SVG))
+                        .width(14)
+                        .height(14)
+                        .style(|_, _| svg::Style { color: Some(COLOR_ACCENT) }),
                     text("Settings locked during active session.")
                         .size(11)
                         .color(COLOR_TEXT_DIM),
@@ -34,7 +38,6 @@ impl KuVpnGui {
                     text("CONFIGURATION")
                         .size(14)
                         .color(COLOR_ACCENT)
-                        .font(NERD_FONT)
                         .width(Length::Fill),
                     locked_hint,
                 ]
@@ -75,7 +78,6 @@ impl KuVpnGui {
                         } else {
                             "Test"
                         })
-                        .font(NERD_FONT)
                     )
                     .on_press(if is_locked {
                         Message::Tick
@@ -165,8 +167,11 @@ impl KuVpnGui {
                 row![
                     button(
                         row![
-                            text(ICON_TRASH).font(NERD_FONT),
-                            text("WIPE SAVED SESSION").font(NERD_FONT).size(12),
+                            svg(svg::Handle::from_memory(ICON_TRASH_SVG))
+                                .width(14)
+                                .height(14)
+                                .style(|_, _| svg::Style { color: Some(COLOR_TEXT_DIM) }),
+                            text("WIPE SAVED SESSION").size(12),
                         ]
                         .spacing(10)
                         .align_y(Alignment::Center)
@@ -176,8 +181,11 @@ impl KuVpnGui {
                     .style(button::secondary),
                     button(
                         row![
-                            text(ICON_REFRESH).font(NERD_FONT),
-                            text("RESET TO DEFAULTS").font(NERD_FONT).size(12),
+                            svg(svg::Handle::from_memory(ICON_REFRESH_SVG))
+                                .width(14)
+                                .height(14)
+                                .style(|_, _| svg::Style { color: Some(COLOR_TEXT_DIM) }),
+                            text("RESET TO DEFAULTS").size(12),
                         ]
                         .spacing(10)
                         .align_y(Alignment::Center)

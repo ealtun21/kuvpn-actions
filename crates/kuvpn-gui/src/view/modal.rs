@@ -1,8 +1,8 @@
 use crate::app::KuVpnGui;
 use crate::types::{
-    InputRequest, Message, COLOR_ACCENT, COLOR_SURFACE, COLOR_TEXT, ICON_LOCK, NERD_FONT,
+    InputRequest, Message, COLOR_ACCENT, COLOR_SURFACE, COLOR_TEXT, ICON_LOCK_SVG,
 };
-use iced::widget::{button, column, container, row, text, text_input};
+use iced::widget::{button, column, container, row, svg, text, text_input};
 use iced::{Alignment, Border, Color, Element, Length};
 
 impl KuVpnGui {
@@ -10,8 +10,11 @@ impl KuVpnGui {
         let modal_content = container(
             column![
                 row![
-                    text(ICON_LOCK).font(NERD_FONT).size(30).color(COLOR_ACCENT),
-                    text("Campus Gateway").size(24).font(NERD_FONT),
+                    svg(svg::Handle::from_memory(ICON_LOCK_SVG))
+                        .width(30)
+                        .height(30)
+                        .style(|_, _| svg::Style { color: Some(COLOR_ACCENT) }),
+                    text("Campus Gateway").size(24),
                 ]
                 .spacing(15)
                 .align_y(Alignment::Center),
@@ -32,7 +35,6 @@ impl KuVpnGui {
                     text("VERIFY")
                         .width(Length::Fill)
                         .align_x(Alignment::Center)
-                        .font(NERD_FONT)
                 )
                 .padding(12)
                 .on_press(Message::SubmitInput)
