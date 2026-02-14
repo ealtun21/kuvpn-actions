@@ -166,6 +166,38 @@ fn try_handle_page(
         return Ok((true, false));
     }
 
+    // Generic fallback detection for unexpected errors or page states
+    // This catches scenarios we haven't explicitly coded for
+    if !handled.contains("generic_error") {
+        if let Some(error_msg) =
+            crate::handlers::generic_detection::detect_generic_error(tab)?
+        {
+            handled.insert("generic_error");
+            log::warn!("[!] Generic error detected: {}", error_msg);
+            return Err(AuthError::AuthenticationFailed {
+                reason: format!("Unexpected error encountered:\n\n{}", error_msg),
+                suggest_manual_mode: true,
+                suggest_clear_cache: true,
+            }
+            .into());
+        }
+    }
+
+    if !handled.contains("unexpected_state") {
+        if let Some(state_msg) =
+            crate::handlers::generic_detection::detect_unexpected_page_state(tab)?
+        {
+            handled.insert("unexpected_state");
+            log::warn!("[!] Unexpected page state: {}", state_msg);
+            return Err(AuthError::AuthenticationFailed {
+                reason: format!("Unexpected page state:\n\n{}", state_msg),
+                suggest_manual_mode: true,
+                suggest_clear_cache: false,
+            }
+            .into());
+        }
+    }
+
     Ok((false, false))
 }
 
@@ -323,6 +355,11 @@ pub fn run_login_and_get_dsid(
                     reset_count,
                     MAX_RESETS
                 );
+
+                // Log current page state to help diagnose the issue
+                if let Err(e) = crate::handlers::generic_detection::log_page_state(&tab) {
+                    log::debug!("[!] Failed to log page state: {}", e);
+                }
 
                 // Navigate back to initial login URL
                 if let Err(e) = tab.navigate_to(url) {
