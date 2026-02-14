@@ -74,12 +74,19 @@ impl KuVpnGui {
                 }),
             text(status_text).size(18).color(color),
             text(match self.status {
-                ConnectionStatus::Connected => "Internal Resources Available",
-                ConnectionStatus::Error => "Something went wrong. Check logs.",
-                _ => "Koç University Access Restricted",
+                ConnectionStatus::Connected => "Internal Resources Available".to_string(),
+                ConnectionStatus::Error => self
+                    .error_message
+                    .clone()
+                    .unwrap_or_else(|| "Something went wrong. Check logs.".to_string()),
+                ConnectionStatus::Connecting | ConnectionStatus::Disconnecting => {
+                    self.status_message.clone()
+                }
+                _ => "Koç University Access Restricted".to_string(),
             })
             .size(12)
-            .color(COLOR_TEXT_DIM),
+            .color(COLOR_TEXT_DIM)
+            .align_x(iced::alignment::Horizontal::Center),
         ]
         .spacing(15)
         .align_x(Alignment::Center);

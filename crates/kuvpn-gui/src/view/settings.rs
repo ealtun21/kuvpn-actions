@@ -8,11 +8,11 @@ use iced::{Alignment, Border, Color, Element, Length};
 use kuvpn::ConnectionStatus;
 
 impl KuVpnGui {
-    pub fn view_advanced_settings(&self) -> Element<'_, Message> {
-        let is_locked = self.status != ConnectionStatus::Disconnected;
-
-        let locked_hint = if is_locked {
-            container(
+        pub fn view_advanced_settings(&self) -> Element<'_, Message> {
+            let is_locked = self.status != ConnectionStatus::Disconnected
+                && self.status != ConnectionStatus::Error;
+    
+            let locked_hint = if is_locked {            container(
                 row![
                     svg(svg::Handle::from_memory(ICON_INFO_SVG))
                         .width(14)

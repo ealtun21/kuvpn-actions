@@ -27,6 +27,8 @@ pub struct KuVpnGui {
     pub pending_request: Option<InputRequest>,
     pub current_input: String,
     pub mfa_info: Option<String>,
+    pub status_message: String,
+    pub error_message: Option<String>,
     pub rotation: f32,
     pub oc_test_result: Option<bool>,
     pub automation_warning: Option<String>,
@@ -222,6 +224,8 @@ impl KuVpnGui {
                     || self.status == ConnectionStatus::Error
                 {
                     self.automation_warning = None; // Clear previous warnings
+                    self.error_message = None;
+                    self.status_message = "Initializing...".to_string();
                     self.connection_start = Some(Instant::now());
                     let (headless, no_auto_login) = login_mode_flags(self.settings.login_mode_val);
 
@@ -338,6 +342,15 @@ impl KuVpnGui {
             }
             Message::LogAppended(raw_log) => {
                 if let Some(parsed) = kuvpn::ParsedLog::parse(&raw_log) {
+                    // Update UI status/error messages
+                    match parsed.level {
+                        log::Level::Error => self.error_message = Some(parsed.message.clone()),
+                        log::Level::Warn | log::Level::Info => {
+                            self.status_message = parsed.message.clone()
+                        }
+                        _ => {}
+                    }
+
                     let user_filter = if let Ok(guard) = crate::logger::GUI_LOGGER.user_level.lock()
                     {
                         *guard
@@ -415,10 +428,15 @@ impl KuVpnGui {
                 Task::none()
             }
             Message::ConnectionFinished(err) => {
-                self.status = ConnectionStatus::Disconnected;
+                self.status = if err.is_some() {
+                    ConnectionStatus::Error
+                } else {
+                    ConnectionStatus::Disconnected
+                };
                 self.mfa_info = None;
                 self.connection_start = None;
                 if let Some(e) = err {
+                    self.error_message = Some(e.clone());
                     self.logs.push(format!("[!] Session Error: {}", e));
 
                     // Detect automation failure and set warning
@@ -546,6 +564,8 @@ impl Default for KuVpnGui {
             pending_request: None,
             current_input: String::new(),
             mfa_info: None,
+            status_message: "Ready to connect".to_string(),
+            error_message: None,
             rotation: 0.0,
             oc_test_result: None,
             automation_warning: None,
