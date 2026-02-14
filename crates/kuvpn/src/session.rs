@@ -1,8 +1,11 @@
-use crate::utils::{CancellationToken, CredentialsProvider};
-use crate::openconnect::{locate_openconnect, execute_openconnect, is_openconnect_running, is_vpn_interface_up, VpnProcess};
 use crate::dsid::run_login_and_get_dsid;
-use std::process::Stdio;
+use crate::openconnect::{
+    execute_openconnect, is_openconnect_running, is_vpn_interface_up, locate_openconnect,
+    VpnProcess,
+};
+use crate::utils::{CancellationToken, CredentialsProvider};
 use std::io::{BufRead, BufReader};
+use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -164,9 +167,8 @@ impl VpnSession {
             // On Unix, we use the named TUN interface (precise).
             // On Windows, we fall back to process-name detection since
             // --interface is not passed on Windows.
-            let is_vpn_connected = || -> bool {
-                is_vpn_interface_up(interface_name) || is_openconnect_running()
-            };
+            let is_vpn_connected =
+                || -> bool { is_vpn_interface_up(interface_name) || is_openconnect_running() };
 
             // Check if already connected
             let already_connected = is_vpn_connected();
@@ -225,7 +227,10 @@ impl VpnSession {
                             "Could not locate openconnect at '{}'. Please install openconnect or set the correct path.",
                             config.openconnect_path
                         ));
-                        log(format!("Error|Could not locate openconnect at '{}'", config.openconnect_path));
+                        log(format!(
+                            "Error|Could not locate openconnect at '{}'",
+                            config.openconnect_path
+                        ));
                         return;
                     }
                 };
@@ -306,11 +311,12 @@ impl VpnSession {
                     break;
                 } else if start_time.elapsed() > timeout {
                     *status.lock().unwrap() = ConnectionStatus::Error;
-                    *last_error.lock().unwrap() = Some(
-                        "VPN tunnel failed to establish within timeout".to_string()
-                    );
+                    *last_error.lock().unwrap() =
+                        Some("VPN tunnel failed to establish within timeout".to_string());
                     log("Error|VPN tunnel failed to establish within timeout".to_string());
-                    if let Some(ref mut p) = process { let _ = p.kill(); }
+                    if let Some(ref mut p) = process {
+                        let _ = p.kill();
+                    }
                     return;
                 } else if let Some(ref mut p) = process {
                     // Check if our spawned process (sudo/doas/pkexec) is still alive.
@@ -320,9 +326,12 @@ impl VpnSession {
                     if !p.is_process_alive() {
                         *status.lock().unwrap() = ConnectionStatus::Error;
                         *last_error.lock().unwrap() = Some(
-                            "OpenConnect process exited before tunnel was established".to_string()
+                            "OpenConnect process exited before tunnel was established".to_string(),
                         );
-                        log("Error|OpenConnect process exited before tunnel was established".to_string());
+                        log(
+                            "Error|OpenConnect process exited before tunnel was established"
+                                .to_string(),
+                        );
                         return;
                     }
                 }

@@ -1,7 +1,7 @@
 use crate::app::KuVpnGui;
 use crate::types::{
-    COLOR_SUCCESS, COLOR_TEXT_DIM, COLOR_WARNING, ICON_REFRESH_SVG, ICON_SHIELD_CHECK_SVG,
-    ICON_SHIELD_SVG, Message, card,
+    card, Message, COLOR_SUCCESS, COLOR_TEXT_DIM, COLOR_WARNING, ICON_REFRESH_SVG,
+    ICON_SHIELD_CHECK_SVG, ICON_SHIELD_SVG,
 };
 use iced::widget::{column, container, row, svg, text};
 use iced::{Alignment, Border, Color, Element, Shadow, Vector};
@@ -10,17 +10,11 @@ use kuvpn::ConnectionStatus;
 impl KuVpnGui {
     pub fn view_status_circle(&self) -> Element<'_, Message> {
         let (color, icon_svg, status_text) = match self.status {
-            ConnectionStatus::Disconnected => {
-                (COLOR_TEXT_DIM, ICON_SHIELD_SVG, "Public Access")
+            ConnectionStatus::Disconnected => (COLOR_TEXT_DIM, ICON_SHIELD_SVG, "Public Access"),
+            ConnectionStatus::Connecting => (COLOR_WARNING, ICON_REFRESH_SVG, "Joining Campus..."),
+            ConnectionStatus::Connected => {
+                (COLOR_SUCCESS, ICON_SHIELD_CHECK_SVG, "KU Network Active")
             }
-            ConnectionStatus::Connecting => {
-                (COLOR_WARNING, ICON_REFRESH_SVG, "Joining Campus...")
-            }
-            ConnectionStatus::Connected => (
-                COLOR_SUCCESS,
-                ICON_SHIELD_CHECK_SVG,
-                "KU Network Active",
-            ),
             ConnectionStatus::Disconnecting => {
                 (COLOR_WARNING, ICON_REFRESH_SVG, "Disconnecting...")
             }
@@ -59,7 +53,9 @@ impl KuVpnGui {
             .height(80)
             .style(move |_, _| svg::Style { color: Some(color) });
 
-        if self.status == ConnectionStatus::Connecting || self.status == ConnectionStatus::Disconnecting {
+        if self.status == ConnectionStatus::Connecting
+            || self.status == ConnectionStatus::Disconnecting
+        {
             icon_display = icon_display.rotation(self.rotation);
         }
 

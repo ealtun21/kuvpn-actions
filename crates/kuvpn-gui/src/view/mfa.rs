@@ -11,11 +11,11 @@ impl KuVpnGui {
                     svg(svg::Handle::from_memory(ICON_PHONE_SVG))
                         .width(40)
                         .height(40)
-                        .style(|_, _| svg::Style { color: Some(COLOR_WARNING) }),
+                        .style(|_, _| svg::Style {
+                            color: Some(COLOR_WARNING)
+                        }),
                     column![
-                        text("Approval Required")
-                            .size(14)
-                            .color(COLOR_WARNING),
+                        text("Approval Required").size(14).color(COLOR_WARNING),
                         text(mfa).size(22).color(Color::WHITE),
                     ]
                     .spacing(5)

@@ -24,7 +24,11 @@ use std::time::Duration;
 /// # Returns
 ///
 /// A `Result` containing the configured `Browser` instance on success, or an error on failure.
-pub fn create_browser(agent: &str, headless: bool, manual_mode: bool) -> Result<Browser, Box<dyn Error>> {
+pub fn create_browser(
+    agent: &str,
+    headless: bool,
+    manual_mode: bool,
+) -> Result<Browser, Box<dyn Error>> {
     let user_agent = OsString::from(format!("--user-agent={agent}"));
     let window = OsString::from("--new-window");
     let no_first_run = OsString::from("--no-first-run");

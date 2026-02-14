@@ -9,13 +9,17 @@ impl KuVpnGui {
             svg(svg::Handle::from_memory(KU_LOGO_BYTES))
                 .width(32)
                 .height(32)
-                .style(|_, _| svg::Style { color: Some(iced::Color::WHITE) }),
+                .style(|_, _| svg::Style {
+                    color: Some(iced::Color::WHITE)
+                }),
             text("KUVPN").size(24).width(Length::Fill),
             button(
                 svg(svg::Handle::from_memory(ICON_SETTINGS_SVG))
                     .width(24)
                     .height(24)
-                    .style(|_, _| svg::Style { color: Some(crate::types::COLOR_TEXT) })
+                    .style(|_, _| svg::Style {
+                        color: Some(crate::types::COLOR_TEXT)
+                    })
             )
             .on_press(Message::ToggleAdvanced)
             .style(button::text),
@@ -23,7 +27,9 @@ impl KuVpnGui {
                 svg(svg::Handle::from_memory(ICON_TERMINAL_SVG))
                     .width(24)
                     .height(24)
-                    .style(|_, _| svg::Style { color: Some(crate::types::COLOR_TEXT) })
+                    .style(|_, _| svg::Style {
+                        color: Some(crate::types::COLOR_TEXT)
+                    })
             )
             .on_press(Message::ToggleConsole)
             .style(button::text),
