@@ -233,7 +233,7 @@ impl KuVpnGui {
                         false,
                         |val| Message::ClientDecorationsToggled(val > 0.5)
                     ),
-                    "System: native OS titlebar | Custom: modern rounded design with custom titlebar"
+                    "System: native OS titlebar and window borders | Custom: frameless with custom titlebar"
                 ),
                 divider(),
                 // --- Actions Section ---

@@ -69,15 +69,6 @@ impl KuVpnGui {
                 .width(Length::Fill)
                 .style(|_| container::Style {
                     background: Some(COLOR_SURFACE.into()),
-                    border: Border {
-                        radius: iced::border::Radius {
-                            top_left: 12.0,
-                            top_right: 12.0,
-                            bottom_left: 0.0,
-                            bottom_right: 0.0,
-                        },
-                        ..Default::default()
-                    },
                     ..Default::default()
                 })
         )
@@ -156,12 +147,7 @@ impl KuVpnGui {
                 border: Border {
                     color: Color::from_rgb(0.20, 0.20, 0.20),
                     width: 1.0,
-                    radius: 12.0.into(),
-                },
-                shadow: Shadow {
-                    color: Color::from_rgba(0.0, 0.0, 0.0, 0.8),
-                    offset: Vector::new(0.0, 8.0),
-                    blur_radius: 32.0,
+                    radius: 0.0.into(),
                 },
                 ..Default::default()
             })
