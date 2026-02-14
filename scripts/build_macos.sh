@@ -20,6 +20,7 @@ if [ "$1" != "--no-container" ] && [ ! -f /.containerenv ] && [ ! -f /proc/1/cgr
         $BUILDER cp "$CONTAINER_ID":/build/KUVPN-aarch64.app dist/macos/
         # Copy DMG/PKG if generated
         $BUILDER cp "$CONTAINER_ID":/build/KUVPN-x86_64.dmg dist/macos/ 2>/dev/null || true
+        $BUILDER cp "$CONTAINER_ID":/build/KUVPN-aarch64.dmg dist/macos/ 2>/dev/null || true
         $BUILDER rm "$CONTAINER_ID"
         
         echo "Successfully built macOS artifacts in dist/macos/"
