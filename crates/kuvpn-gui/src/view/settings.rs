@@ -68,7 +68,7 @@ impl KuVpnGui {
                     "Login Email:",
                     "email@ku.edu.tr",
                     &self.settings.email,
-                    "Your KU email address. Pre-fills login form in Full Auto mode",
+                    "Optional. Saves your email so you don't re-enter after wiping session. Works in Full Auto and Visual Auto modes",
                     is_locked,
                     Message::EmailChanged
                 ),
