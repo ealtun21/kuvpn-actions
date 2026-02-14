@@ -36,8 +36,25 @@ impl VpnProcess {
                 Ok(())
             }
             VpnProcess::Windows { .. } => {
-                if let Some(pid) = get_openconnect_pid() {
-                    kill_process(pid)?;
+                #[cfg(windows)]
+                {
+                    use std::os::windows::process::CommandExt;
+                    use std::process::Command as StdCommand;
+                    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+                    // 1. Try killing all openconnect processes by name (most effective on Windows)
+                    let _ = StdCommand::new("taskkill")
+                        .creation_flags(CREATE_NO_WINDOW)
+                        .args(["/F", "/IM", "openconnect.exe", "/T"])
+                        .status();
+
+                    // 2. Try killing by PID if we can find one specifically
+                    if let Some(pid) = get_openconnect_pid() {
+                        let _ = StdCommand::new("taskkill")
+                            .creation_flags(CREATE_NO_WINDOW)
+                            .args(["/F", "/PID", &pid.to_string(), "/T"])
+                            .status();
+                    }
                 }
                 Ok(())
             }
@@ -87,8 +104,13 @@ impl VpnProcess {
                 ..
             } => {
                 // Wait until the runas thread finishes (openconnect exits)
+                // with a timeout to prevent hanging the session thread.
+                let start = std::time::Instant::now();
                 while !thread_finished.load(Ordering::SeqCst) {
-                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    if start.elapsed() > std::time::Duration::from_secs(5) {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(200));
                 }
                 Ok(())
             }

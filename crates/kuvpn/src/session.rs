@@ -1,7 +1,7 @@
 use crate::dsid::run_login_and_get_dsid;
 use crate::openconnect::{
-    execute_openconnect, is_openconnect_running, is_vpn_interface_up, locate_openconnect,
-    VpnProcess,
+    execute_openconnect, get_openconnect_pid, is_openconnect_running, is_vpn_interface_up,
+    kill_process, locate_openconnect, VpnProcess,
 };
 use crate::utils::{CancellationToken, CredentialsProvider};
 use std::io::{BufRead, BufReader};
@@ -344,18 +344,24 @@ impl VpnSession {
             if let Some(ref mut p) = process {
                 let _ = p.kill();
                 let _ = p.wait();
-            } else {
-                // We don't own the process (already-connected path).
-                // Use PID-based kill as fallback.
-                use crate::openconnect::{get_openconnect_pid, kill_process};
-                if let Some(pid) = get_openconnect_pid() {
-                    log("Info|Sending stop signal to openconnect...".to_string());
-                    let _ = kill_process(pid);
-                }
             }
 
-            *status.lock().unwrap() = ConnectionStatus::Disconnected;
-            log("Info|Disconnected.".to_string());
+            // Fallback/Verify: Check if openconnect is still running and try to kill it again
+            if let Some(pid) = get_openconnect_pid() {
+                let _ = kill_process(pid);
+                thread::sleep(Duration::from_millis(500));
+            }
+
+            if is_openconnect_running() {
+                let mut s = status.lock().unwrap();
+                *s = ConnectionStatus::Error;
+                *last_error.lock().unwrap() =
+                    Some("Failed to stop OpenConnect. Please close it manually.".to_string());
+                log("Error|Failed to stop OpenConnect.".to_string());
+            } else {
+                *status.lock().unwrap() = ConnectionStatus::Disconnected;
+                log("Info|Disconnected.".to_string());
+            }
         })
     }
 }
