@@ -1,4 +1,4 @@
-use iced::widget::{button, toggler};
+use iced::widget::button;
 use iced::{Border, Color, Shadow, Vector};
 use iced::widget::container;
 use std::sync::{Arc, Mutex};
@@ -365,18 +365,3 @@ pub fn btn_segment_unselected(_theme: &iced::Theme, status: button::Status, posi
     }
 }
 
-pub fn toggler_neutral(theme: &iced::Theme, status: toggler::Status) -> toggler::Style {
-    let default_style = toggler::default(theme, status);
-
-    toggler::Style {
-        background: Color::from_rgb(0.20, 0.20, 0.20).into(),
-        background_border_width: default_style.background_border_width,
-        background_border_color: default_style.background_border_color,
-        foreground: COLOR_TEXT.into(),
-        foreground_border_width: default_style.foreground_border_width,
-        foreground_border_color: default_style.foreground_border_color,
-        border_radius: default_style.border_radius,
-        padding_ratio: default_style.padding_ratio,
-        text_color: default_style.text_color,
-    }
-}
