@@ -1,5 +1,6 @@
-# Rust
+# Build artifacts
 /target/
+/dist/
 **/*.rs.bk
 
 # AppImage build artifacts
@@ -12,7 +13,7 @@ packaging/appimage/kuvpn.png
 linuxdeploy-plugin-gtk.sh
 
 # macOS build artifacts
-KUVPN.app/
+*.app/
 *.dmg
 *.pkg
 
@@ -20,6 +21,7 @@ KUVPN.app/
 *.exe
 *.msi
 packaging/windows/KUVPN-Setup.exe
+packaging/windows/openconnect/
 
 # OS specific
 .DS_Store
