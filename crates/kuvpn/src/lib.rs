@@ -5,6 +5,7 @@
 
 pub mod browser;
 pub mod dsid;
+pub mod error;
 pub mod handlers;
 pub mod logger;
 pub mod openconnect;
@@ -13,6 +14,7 @@ pub mod utils;
 
 // Re-export commonly used items
 pub use dsid::run_login_and_get_dsid;
+pub use error::{AuthError, ErrorCategory};
 pub use logger::init_logger;
 pub use openconnect::{
     execute_openconnect, get_openconnect_pid, is_openconnect_running, is_vpn_interface_up,

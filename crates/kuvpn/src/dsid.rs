@@ -1,5 +1,8 @@
 use crate::browser::create_browser;
-use crate::handlers::page_detection::{is_incorrect_password_visible, is_invalid_username_visible};
+use crate::error::AuthError;
+use crate::handlers::page_detection::{
+    is_incorrect_password_visible, is_invalid_username_visible, is_username_warning_visible,
+};
 use crate::handlers::{auth_handlers::*, mfa_handlers::*, page_detection::is_input_visible};
 use crate::utils::{CancellationToken, CredentialsProvider};
 use headless_chrome::{Browser, Tab};
@@ -59,9 +62,19 @@ fn try_handle_page(
 
     if is_invalid_username_visible(tab)? {
         handled.insert("invalid_username");
-        return Err(anyhow::anyhow!(
-            "Invalid username or account not found, Please re-run the program and try again."
-        ));
+        return Err(AuthError::InvalidUsername {
+            message: "The username you entered may be incorrect or the account does not exist.".to_string(),
+        }
+        .into());
+    }
+
+    // Check for username warning (softer error that suggests potential typo)
+    if let Some(warning_text) = is_username_warning_visible(tab)? {
+        handled.insert("username_warning");
+        return Err(AuthError::UsernameWarning {
+            warning_text: warning_text.trim().to_string(),
+        }
+        .into());
     }
 
     if is_incorrect_password_visible(tab)? {
@@ -155,7 +168,12 @@ pub fn run_login_and_get_dsid(
 
     let browser = match create_browser(user_agent, headless, no_auto_login) {
         Ok(b) => b,
-        Err(e) => return Err(anyhow::anyhow!(format!("Failed to create browser: {e}"))),
+        Err(e) => {
+            return Err(AuthError::BrowserError {
+                message: format!("Failed to create browser: {}", e),
+            }
+            .into())
+        }
     };
 
     // Store the browser PID so it can be force-killed on cancel
@@ -208,7 +226,7 @@ pub fn run_login_and_get_dsid(
             if token.is_cancelled() {
                 log::info!("[!] Cancellation requested, closing browser.");
                 close_all_tabs(&browser);
-                return Err(anyhow::anyhow!("Operation cancelled by user"));
+                return Err(AuthError::Cancelled.into());
             }
         }
 
@@ -223,7 +241,10 @@ pub fn run_login_and_get_dsid(
             Ok(None) => {} // Keep going
             Err(e) => {
                 log::warn!("[!] Browser heartbeat lost (manual close?): {}", e);
-                return Err(e);
+                return Err(AuthError::BrowserError {
+                    message: format!("Browser connection lost: {}", e),
+                }
+                .into());
             }
         }
 
@@ -253,12 +274,8 @@ pub fn run_login_and_get_dsid(
                 }
                 Err(e) => {
                     log::warn!("[!] Handler error: {}", e);
-                    // If it's a fatal error (like invalid username), return it.
-                    // Otherwise it might just be the browser closing.
-                    if e.to_string().contains("Invalid username") {
-                        close_all_tabs(&browser);
-                        return Err(e);
-                    }
+                    // Close browser tabs before returning error
+                    close_all_tabs(&browser);
                     return Err(e);
                 }
             }
@@ -269,11 +286,16 @@ pub fn run_login_and_get_dsid(
 
                 if reset_count > MAX_RESETS {
                     close_all_tabs(&browser);
-                    return Err(anyhow::anyhow!(
-                        "AUTOMATION_FAILED: Full Auto mode unable to complete login after {} page resets. \
-                        The authentication flow may have changed or network issues occurred.",
-                        MAX_RESETS
-                    ));
+                    return Err(AuthError::AuthenticationFailed {
+                        reason: format!(
+                            "Full Auto mode unable to complete login after {} page resets. \
+                            The authentication flow may have changed or network issues occurred.",
+                            MAX_RESETS
+                        ),
+                        suggest_manual_mode: true,
+                        suggest_clear_cache: true,
+                    }
+                    .into());
                 }
 
                 log::warn!(
@@ -299,10 +321,15 @@ pub fn run_login_and_get_dsid(
 
             if retries > MAX_RETRIES {
                 close_all_tabs(&browser);
-                return Err(anyhow::anyhow!(format!(
-                    "Max retries reached. Could not find a handler for the current page: {}",
-                    last_url
-                )));
+                return Err(AuthError::AuthenticationFailed {
+                    reason: format!(
+                        "Could not find a handler for the current page after {} retries: {}",
+                        MAX_RETRIES, last_url
+                    ),
+                    suggest_manual_mode: true,
+                    suggest_clear_cache: false,
+                }
+                .into());
             }
         }
 
