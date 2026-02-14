@@ -25,7 +25,9 @@ fn close_all_tabs(browser: &Browser) {
 
 /// Extracts DSID cookie from the browser.
 fn poll_dsid(tab: &Tab, domain: &str) -> anyhow::Result<Option<String>> {
-    let cookies = tab.get_cookies().map_err(|e| anyhow::anyhow!("Browser error: {}", e))?;
+    let cookies = tab
+        .get_cookies()
+        .map_err(|e| anyhow::anyhow!("Browser error: {}", e))?;
     if let Some(cookie) = cookies
         .iter()
         .find(|c| c.name == "DSID" && c.domain.contains(domain))
@@ -43,15 +45,16 @@ fn try_handle_page(
     email: Option<&String>,
     provider: &dyn CredentialsProvider,
     cancel_token: Option<&CancellationToken>,
-) -> anyhow::Result<bool> {
+) -> anyhow::Result<(bool, bool)> {
+    // Returns (handler_matched, is_mfa_handler)
     if !handled.contains("pick_account") && handle_pick_account(tab)? {
         handled.insert("pick_account");
-        return Ok(true);
+        return Ok((true, false));
     }
 
     if !handled.contains("session_conflict") && handle_session_conflict(tab)? {
         handled.insert("session_conflict");
-        return Ok(true);
+        return Ok((true, false));
     }
 
     if is_invalid_username_visible(tab)? {
@@ -63,12 +66,12 @@ fn try_handle_page(
 
     if is_incorrect_password_visible(tab)? {
         handled.remove("password");
-        return Ok(true);
+        return Ok((true, false));
     }
 
     if handle_remote_ngc_denied_next(tab)? {
         handled.remove("ngc_push");
-        return Ok(true);
+        return Ok((true, false));
     }
 
     if !handled.contains("username") && is_input_visible(tab, "input[name=\"loginfmt\"]")? {
@@ -82,22 +85,23 @@ fn try_handle_page(
             provider,
         )?;
         handled.insert("username");
-        return Ok(true);
+        return Ok((true, false));
     }
 
     if !handled.contains("ngc_error_use_password") && handle_ngc_error_use_password(tab, handled)? {
         handled.insert("ngc_error_use_password");
-        return Ok(true);
+        return Ok((true, false));
     }
 
     if !handled.contains("use_app_instead") && handle_use_app_instead(tab)? {
         handled.insert("use_app_instead");
-        return Ok(true);
+        return Ok((true, false));
     }
 
-    if !handled.contains("ngc_push") && handle_authenticator_ngc_push(tab, provider, cancel_token)? {
+    if !handled.contains("ngc_push") && handle_authenticator_ngc_push(tab, provider, cancel_token)?
+    {
         handled.insert("ngc_push");
-        return Ok(true);
+        return Ok((true, true)); // MFA handler
     }
 
     if !handled.contains("password") && is_input_visible(tab, "input[name=\"passwd\"]")? {
@@ -111,25 +115,26 @@ fn try_handle_page(
             provider,
         )?;
         handled.insert("password");
-        return Ok(true);
+        return Ok((true, false));
     }
 
     if !handled.contains("kmsi") && click_kmsi_if_present(tab)? {
         handled.insert("kmsi");
-        return Ok(true);
+        return Ok((true, false));
     }
 
-    if !handled.contains("push") && handle_authenticator_push_approval(tab, provider, cancel_token)? {
+    if !handled.contains("push") && handle_authenticator_push_approval(tab, provider, cancel_token)?
+    {
         handled.insert("push");
-        return Ok(true);
+        return Ok((true, true)); // MFA handler
     }
 
     if !handled.contains("verification_code") && handle_verification_code_choice(tab)? {
         handled.insert("verification_code");
-        return Ok(true);
+        return Ok((true, false));
     }
 
-    Ok(false)
+    Ok((false, false))
 }
 
 /// Main function to run login process and retrieve DSID.
@@ -145,6 +150,8 @@ pub fn run_login_and_get_dsid(
     browser_pid_out: Option<Arc<Mutex<Option<u32>>>>,
 ) -> anyhow::Result<String> {
     const MAX_RETRIES: usize = 10;
+    const STUCK_THRESHOLD: usize = 15; // ~6 seconds without progress before considering stuck
+    const MAX_RESETS: usize = 2; // maximum page resets allowed
 
     let browser = match create_browser(user_agent, headless, no_auto_login) {
         Ok(b) => b,
@@ -184,12 +191,17 @@ pub fn run_login_and_get_dsid(
     tab.navigate_to(url)?;
 
     if let Err(e) = tab.wait_until_navigated() {
-        log::warn!("[!] Initial navigation wait timed out: {}, continuing...", e);
+        log::warn!(
+            "[!] Initial navigation wait timed out: {}, continuing...",
+            e
+        );
     }
 
     let mut handled: HashSet<&'static str> = HashSet::new();
     let mut last_url = "".to_string();
     let mut retries = 0;
+    let mut reset_count = 0;
+    let mut is_in_mfa_wait;
 
     loop {
         if let Some(token) = &cancel_token {
@@ -224,12 +236,20 @@ pub fn run_login_and_get_dsid(
 
         if !no_auto_login {
             // try_handle_page can also fail if browser is closed
-            match try_handle_page(&tab, &mut handled, email.as_ref(), provider, cancel_token.as_ref()) {
-                Ok(true) => {
+            match try_handle_page(
+                &tab,
+                &mut handled,
+                email.as_ref(),
+                provider,
+                cancel_token.as_ref(),
+            ) {
+                Ok((true, is_mfa)) => {
                     retries = 0;
+                    is_in_mfa_wait = is_mfa;
                 }
-                Ok(false) => {
+                Ok((false, _)) => {
                     retries += 1;
+                    is_in_mfa_wait = false;
                 }
                 Err(e) => {
                     log::warn!("[!] Handler error: {}", e);
@@ -240,6 +260,40 @@ pub fn run_login_and_get_dsid(
                         return Err(e);
                     }
                     return Err(e);
+                }
+            }
+
+            // Page reset logic for stuck automation (only in Full Auto mode)
+            if retries > STUCK_THRESHOLD && !is_in_mfa_wait {
+                reset_count += 1;
+
+                if reset_count > MAX_RESETS {
+                    close_all_tabs(&browser);
+                    return Err(anyhow::anyhow!(
+                        "AUTOMATION_FAILED: Full Auto mode unable to complete login after {} page resets. \
+                        The authentication flow may have changed or network issues occurred.",
+                        MAX_RESETS
+                    ));
+                }
+
+                log::warn!(
+                    "[!] Authentication stuck (no progress for {}s). Resetting page... (attempt {}/{})",
+                    (STUCK_THRESHOLD * 400) / 1000,
+                    reset_count,
+                    MAX_RESETS
+                );
+
+                // Navigate back to initial login URL
+                if let Err(e) = tab.navigate_to(url) {
+                    log::warn!(
+                        "[!] Reset navigation failed: {}, continuing with current page",
+                        e
+                    );
+                } else {
+                    let _ = tab.wait_until_navigated();
+                    handled.clear(); // Clear handler history to allow re-triggering
+                    retries = 0;
+                    last_url = String::new();
                 }
             }
 

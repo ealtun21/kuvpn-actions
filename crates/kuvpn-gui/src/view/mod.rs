@@ -18,6 +18,44 @@ impl KuVpnGui {
         let mfa_banner = self.view_mfa_banner();
         let action_section = self.view_actions();
 
+        // Automation warning banner
+        let automation_warning_banner: Element<'_, Message> =
+            if let Some(warning) = &self.automation_warning {
+                container(
+                    column![
+                        row![
+                            svg(svg::Handle::from_memory(crate::types::ICON_INFO_SVG))
+                                .width(20)
+                                .height(20)
+                                .style(|_theme: &iced::Theme, _status| svg::Style {
+                                    color: Some(crate::types::COLOR_WARNING)
+                                }),
+                            text("Automation Issue")
+                                .size(16)
+                                .color(crate::types::COLOR_WARNING),
+                        ]
+                        .spacing(10)
+                        .align_y(Alignment::Center),
+                        text(warning).size(12).color(crate::types::COLOR_TEXT),
+                    ]
+                    .spacing(8),
+                )
+                .width(Length::Fill)
+                .padding(15)
+                .style(|_| container::Style {
+                    background: Some(iced::Color::from_rgba(0.80, 0.60, 0.30, 0.08).into()),
+                    border: iced::Border {
+                        color: crate::types::COLOR_WARNING,
+                        width: 1.5,
+                        radius: 8.0.into(),
+                    },
+                    ..Default::default()
+                })
+                .into()
+            } else {
+                container(iced::widget::Space::new().height(0)).into()
+            };
+
         let mut content = column![];
 
         if self.oc_test_result == Some(false) {
@@ -55,6 +93,7 @@ impl KuVpnGui {
             .push(header)
             .push(status_view)
             .push(mfa_banner)
+            .push(automation_warning_banner)
             .push(action_section)
             .spacing(30)
             .padding(30)

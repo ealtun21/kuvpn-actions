@@ -1,9 +1,9 @@
 use std::path::{Path, PathBuf};
+#[cfg(unix)]
+use std::process::Command;
 use std::process::{Child, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-#[cfg(unix)]
-use std::process::Command;
 use which::which;
 
 #[cfg(windows)]
@@ -54,14 +54,17 @@ impl VpnProcess {
                 {
                     // try_wait returns Ok(None) if the process is still running
                     match _child.try_wait() {
-                        Ok(None) => true,  // still running
-                        _ => false,         // exited or error
+                        Ok(None) => true, // still running
+                        _ => false,       // exited or error
                     }
                 }
                 #[cfg(not(unix))]
                 false
             }
-            VpnProcess::Windows { ref thread_finished, .. } => {
+            VpnProcess::Windows {
+                ref thread_finished,
+                ..
+            } => {
                 // If the runas thread is still running, the process is alive
                 // (UAC prompt showing, or openconnect actively running).
                 // Only check process list after the thread has finished.
@@ -79,7 +82,10 @@ impl VpnProcess {
                 child.wait()?;
                 Ok(())
             }
-            VpnProcess::Windows { ref thread_finished, .. } => {
+            VpnProcess::Windows {
+                ref thread_finished,
+                ..
+            } => {
                 // Wait until the runas thread finishes (openconnect exits)
                 while !thread_finished.load(Ordering::SeqCst) {
                     std::thread::sleep(std::time::Duration::from_millis(500));
@@ -218,7 +224,10 @@ pub fn execute_openconnect(
             finished_clone.store(true, Ordering::SeqCst);
         });
 
-        Ok(VpnProcess::Windows { interface_name: interface_name_owned, thread_finished })
+        Ok(VpnProcess::Windows {
+            interface_name: interface_name_owned,
+            thread_finished,
+        })
     }
 }
 
@@ -315,10 +324,7 @@ pub fn get_openconnect_pid() -> Option<u32> {
     {
         let candidate = which("pgrep");
         if let Ok(pgrep) = candidate {
-            let output = Command::new(pgrep)
-                .arg("openconnect")
-                .output()
-                .ok()?;
+            let output = Command::new(pgrep).arg("openconnect").output().ok()?;
             if output.status.success() {
                 let s = String::from_utf8_lossy(&output.stdout);
                 if let Some(line) = s.lines().next() {

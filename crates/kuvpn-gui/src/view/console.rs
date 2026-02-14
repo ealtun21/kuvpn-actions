@@ -1,5 +1,7 @@
 use crate::app::KuVpnGui;
-use crate::types::{COLOR_TEXT_DIM, COLOR_WARNING, ICON_TERMINAL_SVG, Message, btn_secondary, card};
+use crate::types::{
+    btn_secondary, card, Message, COLOR_TEXT_DIM, COLOR_WARNING, ICON_TERMINAL_SVG,
+};
 use iced::widget::{button, column, container, row, scrollable, svg, text};
 use iced::{Color, Element, Font, Length};
 
@@ -37,7 +39,9 @@ impl KuVpnGui {
                     svg(svg::Handle::from_memory(ICON_TERMINAL_SVG))
                         .width(14)
                         .height(14)
-                        .style(|_, _| svg::Style { color: Some(COLOR_TEXT_DIM) }),
+                        .style(|_, _| svg::Style {
+                            color: Some(COLOR_TEXT_DIM)
+                        }),
                     text("SESSION LOGS")
                         .size(12)
                         .color(COLOR_TEXT_DIM)
@@ -48,10 +52,7 @@ impl KuVpnGui {
                         .style(btn_secondary),
                 ]
                 .spacing(10),
-                scrollable(
-                    column(log_lines).spacing(2),
-                )
-                .height(Length::Fixed(160.0)),
+                scrollable(column(log_lines).spacing(2),).height(Length::Fixed(160.0)),
             ]
             .spacing(10),
         )

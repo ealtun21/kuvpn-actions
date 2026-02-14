@@ -1,11 +1,9 @@
 use crate::app::KuVpnGui;
 use crate::types::{
+    btn_secondary, btn_segment_selected, btn_segment_unselected, card, Message, SegmentPosition,
     COLOR_TEXT, COLOR_TEXT_DIM, ICON_INFO_SVG, ICON_REFRESH_SVG, ICON_TRASH_SVG,
-    Message, btn_secondary, card, btn_segment_selected, btn_segment_unselected, SegmentPosition,
 };
-use iced::widget::{
-    button, column, container, row, svg, text, text_input,
-};
+use iced::widget::{button, column, container, row, svg, text, text_input};
 use iced::{Alignment, Border, Color, Element, Length};
 use kuvpn::ConnectionStatus;
 
@@ -19,7 +17,9 @@ impl KuVpnGui {
                     svg(svg::Handle::from_memory(ICON_INFO_SVG))
                         .width(14)
                         .height(14)
-                        .style(|_, _| svg::Style { color: Some(COLOR_TEXT_DIM) }),
+                        .style(|_, _| svg::Style {
+                            color: Some(COLOR_TEXT_DIM)
+                        }),
                     text("Settings locked during active session.")
                         .size(11)
                         .color(COLOR_TEXT_DIM),
@@ -90,7 +90,8 @@ impl KuVpnGui {
                         .padding(12)
                         .style(move |_theme, status| {
                             let mut style = text_input::default(_theme, status);
-                            style.background = iced::Background::Color(Color::from_rgb(0.08, 0.08, 0.08));
+                            style.background =
+                                iced::Background::Color(Color::from_rgb(0.08, 0.08, 0.08));
                             style.border = Border {
                                 color: match status {
                                     text_input::Status::Active => Color::from_rgb(0.20, 0.20, 0.20),
@@ -101,23 +102,25 @@ impl KuVpnGui {
                                             Color::from_rgb(0.30, 0.30, 0.30)
                                         }
                                     }
-                                    text_input::Status::Hovered => Color::from_rgb(0.25, 0.25, 0.25),
-                                    text_input::Status::Disabled => Color::from_rgb(0.15, 0.15, 0.15),
+                                    text_input::Status::Hovered => {
+                                        Color::from_rgb(0.25, 0.25, 0.25)
+                                    }
+                                    text_input::Status::Disabled => {
+                                        Color::from_rgb(0.15, 0.15, 0.15)
+                                    }
                                 },
                                 width: 1.0,
                                 radius: 8.0.into(),
                             };
                             style
                         }),
-                    button(
-                        text(if self.oc_test_result == Some(true) {
-                            "✓"
-                        } else if self.oc_test_result == Some(false) {
-                            "✗"
-                        } else {
-                            "Test"
-                        })
-                    )
+                    button(text(if self.oc_test_result == Some(true) {
+                        "✓"
+                    } else if self.oc_test_result == Some(false) {
+                        "✗"
+                    } else {
+                        "Test"
+                    }))
                     .on_press(if is_locked {
                         Message::Tick
                     } else {
@@ -182,9 +185,9 @@ impl KuVpnGui {
                                 &["pkexec", "sudo", "doas"],
                                 &self.settings.escalation_tool,
                                 is_locked,
-                                Message::EscalationToolChanged
+                                Message::EscalationToolChanged,
                             ),
-                            "pkexec (default) | sudo/doas (passwordless)"
+                            "pkexec (default) | sudo/doas (passwordless)",
                         )
                     }
                     #[cfg(windows)]
@@ -199,7 +202,11 @@ impl KuVpnGui {
                     self.view_segmented_control(
                         &["NO", "YES"],
                         &[0.0, 1.0],
-                        if self.settings.close_to_tray { 1.0 } else { 0.0 },
+                        if self.settings.close_to_tray {
+                            1.0
+                        } else {
+                            0.0
+                        },
                         false,
                         |val| Message::CloseToTrayToggled(val > 0.5)
                     ),
@@ -214,7 +221,9 @@ impl KuVpnGui {
                             svg(svg::Handle::from_memory(ICON_TRASH_SVG))
                                 .width(14)
                                 .height(14)
-                                .style(|_, _| svg::Style { color: Some(COLOR_TEXT_DIM) }),
+                                .style(|_, _| svg::Style {
+                                    color: Some(COLOR_TEXT_DIM)
+                                }),
                             text("WIPE SAVED SESSION").size(12),
                         ]
                         .spacing(10)
@@ -228,7 +237,9 @@ impl KuVpnGui {
                             svg(svg::Handle::from_memory(ICON_REFRESH_SVG))
                                 .width(14)
                                 .height(14)
-                                .style(|_, _| svg::Style { color: Some(COLOR_TEXT_DIM) }),
+                                .style(|_, _| svg::Style {
+                                    color: Some(COLOR_TEXT_DIM)
+                                }),
                             text("RESET TO DEFAULTS").size(12),
                         ]
                         .spacing(10)
@@ -261,9 +272,7 @@ impl KuVpnGui {
         on_change: fn(String) -> Message,
     ) -> Element<'a, Message> {
         row![
-            text(label)
-                .size(11)
-                .width(Length::Fixed(120.0)),
+            text(label).size(11).width(Length::Fixed(120.0)),
             text_input(placeholder, value)
                 .on_input(if locked { |_| Message::Tick } else { on_change })
                 .padding(12)
@@ -305,9 +314,7 @@ impl KuVpnGui {
         helper_text: &'a str,
     ) -> Element<'a, Message> {
         row![
-            text(label)
-                .size(11)
-                .width(Length::Fixed(120.0)),
+            text(label).size(11).width(Length::Fixed(120.0)),
             control,
             text(helper_text)
                 .size(11)
@@ -346,7 +353,11 @@ impl KuVpnGui {
 
                 button(text(*label).size(12))
                     .padding([8, 12])
-                    .on_press(if locked { Message::Tick } else { on_change(value) })
+                    .on_press(if locked {
+                        Message::Tick
+                    } else {
+                        on_change(value)
+                    })
                     .style(move |theme, status| {
                         if is_selected {
                             btn_segment_selected(theme, status, position)
@@ -386,7 +397,11 @@ impl KuVpnGui {
 
                 button(text(label).size(12))
                     .padding([8, 12])
-                    .on_press(if locked { Message::Tick } else { on_change(label.to_string()) })
+                    .on_press(if locked {
+                        Message::Tick
+                    } else {
+                        on_change(label.to_string())
+                    })
                     .style(move |theme, status| {
                         if is_selected {
                             btn_segment_selected(theme, status, position)

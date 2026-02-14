@@ -59,9 +59,9 @@ impl CredentialsProvider for TerminalCredentialsProvider {
     }
 }
 
+use once_cell::sync::Lazy;
 use std::fs::File;
 use std::sync::Mutex;
-use once_cell::sync::Lazy;
 
 static INSTANCE_LOCK: Lazy<Mutex<Option<File>>> = Lazy::new(|| Mutex::new(None));
 
@@ -89,7 +89,9 @@ pub fn ensure_single_instance() -> Result<(), Box<dyn Error>> {
     {
         use std::os::windows::io::AsRawHandle;
         use windows::Win32::Foundation::HANDLE;
-        use windows::Win32::Storage::FileSystem::{LockFileEx, LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY};
+        use windows::Win32::Storage::FileSystem::{
+            LockFileEx, LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY,
+        };
         use windows::Win32::System::IO::OVERLAPPED;
 
         let handle = file.as_raw_handle();
