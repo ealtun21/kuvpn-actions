@@ -65,6 +65,7 @@ impl KuVpnGui {
                 log::info!("Window opened with ID: {:?}", id);
                 self.window_id = Some(id);
                 self.is_visible = true;
+                self.window_close_pending = false;
                 if let Some(item) = &self.show_item {
                     let _ = item.set_text("Toggle Visibility");
                 }
@@ -77,6 +78,11 @@ impl KuVpnGui {
                     self.is_visible = false;
                     self.window_close_pending = false;
                 }
+                Task::none()
+            }
+            Message::ResetClosePending => {
+                log::info!("Resetting window_close_pending (safety timeout)");
+                self.window_close_pending = false;
                 Task::none()
             }
             Message::GtkTick => {
@@ -155,7 +161,13 @@ impl KuVpnGui {
                     self.is_visible = false;
                     self.window_close_pending = true;
                     if let Some(id) = self.window_id {
-                        return iced::window::close(id);
+                        return Task::batch(vec![
+                            iced::window::close(id),
+                            Task::perform(
+                                async { tokio::time::sleep(std::time::Duration::from_millis(500)).await },
+                                |_| Message::ResetClosePending,
+                            ),
+                        ]);
                     }
                 } else {
                     log::info!("Opening window to show");

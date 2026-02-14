@@ -42,19 +42,31 @@ impl VpnProcess {
                     use std::process::Command as StdCommand;
                     const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-                    // 1. Try killing all openconnect processes by name (most effective on Windows)
+                    // 1. Try killing all openconnect related processes by name using Admin elevation
+                    log::info!("Requesting Admin elevation to stop OpenConnect...");
+                    let mut cmd = AdminCommand::new("taskkill");
+                    cmd.show(false);
+                    cmd.args(&["/F", "/IM", "openconnect.exe", "/T"]);
+                    let _ = cmd.status();
+
+                    let mut cmd_gui = AdminCommand::new("taskkill");
+                    cmd_gui.show(false);
+                    cmd_gui.args(&["/F", "/IM", "openconnect-gui.exe", "/T"]);
+                    let _ = cmd_gui.status();
+
+                    // 2. Try killing by PID specifically if found
+                    if let Some(pid) = get_openconnect_pid() {
+                        let mut cmd_pid = AdminCommand::new("taskkill");
+                        cmd_pid.show(false);
+                        cmd_pid.args(&["/F", "/PID", &pid.to_string(), "/T"]);
+                        let _ = cmd_pid.status();
+                    }
+
+                    // 3. Fallback to non-elevated taskkill just in case
                     let _ = StdCommand::new("taskkill")
                         .creation_flags(CREATE_NO_WINDOW)
-                        .args(["/F", "/IM", "openconnect.exe", "/T"])
+                        .args(["/F", "/IM", "openconnect.exe"])
                         .status();
-
-                    // 2. Try killing by PID if we can find one specifically
-                    if let Some(pid) = get_openconnect_pid() {
-                        let _ = StdCommand::new("taskkill")
-                            .creation_flags(CREATE_NO_WINDOW)
-                            .args(["/F", "/PID", &pid.to_string(), "/T"])
-                            .status();
-                    }
                 }
                 Ok(())
             }
@@ -369,15 +381,13 @@ pub fn kill_process(pid: u32) -> anyhow::Result<()> {
     }
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
-        use std::process::Command as StdCommand;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        StdCommand::new("taskkill")
-            .creation_flags(CREATE_NO_WINDOW)
-            .arg("/F")
+        let mut cmd = AdminCommand::new("taskkill");
+        cmd.show(false);
+        cmd.arg("/F")
+            .arg("/T")
             .arg("/PID")
-            .arg(pid.to_string())
-            .status()?;
+            .arg(pid.to_string());
+        cmd.status()?;
     }
     Ok(())
 }

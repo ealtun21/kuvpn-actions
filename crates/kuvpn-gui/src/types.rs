@@ -68,6 +68,7 @@ pub enum Message {
     ToggleVisibility { from_close_request: bool },
     WindowOpened(iced::window::Id),
     WindowClosed(iced::window::Id),
+    ResetClosePending,
     GtkTick,
     ResetSettings,
     TestOpenConnect,
