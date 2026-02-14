@@ -74,6 +74,7 @@ pub struct VpnSession {
     status: Arc<Mutex<ConnectionStatus>>,
     cancel_token: CancellationToken,
     last_error: Arc<Mutex<Option<String>>>,
+    error_category: Arc<Mutex<Option<crate::error::ErrorCategory>>>,
     logs_tx: Arc<Mutex<Option<crossbeam_channel::Sender<String>>>>,
     browser_pid: Arc<Mutex<Option<u32>>>,
 }
@@ -85,6 +86,7 @@ impl VpnSession {
             status: Arc::new(Mutex::new(ConnectionStatus::Disconnected)),
             cancel_token: CancellationToken::new(),
             last_error: Arc::new(Mutex::new(None)),
+            error_category: Arc::new(Mutex::new(None)),
             logs_tx: Arc::new(Mutex::new(None)),
             browser_pid: Arc::new(Mutex::new(None)),
         }
@@ -100,6 +102,10 @@ impl VpnSession {
 
     pub fn last_error(&self) -> Option<String> {
         self.last_error.lock().unwrap().clone()
+    }
+
+    pub fn error_category(&self) -> Option<crate::error::ErrorCategory> {
+        *self.error_category.lock().unwrap()
     }
 
     /// Returns true if the session has reached a terminal state.
@@ -145,12 +151,14 @@ impl VpnSession {
             }
             *s = ConnectionStatus::Connecting;
             *self.last_error.lock().unwrap() = None;
+            *self.error_category.lock().unwrap() = None;
         }
 
         let status = Arc::clone(&self.status);
         let config = self.config.clone();
         let cancel_token = self.cancel_token.clone();
         let last_error = Arc::clone(&self.last_error);
+        let error_category = Arc::clone(&self.error_category);
         let logs_tx = Arc::clone(&self.logs_tx);
         let browser_pid = Arc::clone(&self.browser_pid);
 
@@ -202,7 +210,16 @@ impl VpnSession {
                         let mut s = status.lock().unwrap();
                         if *s != ConnectionStatus::Disconnecting {
                             *s = ConnectionStatus::Error;
+
+                            // Try to extract AuthError category
+                            let category = if let Some(auth_err) = e.downcast_ref::<crate::error::AuthError>() {
+                                Some(auth_err.category())
+                            } else {
+                                Some(crate::error::ErrorCategory::Authentication)
+                            };
+
                             *last_error.lock().unwrap() = Some(e.to_string());
+                            *error_category.lock().unwrap() = category;
                             log(format!("Error|{}", e));
                         } else {
                             *s = ConnectionStatus::Disconnected;
@@ -227,6 +244,7 @@ impl VpnSession {
                             "Could not locate openconnect at '{}'. Please install openconnect or set the correct path.",
                             config.openconnect_path
                         ));
+                        *error_category.lock().unwrap() = Some(crate::error::ErrorCategory::Connection);
                         log(format!(
                             "Error|Could not locate openconnect at '{}'",
                             config.openconnect_path
@@ -249,6 +267,7 @@ impl VpnSession {
                     Err(e) => {
                         *status.lock().unwrap() = ConnectionStatus::Error;
                         *last_error.lock().unwrap() = Some(e.to_string());
+                        *error_category.lock().unwrap() = Some(crate::error::ErrorCategory::Connection);
                         log(format!("Error|{}", e));
                         return;
                     }
@@ -313,6 +332,7 @@ impl VpnSession {
                     *status.lock().unwrap() = ConnectionStatus::Error;
                     *last_error.lock().unwrap() =
                         Some("VPN tunnel failed to establish within timeout".to_string());
+                    *error_category.lock().unwrap() = Some(crate::error::ErrorCategory::Connection);
                     log("Error|VPN tunnel failed to establish within timeout".to_string());
                     if let Some(ref mut p) = process {
                         let _ = p.kill();
@@ -328,6 +348,7 @@ impl VpnSession {
                         *last_error.lock().unwrap() = Some(
                             "OpenConnect process exited before tunnel was established".to_string(),
                         );
+                        *error_category.lock().unwrap() = Some(crate::error::ErrorCategory::Connection);
                         log(
                             "Error|OpenConnect process exited before tunnel was established"
                                 .to_string(),

@@ -73,7 +73,7 @@ pub enum Message {
     MfaPushReceived(String),
     MfaCompleteReceived,
     ClearSessionPressed,
-    ConnectionFinished(Option<String>),
+    ConnectionFinished(Option<String>, Option<kuvpn::ErrorCategory>),
     StatusChanged(ConnectionStatus),
     Tick,
     TrayEvent(TrayIconEvent),
