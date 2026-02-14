@@ -18,11 +18,19 @@ impl KuVpnGui {
             ConnectionStatus::Disconnecting => {
                 (COLOR_WARNING, ICON_REFRESH_SVG, "Disconnecting...")
             }
-            ConnectionStatus::Error => (
-                Color::from_rgb(0.8, 0.2, 0.2),
-                ICON_SHIELD_SVG,
-                "Connection Error",
-            ),
+            ConnectionStatus::Error => {
+                let error_type = match self.error_category {
+                    Some(kuvpn::ErrorCategory::Authentication) => "Authentication Error",
+                    Some(kuvpn::ErrorCategory::Connection) => "Connection Error",
+                    Some(kuvpn::ErrorCategory::System) => "System Error",
+                    None => "Error",
+                };
+                (
+                    Color::from_rgb(0.8, 0.2, 0.2),
+                    ICON_SHIELD_SVG,
+                    error_type,
+                )
+            }
         };
 
         let glow = match self.status {
@@ -84,23 +92,27 @@ impl KuVpnGui {
                 .align_x(iced::alignment::Horizontal::Center)
                 .width(Length::Fill),
             container(
-                iced::widget::scrollable(
-                    text(match self.status {
-                        ConnectionStatus::Connected => "Internal Resources Available".to_string(),
-                        ConnectionStatus::Error => {
-                            "Check Console for details. Try switching to Manual mode in Settings.".to_string()
+                text(match self.status {
+                    ConnectionStatus::Connected => "Internal Resources Available".to_string(),
+                    ConnectionStatus::Error => {
+                        // If automation_warning or mfa_info is set, show brief message
+                        if self.automation_warning.is_some() || self.mfa_info.is_some() {
+                            "See details below".to_string()
+                        } else {
+                            self.error_message.clone().unwrap_or_else(||
+                                "An error occurred. Check console for details.".to_string()
+                            )
                         }
-                        ConnectionStatus::Connecting | ConnectionStatus::Disconnecting => {
-                            self.status_message.clone()
-                        }
-                        _ => "Koç University Access Restricted".to_string(),
-                    })
-                    .size(12)
-                    .color(COLOR_TEXT_DIM)
-                    .align_x(iced::alignment::Horizontal::Center)
-                    .wrapping(iced::widget::text::Wrapping::Word)
-                )
-                .height(100)
+                    }
+                    ConnectionStatus::Connecting | ConnectionStatus::Disconnecting => {
+                        self.status_message.clone()
+                    }
+                    _ => "Koç University Access Restricted".to_string(),
+                })
+                .size(12)
+                .color(COLOR_TEXT_DIM)
+                .align_x(iced::alignment::Horizontal::Center)
+                .wrapping(iced::widget::text::Wrapping::Word)
             )
             .width(Length::Fill)
             .max_width(480.0)
@@ -110,6 +122,89 @@ impl KuVpnGui {
         .align_x(Alignment::Center)
         .width(Length::Fill)
         .max_width(480.0);
+
+        // Add notification banners right here (MFA push, automation warning, etc.)
+        if let Some(code) = &self.mfa_info {
+            content = content.push(
+                container(
+                    column![
+                        row![
+                            iced::widget::svg(iced::widget::svg::Handle::from_memory(
+                                crate::types::ICON_INFO_SVG
+                            ))
+                            .width(18)
+                            .height(18)
+                            .style(|_theme: &iced::Theme, _status| iced::widget::svg::Style {
+                                color: Some(crate::types::COLOR_WARNING)
+                            }),
+                            text("Approve Sign-In")
+                                .size(13)
+                                .color(crate::types::COLOR_WARNING),
+                        ]
+                        .spacing(8)
+                        .align_y(Alignment::Center),
+                        text(format!("Approve number {} in your Authenticator app", code))
+                            .size(11)
+                            .color(crate::types::COLOR_TEXT)
+                            .wrapping(iced::widget::text::Wrapping::Word),
+                    ]
+                    .spacing(6),
+                )
+                .width(Length::Fill)
+                .max_width(380.0)
+                .padding(12)
+                .style(|_| container::Style {
+                    background: Some(iced::Color::from_rgba(0.80, 0.60, 0.30, 0.08).into()),
+                    border: Border {
+                        color: crate::types::COLOR_WARNING,
+                        width: 1.5,
+                        radius: 8.0.into(),
+                    },
+                    ..Default::default()
+                }),
+            );
+        }
+
+        if let Some(warning) = &self.automation_warning {
+            content = content.push(
+                container(
+                    column![
+                        row![
+                            iced::widget::svg(iced::widget::svg::Handle::from_memory(
+                                crate::types::ICON_INFO_SVG
+                            ))
+                            .width(18)
+                            .height(18)
+                            .style(|_theme: &iced::Theme, _status| iced::widget::svg::Style {
+                                color: Some(crate::types::COLOR_WARNING)
+                            }),
+                            text("Automation Issue")
+                                .size(13)
+                                .color(crate::types::COLOR_WARNING),
+                        ]
+                        .spacing(8)
+                        .align_y(Alignment::Center),
+                        text(warning)
+                            .size(11)
+                            .color(crate::types::COLOR_TEXT)
+                            .wrapping(iced::widget::text::Wrapping::Word),
+                    ]
+                    .spacing(6),
+                )
+                .width(Length::Fill)
+                .max_width(380.0)
+                .padding(12)
+                .style(|_| container::Style {
+                    background: Some(iced::Color::from_rgba(0.80, 0.60, 0.30, 0.08).into()),
+                    border: Border {
+                        color: crate::types::COLOR_WARNING,
+                        width: 1.5,
+                        radius: 8.0.into(),
+                    },
+                    ..Default::default()
+                }),
+            );
+        }
 
         // Add connection details when connected
         if self.status == ConnectionStatus::Connected {

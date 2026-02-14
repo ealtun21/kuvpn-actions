@@ -36,6 +36,7 @@ pub struct KuVpnGui {
     pub mfa_info: Option<String>,
     pub status_message: String,
     pub error_message: Option<String>,
+    pub error_category: Option<kuvpn::ErrorCategory>,
     pub rotation: f32,
     pub oc_test_result: Option<bool>,
     pub automation_warning: Option<String>,
@@ -275,6 +276,7 @@ impl KuVpnGui {
                 {
                     self.automation_warning = None; // Clear previous warnings
                     self.error_message = None;
+                    self.error_category = None;
                     self.status_message = "Initializing...".to_string();
                     self.connection_start = Some(Instant::now());
                     let (headless, no_auto_login) = login_mode_flags(self.settings.login_mode_val);
@@ -377,7 +379,10 @@ impl KuVpnGui {
                                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                             }
                             let _ = output
-                                .send(Message::ConnectionFinished(session_c.last_error()))
+                                .send(Message::ConnectionFinished(
+                                    session_c.last_error(),
+                                    session_c.error_category(),
+                                ))
                                 .await;
                         },
                     ));
@@ -393,8 +398,9 @@ impl KuVpnGui {
             Message::LogAppended(raw_log) => {
                 if let Some(parsed) = kuvpn::ParsedLog::parse(&raw_log) {
                     // Update UI status/error messages
+                    // Note: Don't overwrite error_message from logs since ConnectionFinished
+                    // provides properly formatted, categorized error messages
                     match parsed.level {
-                        log::Level::Error => self.error_message = Some(parsed.message.clone()),
                         log::Level::Warn | log::Level::Info => {
                             self.status_message = parsed.message.clone()
                         }
@@ -479,7 +485,7 @@ impl KuVpnGui {
                 }
                 Task::none()
             }
-            Message::ConnectionFinished(err) => {
+            Message::ConnectionFinished(err, category) => {
                 self.status = if err.is_some() {
                     ConnectionStatus::Error
                 } else {
@@ -494,19 +500,31 @@ impl KuVpnGui {
                 }
 
                 if let Some(e) = err {
-                    self.error_message = Some(e.clone());
                     self.logs.push(format!("[!] Session Error: {}", e));
 
-                    // Detect automation failure and set warning
-                    if e.contains("AUTOMATION_FAILED") {
+                    // Store the error category for display
+                    self.error_category = category;
+
+                    // Check if this is an automation failure that needs the special banner
+                    if matches!(category, Some(kuvpn::ErrorCategory::Authentication))
+                        && (e.contains("Full Auto mode unable to complete login")
+                            || e.contains("Could not find a handler"))
+                    {
+                        // For automation failures, show simple actionable message
                         self.automation_warning = Some(
-                            "Full Auto mode encountered repeated issues.\n\n\
-                             Suggestions:\n\
-                             • Switch to Manual mode to complete login yourself\n\
-                             • Use Visual Auto mode and record a screen video for bug reporting\n\
-                             • Try clearing session data (Wipe Session button)"
+                            "Full Auto mode was unable to complete the login flow.\n\n\
+                             What to do:\n\
+                             • Switch to Manual mode and complete login yourself\n\
+                             • Try clearing session data (Wipe Session button)\n\
+                             • Use Visual Auto mode to record a video for bug reporting\n\n\
+                             Check console/logs for technical details."
                                 .to_string(),
                         );
+                        // Clear error_message so we don't show it twice
+                        self.error_message = None;
+                    } else {
+                        // For other errors, show in the normal error display
+                        self.error_message = Some(e.clone());
                     }
                 }
                 Task::none()
@@ -717,6 +735,7 @@ impl Default for KuVpnGui {
             mfa_info: None,
             status_message: "Ready to connect".to_string(),
             error_message: None,
+            error_category: None,
             rotation: 0.0,
             oc_test_result: None,
             automation_warning: None,

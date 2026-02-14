@@ -355,58 +355,15 @@ impl KuVpnGui {
 
     fn view_connection_tab(&self) -> Element<'_, Message> {
         let status_view = self.view_status_circle();
-        let mfa_banner = self.view_mfa_banner();
         let action_section = self.view_actions();
 
-        // Automation warning banner
-        let automation_warning_banner: Element<'_, Message> =
-            if let Some(warning) = &self.automation_warning {
-                container(
-                    column![
-                        row![
-                            svg(svg::Handle::from_memory(crate::types::ICON_INFO_SVG))
-                                .width(18)
-                                .height(18)
-                                .style(|_theme: &iced::Theme, _status| svg::Style {
-                                    color: Some(crate::types::COLOR_WARNING)
-                                }),
-                            text("Automation Issue")
-                                .size(13)
-                                .color(crate::types::COLOR_WARNING),
-                        ]
-                        .spacing(8)
-                        .align_y(Alignment::Center),
-                        text(warning).size(11).color(crate::types::COLOR_TEXT).wrapping(iced::widget::text::Wrapping::Word),
-                    ]
-                    .spacing(6),
-                )
-                .width(Length::Fill)
-                .max_width(380.0)
-                .padding(12)
-                .style(|_| container::Style {
-                    background: Some(iced::Color::from_rgba(0.80, 0.60, 0.30, 0.08).into()),
-                    border: Border {
-                        color: crate::types::COLOR_WARNING,
-                        width: 1.5,
-                        radius: 8.0.into(),
-                    },
-                    ..Default::default()
-                })
-                .into()
-            } else {
-                container(iced::widget::Space::new().height(0)).into()
-            };
+        // Banners are now part of status_view, so we don't need them separately
 
         // Main connection card
         container(
-            column![
-                status_view,
-                mfa_banner,
-                automation_warning_banner,
-                action_section
-            ]
-            .spacing(10)
-            .align_x(Alignment::Center)
+            column![status_view, action_section]
+                .spacing(10)
+                .align_x(Alignment::Center)
             .padding([20, 20])
         )
         .width(Length::Fill)
