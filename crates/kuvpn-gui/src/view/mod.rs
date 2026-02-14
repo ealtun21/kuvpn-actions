@@ -408,23 +408,23 @@ impl KuVpnGui {
                 container(iced::widget::Space::new().height(0)).into()
             };
 
-        // Wrap in a card for better visual hierarchy
+        // Main connection card
         container(
-            container(
-                column![
-                    status_view,
-                    mfa_banner,
-                    automation_warning_banner,
-                    action_section
-                ]
-                .spacing(22)
-                .align_x(Alignment::Center)
-                .padding(10)
-            )
-            .width(Length::Fill)
-            .center_x(Length::Fill)
+            column![
+                status_view,
+                mfa_banner,
+                automation_warning_banner,
+                action_section
+            ]
+            .spacing(24)
+            .align_x(Alignment::Center)
+            .padding([30, 20])
         )
         .width(Length::Fill)
+        .height(Length::Fill)
+        .center_x(Length::Fill)
+        .center_y(Length::Fill)
+        .style(crate::types::card)
         .into()
     }
 
