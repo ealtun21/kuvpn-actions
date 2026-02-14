@@ -1,6 +1,7 @@
 use futures::SinkExt;
 use iced::{Subscription, Task};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use tray_icon::{
     menu::{MenuEvent, MenuItem},
     TrayIcon, TrayIconEvent,
@@ -38,6 +39,7 @@ pub struct KuVpnGui {
     pub is_visible: bool,
     pub window_close_pending: bool,
     pub last_tray_click: Option<std::time::Instant>,
+    pub connection_start: Option<Instant>,
 }
 
 impl KuVpnGui {
@@ -211,6 +213,7 @@ impl KuVpnGui {
             // ConnectPressed handled above
             Message::ConnectPressed => {
                 if self.status == ConnectionStatus::Disconnected || self.status == ConnectionStatus::Error {
+                    self.connection_start = Some(Instant::now());
                     let (headless, no_auto_login) = login_mode_flags(self.settings.login_mode_val);
 
                     let config = SessionConfig {
@@ -386,6 +389,7 @@ impl KuVpnGui {
             Message::ConnectionFinished(err) => {
                 self.status = ConnectionStatus::Disconnected;
                 self.mfa_info = None;
+                self.connection_start = None;
                 if let Some(e) = err {
                     self.logs.push(format!("[!] Session Error: {}", e));
                 }
@@ -418,6 +422,13 @@ impl KuVpnGui {
             }
             Message::OpenConnectTestResult(success) => {
                 self.oc_test_result = Some(success);
+                Task::none()
+            }
+            Message::CopyLogs => {
+                let logs_text = self.logs.join("\n");
+                if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                    let _ = clipboard.set_text(logs_text);
+                }
                 Task::none()
             }
         }
@@ -498,6 +509,7 @@ impl Default for KuVpnGui {
             is_visible: false,
             window_close_pending: false,
             last_tray_click: None,
+            connection_start: None,
         }
     }
 }

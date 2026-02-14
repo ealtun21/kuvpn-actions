@@ -1,5 +1,6 @@
-use iced::widget::button;
-use iced::{Border, Color};
+use iced::widget::{button, toggler};
+use iced::{Border, Color, Shadow, Vector};
+use iced::widget::container;
 use std::sync::{Arc, Mutex};
 use tokio::sync::oneshot;
 use tray_icon::{menu::MenuEvent, TrayIconEvent};
@@ -29,6 +30,14 @@ pub const ICON_TRASH_SVG: &[u8] = r#"<svg viewBox="0 0 24 24" fill="none" stroke
 pub const ICON_POWER_SVG: &[u8] = r#"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>"#.as_bytes();
 
 pub use kuvpn::ConnectionStatus;
+
+#[derive(Debug, Clone, Copy)]
+pub enum SegmentPosition {
+    Left,
+    Middle,
+    Right,
+    Single,
+}
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -63,6 +72,7 @@ pub enum Message {
     ResetSettings,
     TestOpenConnect,
     OpenConnectTestResult(bool),
+    CopyLogs,
 }
 
 #[derive(Debug)]
@@ -115,6 +125,25 @@ pub fn login_mode_name(val: f32) -> &'static str {
     }
 }
 
+// --- Container Styles ---
+
+pub fn card(_theme: &iced::Theme) -> container::Style {
+    container::Style {
+        background: Some(COLOR_SURFACE.into()),
+        border: Border {
+            color: Color::from_rgb(0.18, 0.18, 0.18),
+            width: 1.0,
+            radius: 12.0.into(),
+        },
+        shadow: Shadow {
+            color: Color::from_rgba(0.0, 0.0, 0.0, 0.5),
+            offset: Vector::new(0.0, 4.0),
+            blur_radius: 12.0,
+        },
+        ..Default::default()
+    }
+}
+
 // --- Custom Button Styles ---
 
 pub fn btn_primary(_theme: &iced::Theme, status: button::Status) -> button::Style {
@@ -122,18 +151,33 @@ pub fn btn_primary(_theme: &iced::Theme, status: button::Status) -> button::Styl
         background: Some(COLOR_ACCENT.into()),
         text_color: Color::WHITE,
         border: Border {
-            radius: 8.0.into(),
+            radius: 10.0.into(),
             ..Default::default()
+        },
+        shadow: Shadow {
+            color: Color::from_rgba(0.50, 0.0, 0.125, 0.3),
+            offset: Vector::new(0.0, 2.0),
+            blur_radius: 8.0,
         },
         ..Default::default()
     };
     match status {
         button::Status::Hovered => button::Style {
             background: Some(Color::from_rgb(0.60, 0.06, 0.19).into()),
+            shadow: Shadow {
+                color: Color::from_rgba(0.50, 0.0, 0.125, 0.5),
+                offset: Vector::new(0.0, 4.0),
+                blur_radius: 16.0,
+            },
             ..base
         },
         button::Status::Pressed => button::Style {
             background: Some(Color::from_rgb(0.40, 0.0, 0.10).into()),
+            shadow: Shadow {
+                color: Color::from_rgba(0.50, 0.0, 0.125, 0.2),
+                offset: Vector::new(0.0, 1.0),
+                blur_radius: 4.0,
+            },
             ..base
         },
         _ => base,
@@ -147,7 +191,12 @@ pub fn btn_secondary(_theme: &iced::Theme, status: button::Status) -> button::St
         border: Border {
             color: Color::from_rgb(0.25, 0.25, 0.25),
             width: 1.0,
-            radius: 8.0.into(),
+            radius: 10.0.into(),
+        },
+        shadow: Shadow {
+            color: Color::from_rgba(0.0, 0.0, 0.0, 0.2),
+            offset: Vector::new(0.0, 1.0),
+            blur_radius: 4.0,
         },
         ..Default::default()
     };
@@ -157,12 +206,22 @@ pub fn btn_secondary(_theme: &iced::Theme, status: button::Status) -> button::St
             border: Border {
                 color: Color::from_rgb(0.35, 0.35, 0.35),
                 width: 1.0,
-                radius: 8.0.into(),
+                radius: 10.0.into(),
+            },
+            shadow: Shadow {
+                color: Color::from_rgba(0.0, 0.0, 0.0, 0.3),
+                offset: Vector::new(0.0, 2.0),
+                blur_radius: 8.0,
             },
             ..base
         },
         button::Status::Pressed => button::Style {
             background: Some(Color::from_rgb(0.08, 0.08, 0.08).into()),
+            shadow: Shadow {
+                color: Color::from_rgba(0.0, 0.0, 0.0, 0.15),
+                offset: Vector::new(0.0, 1.0),
+                blur_radius: 2.0,
+            },
             ..base
         },
         _ => base,
@@ -175,20 +234,149 @@ pub fn btn_danger(_theme: &iced::Theme, status: button::Status) -> button::Style
         background: Some(base_color.into()),
         text_color: Color::WHITE,
         border: Border {
-            radius: 8.0.into(),
+            radius: 10.0.into(),
             ..Default::default()
+        },
+        shadow: Shadow {
+            color: Color::from_rgba(0.8, 0.2, 0.2, 0.3),
+            offset: Vector::new(0.0, 2.0),
+            blur_radius: 8.0,
         },
         ..Default::default()
     };
     match status {
         button::Status::Hovered => button::Style {
             background: Some(Color::from_rgb(0.9, 0.25, 0.25).into()),
+            shadow: Shadow {
+                color: Color::from_rgba(0.8, 0.2, 0.2, 0.5),
+                offset: Vector::new(0.0, 4.0),
+                blur_radius: 16.0,
+            },
             ..base
         },
         button::Status::Pressed => button::Style {
             background: Some(Color::from_rgb(0.65, 0.15, 0.15).into()),
+            shadow: Shadow {
+                color: Color::from_rgba(0.8, 0.2, 0.2, 0.2),
+                offset: Vector::new(0.0, 1.0),
+                blur_radius: 4.0,
+            },
             ..base
         },
         _ => base,
+    }
+}
+
+pub fn btn_segment_selected(_theme: &iced::Theme, _status: button::Status, position: SegmentPosition) -> button::Style {
+    let radius = match position {
+        SegmentPosition::Left => iced::border::Radius {
+            top_left: 8.0,
+            top_right: 0.0,
+            bottom_right: 0.0,
+            bottom_left: 8.0,
+        },
+        SegmentPosition::Middle => iced::border::Radius {
+            top_left: 0.0,
+            top_right: 0.0,
+            bottom_right: 0.0,
+            bottom_left: 0.0,
+        },
+        SegmentPosition::Right => iced::border::Radius {
+            top_left: 0.0,
+            top_right: 8.0,
+            bottom_right: 8.0,
+            bottom_left: 0.0,
+        },
+        SegmentPosition::Single => iced::border::Radius {
+            top_left: 8.0,
+            top_right: 8.0,
+            bottom_right: 8.0,
+            bottom_left: 8.0,
+        },
+    };
+
+    button::Style {
+        background: Some(COLOR_ACCENT.into()),
+        text_color: Color::WHITE,
+        border: Border {
+            radius: radius,
+            ..Default::default()
+        },
+        shadow: Shadow::default(),
+        ..Default::default()
+    }
+}
+
+pub fn btn_segment_unselected(_theme: &iced::Theme, status: button::Status, position: SegmentPosition) -> button::Style {
+    let radius = match position {
+        SegmentPosition::Left => iced::border::Radius {
+            top_left: 8.0,
+            top_right: 0.0,
+            bottom_right: 0.0,
+            bottom_left: 8.0,
+        },
+        SegmentPosition::Middle => iced::border::Radius {
+            top_left: 0.0,
+            top_right: 0.0,
+            bottom_right: 0.0,
+            bottom_left: 0.0,
+        },
+        SegmentPosition::Right => iced::border::Radius {
+            top_left: 0.0,
+            top_right: 8.0,
+            bottom_right: 8.0,
+            bottom_left: 0.0,
+        },
+        SegmentPosition::Single => iced::border::Radius {
+            top_left: 8.0,
+            top_right: 8.0,
+            bottom_right: 8.0,
+            bottom_left: 8.0,
+        },
+    };
+
+    let base = button::Style {
+        background: Some(Color::TRANSPARENT.into()),
+        text_color: COLOR_TEXT,
+        border: Border {
+            color: Color::from_rgb(0.25, 0.25, 0.25),
+            width: 1.0,
+            radius: radius,
+        },
+        shadow: Shadow::default(),
+        ..Default::default()
+    };
+
+    match status {
+        button::Status::Hovered => button::Style {
+            background: Some(Color::from_rgb(0.15, 0.15, 0.15).into()),
+            border: Border {
+                color: Color::from_rgb(0.35, 0.35, 0.35),
+                width: 1.0,
+                radius: radius,
+            },
+            ..base
+        },
+        button::Status::Pressed => button::Style {
+            background: Some(Color::from_rgb(0.10, 0.10, 0.10).into()),
+            ..base
+        },
+        _ => base,
+    }
+}
+
+pub fn toggler_neutral(theme: &iced::Theme, status: toggler::Status) -> toggler::Style {
+    let default_style = toggler::default(theme, status);
+
+    toggler::Style {
+        background: Color::from_rgb(0.20, 0.20, 0.20).into(),
+        background_border_width: default_style.background_border_width,
+        background_border_color: default_style.background_border_color,
+        foreground: COLOR_TEXT.into(),
+        foreground_border_width: default_style.foreground_border_width,
+        foreground_border_color: default_style.foreground_border_color,
+        border_radius: default_style.border_radius,
+        padding_ratio: default_style.padding_ratio,
+        text_color: default_style.text_color,
     }
 }
