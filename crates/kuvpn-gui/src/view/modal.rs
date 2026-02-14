@@ -11,45 +11,46 @@ impl KuVpnGui {
             column![
                 row![
                     svg(svg::Handle::from_memory(ICON_LOCK_SVG))
-                        .width(30)
-                        .height(30)
+                        .width(26)
+                        .height(26)
                         .style(|_, _| svg::Style {
                             color: Some(COLOR_ACCENT)
                         }),
-                    text("Campus Gateway").size(24),
+                    text("Campus Gateway").size(20),
                 ]
-                .spacing(15)
+                .spacing(12)
                 .align_y(Alignment::Center),
-                text(&req.msg).size(16).color(COLOR_TEXT),
+                text(&req.msg).size(14).color(COLOR_TEXT),
                 if req.is_password {
                     text_input("Credentials", &self.current_input)
                         .on_input(Message::InputChanged)
                         .secure(true)
                         .on_submit(Message::SubmitInput)
-                        .padding(15)
+                        .padding(12)
                 } else {
                     text_input("Response Required", &self.current_input)
                         .on_input(Message::InputChanged)
                         .on_submit(Message::SubmitInput)
-                        .padding(15)
+                        .padding(12)
                 },
                 button(
                     text("VERIFY")
-                        .width(Length::Fill)
-                        .align_x(Alignment::Center)
+                        .size(14)
+                        .color(Color::WHITE)
                 )
-                .padding(12)
+                .width(Length::Fill)
+                .padding([12, 16])
                 .on_press(Message::SubmitInput)
                 .style(btn_primary)
             ]
-            .spacing(25)
-            .padding(40),
+            .spacing(20)
+            .padding(32),
         )
-        .width(Length::Fixed(450.0))
+        .width(Length::Fixed(400.0))
         .style(|_| container::Style {
             background: Some(COLOR_SURFACE.into()),
             border: Border {
-                radius: 12.0.into(),
+                radius: 10.0.into(),
                 color: COLOR_ACCENT,
                 width: 1.0,
             },
