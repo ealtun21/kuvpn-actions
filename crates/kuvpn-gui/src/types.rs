@@ -97,17 +97,6 @@ pub fn log_level_from_slider(val: f32) -> log::LevelFilter {
     }
 }
 
-pub fn log_level_name(val: f32) -> &'static str {
-    match val.round() as i32 {
-        0 => "Off",
-        1 => "Error",
-        2 => "Warn",
-        3 => "Info",
-        4 => "Debug",
-        5 => "Trace",
-        _ => "Info",
-    }
-}
 
 pub fn login_mode_flags(val: f32) -> (bool, bool) {
     match val.round() as i32 {
@@ -117,13 +106,6 @@ pub fn login_mode_flags(val: f32) -> (bool, bool) {
     }
 }
 
-pub fn login_mode_name(val: f32) -> &'static str {
-    match val.round() as i32 {
-        0 => "Full Automatic (Headless + Auto-Login)",
-        1 => "Visual Automatic (Browser + Auto-Login)",
-        _ => "Manual Mode (Browser + Manual Entry)",
-    }
-}
 
 // --- Container Styles ---
 
