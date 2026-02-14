@@ -426,10 +426,16 @@ impl KuVpnGui {
             }
             Message::CopyLogs => {
                 let logs_text = self.logs.join("\n");
-                if let Ok(mut clipboard) = arboard::Clipboard::new() {
-                    let _ = clipboard.set_text(logs_text);
-                }
-                Task::none()
+                Task::perform(
+                    async move {
+                        if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                            let _ = clipboard.set_text(logs_text);
+                            // Keep clipboard alive for 500ms to allow clipboard managers to access it
+                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                        }
+                    },
+                    |_| Message::Tick,
+                )
             }
         }
     }
