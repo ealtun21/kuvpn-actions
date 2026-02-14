@@ -3,11 +3,37 @@ use tray_icon::{
     TrayIcon, TrayIconBuilder,
 };
 
+use crate::types::{TRAY_ICON_CONNECTED, TRAY_ICON_DISCONNECTED, TRAY_ICON_NORMAL};
+
 pub struct TrayComponents {
     pub tray: TrayIcon,
     pub show_item: MenuItem,
     pub connect_item: MenuItem,
     pub disconnect_item: MenuItem,
+}
+
+/// Convert SVG bytes to a tray icon
+fn svg_to_tray_icon(svg_bytes: &[u8]) -> Result<tray_icon::Icon, Box<dyn std::error::Error>> {
+    let opt = resvg::usvg::Options::default();
+    let tree = resvg::usvg::Tree::from_data(svg_bytes, &opt)?;
+
+    // Render at a reasonable size for tray icons
+    let size = 512;
+
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(size, size)
+        .ok_or("Failed to create pixmap")?;
+
+    let transform = resvg::tiny_skia::Transform::from_scale(
+        size as f32 / tree.size().width(),
+        size as f32 / tree.size().height(),
+    );
+
+    resvg::render(&tree, transform, &mut pixmap.as_mut());
+
+    // Convert RGBA8 to the format expected by tray-icon
+    let rgba_data = pixmap.data().to_vec();
+
+    Ok(tray_icon::Icon::from_rgba(rgba_data, size, size)?)
 }
 
 pub fn init_tray() -> TrayComponents {
@@ -25,16 +51,20 @@ pub fn init_tray() -> TrayComponents {
     ])
     .expect("Failed to create tray menu");
 
-    let icon = {
-        let mut rgba = vec![0u8; 32 * 32 * 4];
-        for i in 0..32 * 32 {
-            rgba[i * 4] = 128; // R
-            rgba[i * 4 + 1] = 0; // G
-            rgba[i * 4 + 2] = 32; // B
-            rgba[i * 4 + 3] = 255; // A
-        }
-        tray_icon::Icon::from_rgba(rgba, 32, 32).expect("Failed to create icon")
-    };
+    // Use the normal/idle icon by default
+    let icon = svg_to_tray_icon(TRAY_ICON_NORMAL)
+        .unwrap_or_else(|e| {
+            log::warn!("Failed to load tray icon from SVG: {}, using fallback", e);
+            // Fallback to a simple colored square
+            let mut rgba = vec![0u8; 32 * 32 * 4];
+            for i in 0..32 * 32 {
+                rgba[i * 4] = 128; // R
+                rgba[i * 4 + 1] = 0; // G
+                rgba[i * 4 + 2] = 32; // B
+                rgba[i * 4 + 3] = 255; // A
+            }
+            tray_icon::Icon::from_rgba(rgba, 32, 32).expect("Failed to create fallback icon")
+        });
 
     let tray = TrayIconBuilder::new()
         .with_menu(Box::new(tray_menu))
@@ -48,5 +78,26 @@ pub fn init_tray() -> TrayComponents {
         show_item,
         connect_item,
         disconnect_item,
+    }
+}
+
+/// Update the tray icon based on connection status
+pub fn update_tray_icon(tray: &TrayIcon, status: kuvpn::ConnectionStatus) {
+    let svg_bytes = match status {
+        kuvpn::ConnectionStatus::Connected => TRAY_ICON_CONNECTED,
+        kuvpn::ConnectionStatus::Disconnected => TRAY_ICON_NORMAL,
+        kuvpn::ConnectionStatus::Error => TRAY_ICON_DISCONNECTED,
+        kuvpn::ConnectionStatus::Connecting | kuvpn::ConnectionStatus::Disconnecting => {
+            // Keep current icon during transition states
+            return;
+        }
+    };
+
+    if let Ok(icon) = svg_to_tray_icon(svg_bytes) {
+        if let Err(e) = tray.set_icon(Some(icon)) {
+            log::error!("Failed to update tray icon: {}", e);
+        }
+    } else {
+        log::error!("Failed to convert SVG to tray icon");
     }
 }

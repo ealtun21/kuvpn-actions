@@ -456,6 +456,12 @@ impl KuVpnGui {
                 };
                 self.mfa_info = None;
                 self.connection_start = None;
+
+                // Update tray icon based on final status
+                if let Some(tray) = &self.tray_icon {
+                    crate::tray::update_tray_icon(tray, self.status);
+                }
+
                 if let Some(e) = err {
                     self.error_message = Some(e.clone());
                     self.logs.push(format!("[!] Session Error: {}", e));
@@ -482,6 +488,10 @@ impl KuVpnGui {
                     }
                     if let Some(item) = &self.disconnect_item {
                         let _ = item.set_enabled(status == ConnectionStatus::Connected);
+                    }
+                    // Update tray icon based on new status
+                    if let Some(tray) = &self.tray_icon {
+                        crate::tray::update_tray_icon(tray, status);
                     }
                 }
                 Task::none()
