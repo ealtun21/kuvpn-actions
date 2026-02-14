@@ -20,7 +20,7 @@ impl Default for GuiSettings {
             domain: "vpn.ku.edu.tr".to_string(),
             email: String::new(),
             escalation_tool: "pkexec".to_string(),
-            log_level_val: 1.0,
+            log_level_val: 3.0, // Default: Info level
             openconnect_path: "openconnect".to_string(),
             login_mode_val: 0.0,
             close_to_tray: true,

@@ -9,8 +9,11 @@ use tray_icon::{
 
 use crate::config::GuiSettings;
 use crate::provider::{GuiInteraction, GuiProvider};
-use crate::types::{ConnectionStatus, InputRequest, InputRequestWrapper, Message, log_level_from_slider, login_mode_flags};
-use kuvpn::{VpnSession, SessionConfig};
+use crate::types::{
+    log_level_from_slider, login_mode_flags, ConnectionStatus, InputRequest, InputRequestWrapper,
+    Message,
+};
+use kuvpn::{SessionConfig, VpnSession};
 
 pub struct KuVpnGui {
     // Settings
@@ -26,7 +29,8 @@ pub struct KuVpnGui {
     pub mfa_info: Option<String>,
     pub rotation: f32,
     pub oc_test_result: Option<bool>,
-    
+    pub automation_warning: Option<String>,
+
     // VPN Session
     pub session: Option<Arc<VpnSession>>,
 
@@ -205,14 +209,19 @@ impl KuVpnGui {
                 Task::none()
             }
             Message::Tick => {
-                if self.status == ConnectionStatus::Connecting || self.status == ConnectionStatus::Disconnecting {
+                if self.status == ConnectionStatus::Connecting
+                    || self.status == ConnectionStatus::Disconnecting
+                {
                     self.rotation += 0.1;
                 }
                 Task::none()
             }
             // ConnectPressed handled above
             Message::ConnectPressed => {
-                if self.status == ConnectionStatus::Disconnected || self.status == ConnectionStatus::Error {
+                if self.status == ConnectionStatus::Disconnected
+                    || self.status == ConnectionStatus::Error
+                {
+                    self.automation_warning = None; // Clear previous warnings
                     self.connection_start = Some(Instant::now());
                     let (headless, no_auto_login) = login_mode_flags(self.settings.login_mode_val);
 
@@ -222,8 +231,16 @@ impl KuVpnGui {
                         user_agent: "Mozilla/5.0".to_string(),
                         headless,
                         no_auto_login,
-                        email: if self.settings.email.is_empty() { None } else { Some(self.settings.email.clone()) },
-                        openconnect_path: if self.settings.openconnect_path.is_empty() { "openconnect".to_string() } else { self.settings.openconnect_path.clone() },
+                        email: if self.settings.email.is_empty() {
+                            None
+                        } else {
+                            Some(self.settings.email.clone())
+                        },
+                        openconnect_path: if self.settings.openconnect_path.is_empty() {
+                            "openconnect".to_string()
+                        } else {
+                            self.settings.openconnect_path.clone()
+                        },
                         escalation_tool: Some(self.settings.escalation_tool.clone()),
                         interface_name: "kuvpn0".to_string(),
                     };
@@ -252,11 +269,12 @@ impl KuVpnGui {
                         100,
                         move |mut output: iced::futures::channel::mpsc::Sender<Message>| async move {
                             use futures::SinkExt;
-                            let (interaction_tx, mut interaction_rx) = tokio::sync::mpsc::channel(10);
-                            
+                            let (interaction_tx, mut interaction_rx) =
+                                tokio::sync::mpsc::channel(10);
+
                             let provider = Arc::new(GuiProvider {
                                 interaction_tx,
-                                cancel_token: kuvpn::utils::CancellationToken::new(), 
+                                cancel_token: kuvpn::utils::CancellationToken::new(),
                             });
 
                             let session_c = Arc::clone(&session);
@@ -284,7 +302,11 @@ impl KuVpnGui {
                                 // Poll interactions
                                 match interaction_rx.try_recv() {
                                     Ok(GuiInteraction::Request(req)) => {
-                                        let _ = output.send(Message::RequestInput(Arc::new(InputRequestWrapper(Mutex::new(Some(req)))))).await;
+                                        let _ = output
+                                            .send(Message::RequestInput(Arc::new(
+                                                InputRequestWrapper(Mutex::new(Some(req))),
+                                            )))
+                                            .await;
                                     }
                                     Ok(GuiInteraction::MfaPush(code)) => {
                                         let _ = output.send(Message::MfaPushReceived(code)).await;
@@ -292,13 +314,17 @@ impl KuVpnGui {
                                     Ok(GuiInteraction::MfaComplete) => {
                                         let _ = output.send(Message::MfaCompleteReceived).await;
                                     }
-                                    Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => break,
+                                    Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
+                                        break
+                                    }
                                     Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {}
                                 }
 
                                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                             }
-                            let _ = output.send(Message::ConnectionFinished(session_c.last_error())).await;
+                            let _ = output
+                                .send(Message::ConnectionFinished(session_c.last_error()))
+                                .await;
                         },
                     ));
                 }
@@ -312,14 +338,16 @@ impl KuVpnGui {
             }
             Message::LogAppended(raw_log) => {
                 if let Some(parsed) = kuvpn::ParsedLog::parse(&raw_log) {
-                    let user_filter = if let Ok(guard) = crate::logger::GUI_LOGGER.user_level.lock() {
+                    let user_filter = if let Ok(guard) = crate::logger::GUI_LOGGER.user_level.lock()
+                    {
                         *guard
                     } else {
                         log::LevelFilter::Info
                     };
 
                     if parsed.level <= user_filter {
-                        self.logs.push(format!("[{}] {}", parsed.prefix(), parsed.message));
+                        self.logs
+                            .push(format!("[{}] {}", parsed.prefix(), parsed.message));
                         if self.logs.len() > 500 {
                             self.logs.remove(0);
                         }
@@ -327,7 +355,7 @@ impl KuVpnGui {
                 }
                 Task::none()
             }
-            
+
             Message::MfaPushReceived(code) => {
                 self.mfa_info = Some(code);
                 if !self.is_visible {
@@ -392,6 +420,18 @@ impl KuVpnGui {
                 self.connection_start = None;
                 if let Some(e) = err {
                     self.logs.push(format!("[!] Session Error: {}", e));
+
+                    // Detect automation failure and set warning
+                    if e.contains("AUTOMATION_FAILED") {
+                        self.automation_warning = Some(
+                            "Full Auto mode encountered repeated issues.\n\n\
+                             Suggestions:\n\
+                             • Switch to Manual mode to complete login yourself\n\
+                             • Use Visual Auto mode and record a screen video for bug reporting\n\
+                             • Try clearing session data (Wipe Session button)"
+                                .to_string(),
+                        );
+                    }
                 }
                 Task::none()
             }
@@ -443,7 +483,9 @@ impl KuVpnGui {
     pub fn subscription(&self) -> Subscription<Message> {
         let mut subs = vec![];
 
-        if self.status == ConnectionStatus::Connecting || self.status == ConnectionStatus::Disconnecting {
+        if self.status == ConnectionStatus::Connecting
+            || self.status == ConnectionStatus::Disconnecting
+        {
             subs.push(
                 iced::time::every(std::time::Duration::from_millis(16)).map(|_| Message::Tick),
             );
@@ -506,6 +548,7 @@ impl Default for KuVpnGui {
             mfa_info: None,
             rotation: 0.0,
             oc_test_result: None,
+            automation_warning: None,
             session: None,
             tray_icon: None,
             show_item: None,

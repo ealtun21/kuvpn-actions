@@ -7,7 +7,9 @@ mod args;
 
 use args::Args;
 use clap::Parser;
-use kuvpn::{init_logger, run_login_and_get_dsid, ParsedLog, SessionConfig, VpnSession, ConnectionStatus};
+use kuvpn::{
+    init_logger, run_login_and_get_dsid, ConnectionStatus, ParsedLog, SessionConfig, VpnSession,
+};
 use log::{error, info};
 use std::process::ExitCode;
 use std::sync::Arc;

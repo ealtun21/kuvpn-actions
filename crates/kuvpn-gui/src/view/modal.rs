@@ -1,6 +1,6 @@
 use crate::app::KuVpnGui;
 use crate::types::{
-    InputRequest, Message, COLOR_ACCENT, COLOR_SURFACE, COLOR_TEXT, ICON_LOCK_SVG, btn_primary,
+    btn_primary, InputRequest, Message, COLOR_ACCENT, COLOR_SURFACE, COLOR_TEXT, ICON_LOCK_SVG,
 };
 use iced::widget::{button, column, container, row, svg, text, text_input};
 use iced::{Alignment, Border, Color, Element, Length};
@@ -13,7 +13,9 @@ impl KuVpnGui {
                     svg(svg::Handle::from_memory(ICON_LOCK_SVG))
                         .width(30)
                         .height(30)
-                        .style(|_, _| svg::Style { color: Some(COLOR_ACCENT) }),
+                        .style(|_, _| svg::Style {
+                            color: Some(COLOR_ACCENT)
+                        }),
                     text("Campus Gateway").size(24),
                 ]
                 .spacing(15)

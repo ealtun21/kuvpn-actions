@@ -1,6 +1,6 @@
 use iced::widget::button;
-use iced::{Border, Color, Shadow, Vector};
 use iced::widget::container;
+use iced::{Border, Color, Shadow, Vector};
 use std::sync::{Arc, Mutex};
 use tokio::sync::oneshot;
 use tray_icon::{menu::MenuEvent, TrayIconEvent};
@@ -267,7 +267,11 @@ pub fn btn_danger(_theme: &iced::Theme, status: button::Status) -> button::Style
     }
 }
 
-pub fn btn_segment_selected(_theme: &iced::Theme, _status: button::Status, position: SegmentPosition) -> button::Style {
+pub fn btn_segment_selected(
+    _theme: &iced::Theme,
+    _status: button::Status,
+    position: SegmentPosition,
+) -> button::Style {
     let radius = match position {
         SegmentPosition::Left => iced::border::Radius {
             top_left: 8.0,
@@ -307,7 +311,11 @@ pub fn btn_segment_selected(_theme: &iced::Theme, _status: button::Status, posit
     }
 }
 
-pub fn btn_segment_unselected(_theme: &iced::Theme, status: button::Status, position: SegmentPosition) -> button::Style {
+pub fn btn_segment_unselected(
+    _theme: &iced::Theme,
+    status: button::Status,
+    position: SegmentPosition,
+) -> button::Style {
     let radius = match position {
         SegmentPosition::Left => iced::border::Radius {
             top_left: 8.0,
@@ -364,4 +372,3 @@ pub fn btn_segment_unselected(_theme: &iced::Theme, status: button::Status, posi
         _ => base,
     }
 }
-
