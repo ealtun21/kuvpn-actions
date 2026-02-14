@@ -8,6 +8,11 @@ use tray_icon::{menu::MenuEvent, TrayIconEvent};
 // --- Constants & Styling ---
 pub const KU_LOGO_BYTES: &[u8] = include_bytes!("../assets/ku.svg");
 
+// Tray Icons
+pub const TRAY_ICON_NORMAL: &[u8] = include_bytes!("../assets/vpn-normal.svg");
+pub const TRAY_ICON_CONNECTED: &[u8] = include_bytes!("../assets/vpn-connected.svg");
+pub const TRAY_ICON_DISCONNECTED: &[u8] = include_bytes!("../assets/vpn-disconnected.svg");
+
 // Colors (Refined Koç University Palette)
 pub const COLOR_BG: Color = Color::from_rgb(0.07, 0.07, 0.07);
 pub const COLOR_SURFACE: Color = Color::from_rgb(0.12, 0.12, 0.12);
