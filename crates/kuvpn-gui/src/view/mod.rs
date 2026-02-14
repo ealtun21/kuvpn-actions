@@ -176,18 +176,9 @@ impl KuVpnGui {
                 })
         };
 
-        let main_container = if use_csd {
-            container(window_content)
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .padding(8)
-                .center_x(Length::Fill)
-                .center_y(Length::Fill)
-        } else {
-            container(window_content)
-                .width(Length::Fill)
-                .height(Length::Fill)
-        };
+        let main_container = container(window_content)
+            .width(Length::Fill)
+            .height(Length::Fill);
 
         if let Some(req) = &self.pending_request {
             stack![main_container, self.view_modal(req)].into()
@@ -200,24 +191,28 @@ impl KuVpnGui {
         // Connection tab button
         let conn_active = self.current_tab == Tab::Connection;
         let conn_btn = button(
-            row![
-                svg(svg::Handle::from_memory(crate::types::ICON_SHIELD_SVG))
-                    .width(16)
-                    .height(16)
-                    .style(move |_theme: &iced::Theme, _status| svg::Style {
-                        color: Some(if conn_active {
-                            iced::Color::WHITE
-                        } else {
-                            COLOR_TEXT_DIM
-                        })
-                    }),
-                text("Connection").size(13),
-            ]
-            .spacing(8)
-            .align_y(Alignment::Center),
+            container(
+                row![
+                    svg(svg::Handle::from_memory(crate::types::ICON_SHIELD_SVG))
+                        .width(16)
+                        .height(16)
+                        .style(move |_theme: &iced::Theme, _status| svg::Style {
+                            color: Some(if conn_active {
+                                iced::Color::WHITE
+                            } else {
+                                COLOR_TEXT_DIM
+                            })
+                        }),
+                    text("Connection").size(13),
+                ]
+                .spacing(8)
+                .align_y(Alignment::Center)
+            )
+            .width(Length::Fill)
+            .center_x(Length::Fill)
         )
         .padding([10, 18])
-        .width(Length::Fixed(130.0))
+        .width(Length::Fill)
         .on_press(Message::TabChanged(Tab::Connection))
         .style(move |_theme, status| {
             if conn_active {
@@ -254,24 +249,28 @@ impl KuVpnGui {
         // Settings tab button
         let settings_active = self.current_tab == Tab::Settings;
         let settings_btn = button(
-            row![
-                svg(svg::Handle::from_memory(crate::types::ICON_SETTINGS_SVG))
-                    .width(16)
-                    .height(16)
-                    .style(move |_theme: &iced::Theme, _status| svg::Style {
-                        color: Some(if settings_active {
-                            iced::Color::WHITE
-                        } else {
-                            COLOR_TEXT_DIM
-                        })
-                    }),
-                text("Settings").size(13),
-            ]
-            .spacing(8)
-            .align_y(Alignment::Center),
+            container(
+                row![
+                    svg(svg::Handle::from_memory(crate::types::ICON_SETTINGS_SVG))
+                        .width(16)
+                        .height(16)
+                        .style(move |_theme: &iced::Theme, _status| svg::Style {
+                            color: Some(if settings_active {
+                                iced::Color::WHITE
+                            } else {
+                                COLOR_TEXT_DIM
+                            })
+                        }),
+                    text("Settings").size(13),
+                ]
+                .spacing(8)
+                .align_y(Alignment::Center)
+            )
+            .width(Length::Fill)
+            .center_x(Length::Fill)
         )
         .padding([10, 18])
-        .width(Length::Fixed(110.0))
+        .width(Length::Fill)
         .on_press(Message::TabChanged(Tab::Settings))
         .style(move |_theme, status| {
             if settings_active {
@@ -308,24 +307,28 @@ impl KuVpnGui {
         // Console tab button
         let console_active = self.current_tab == Tab::Console;
         let console_btn = button(
-            row![
-                svg(svg::Handle::from_memory(crate::types::ICON_TERMINAL_SVG))
-                    .width(16)
-                    .height(16)
-                    .style(move |_theme: &iced::Theme, _status| svg::Style {
-                        color: Some(if console_active {
-                            iced::Color::WHITE
-                        } else {
-                            COLOR_TEXT_DIM
-                        })
-                    }),
-                text("Console").size(13),
-            ]
-            .spacing(8)
-            .align_y(Alignment::Center),
+            container(
+                row![
+                    svg(svg::Handle::from_memory(crate::types::ICON_TERMINAL_SVG))
+                        .width(16)
+                        .height(16)
+                        .style(move |_theme: &iced::Theme, _status| svg::Style {
+                            color: Some(if console_active {
+                                iced::Color::WHITE
+                            } else {
+                                COLOR_TEXT_DIM
+                            })
+                        }),
+                    text("Console").size(13),
+                ]
+                .spacing(8)
+                .align_y(Alignment::Center)
+            )
+            .width(Length::Fill)
+            .center_x(Length::Fill)
         )
         .padding([10, 18])
-        .width(Length::Fixed(105.0))
+        .width(Length::Fill)
         .on_press(Message::TabChanged(Tab::Console))
         .style(move |_theme, status| {
             if console_active {
@@ -387,13 +390,13 @@ impl KuVpnGui {
                         ]
                         .spacing(8)
                         .align_y(Alignment::Center),
-                        text(warning).size(11).color(crate::types::COLOR_TEXT),
+                        text(warning).size(11).color(crate::types::COLOR_TEXT).wrapping(iced::widget::text::Wrapping::Word),
                     ]
                     .spacing(6),
                 )
                 .width(Length::Fill)
-                .max_width(480.0)
-                .padding(14)
+                .max_width(380.0)
+                .padding(12)
                 .style(|_| container::Style {
                     background: Some(iced::Color::from_rgba(0.80, 0.60, 0.30, 0.08).into()),
                     border: Border {
@@ -416,14 +419,13 @@ impl KuVpnGui {
                 automation_warning_banner,
                 action_section
             ]
-            .spacing(24)
+            .spacing(10)
             .align_x(Alignment::Center)
-            .padding([30, 20])
+            .padding([20, 20])
         )
         .width(Length::Fill)
         .height(Length::Fill)
         .center_x(Length::Fill)
-        .center_y(Length::Fill)
         .style(crate::types::card)
         .into()
     }

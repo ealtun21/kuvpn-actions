@@ -14,6 +14,14 @@ use crate::types::Message;
 use iced::Task;
 use std::sync::{Arc, Mutex};
 
+pub fn load_window_icon() -> Option<iced::window::Icon> {
+    iced::window::icon::from_file_data(
+        crate::types::WINDOW_ICON_256,
+        Some(image::ImageFormat::Png),
+    )
+    .ok()
+}
+
 fn get_title(_: &KuVpnGui, _: iced::window::Id) -> String {
     "KUVPN".to_string()
 }
@@ -59,8 +67,11 @@ pub fn main() -> iced::Result {
                 exit_on_close_request: false,
                 size: iced::Size::new(580.0, 650.0),
                 min_size: Some(iced::Size::new(560.0, 580.0)),
+                max_size: Some(iced::Size::new(580.0, 650.0)),
+                resizable: false,
                 decorations: !use_csd,
                 transparent: use_csd,
+                icon: load_window_icon(),
                 ..Default::default()
             });
 

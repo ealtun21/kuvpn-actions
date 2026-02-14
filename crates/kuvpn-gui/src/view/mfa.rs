@@ -22,12 +22,11 @@ impl KuVpnGui {
                     ]
                     .spacing(5)
                 ]
-                .spacing(15)
+                .spacing(12)
                 .align_y(Alignment::Center),
             )
-            .padding(16)
-            .width(Length::Fill)
-            .max_width(480.0)
+            .padding(12)
+            .width(Length::Shrink)
             .style(|_| container::Style {
                 background: Some(Color::from_rgba(0.80, 0.60, 0.30, 0.08).into()),
                 border: Border {
