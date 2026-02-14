@@ -1,7 +1,7 @@
 use crate::app::KuVpnGui;
-use crate::types::{COLOR_TEXT_DIM, COLOR_WARNING, ICON_TERMINAL_SVG, Message};
-use iced::widget::{column, container, row, scrollable, svg, text};
-use iced::{Border, Color, Element, Font, Length};
+use crate::types::{COLOR_TEXT_DIM, COLOR_WARNING, ICON_TERMINAL_SVG, Message, btn_secondary, card};
+use iced::widget::{button, column, container, row, scrollable, svg, text};
+use iced::{Color, Element, Font, Length};
 
 fn log_line_color(line: &str) -> Color {
     if line.starts_with("[ERR]") || line.starts_with("[!]") {
@@ -40,7 +40,12 @@ impl KuVpnGui {
                         .style(|_, _| svg::Style { color: Some(COLOR_TEXT_DIM) }),
                     text("SESSION LOGS")
                         .size(12)
-                        .color(COLOR_TEXT_DIM),
+                        .color(COLOR_TEXT_DIM)
+                        .width(Length::Fill),
+                    button(text("Copy All").size(11))
+                        .padding(8)
+                        .on_press(Message::CopyLogs)
+                        .style(btn_secondary),
                 ]
                 .spacing(10),
                 scrollable(
@@ -51,15 +56,7 @@ impl KuVpnGui {
             .spacing(10),
         )
         .padding(15)
-        .style(|_| container::Style {
-            background: Some(Color::from_rgb(0.04, 0.04, 0.04).into()),
-            border: Border {
-                color: Color::from_rgb(0.15, 0.15, 0.15),
-                width: 1.0,
-                radius: 6.0.into(),
-            },
-            ..Default::default()
-        })
+        .style(card)
         .into()
     }
 }

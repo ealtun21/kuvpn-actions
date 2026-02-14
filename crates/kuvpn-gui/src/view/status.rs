@@ -1,9 +1,9 @@
 use crate::app::KuVpnGui;
 use crate::types::{
     COLOR_SUCCESS, COLOR_TEXT_DIM, COLOR_WARNING, ICON_REFRESH_SVG, ICON_SHIELD_CHECK_SVG,
-    ICON_SHIELD_SVG, Message,
+    ICON_SHIELD_SVG, Message, card,
 };
-use iced::widget::{column, container, svg, text};
+use iced::widget::{column, container, row, svg, text};
 use iced::{Alignment, Border, Color, Element, Shadow, Vector};
 use kuvpn::ConnectionStatus;
 
@@ -63,7 +63,7 @@ impl KuVpnGui {
             icon_display = icon_display.rotation(self.rotation);
         }
 
-        column![
+        let mut content = column![
             container(icon_display)
                 .center_x(180)
                 .center_y(180)
@@ -86,7 +86,41 @@ impl KuVpnGui {
             .color(COLOR_TEXT_DIM),
         ]
         .spacing(15)
-        .align_x(Alignment::Center)
-        .into()
+        .align_x(Alignment::Center);
+
+        // Add connection details when connected
+        if self.status == ConnectionStatus::Connected {
+            if let Some(start_time) = self.connection_start {
+                let elapsed = start_time.elapsed();
+                let duration_str = format!(
+                    "{}h {}m {}s",
+                    elapsed.as_secs() / 3600,
+                    (elapsed.as_secs() % 3600) / 60,
+                    elapsed.as_secs() % 60
+                );
+
+                content = content.push(
+                    container(
+                        column![
+                            row![
+                                text("Duration:").width(80),
+                                text(duration_str).color(COLOR_SUCCESS),
+                            ]
+                            .spacing(10),
+                            row![
+                                text("Interface:").width(80),
+                                text("kuvpn0").color(COLOR_SUCCESS),
+                            ]
+                            .spacing(10),
+                        ]
+                        .spacing(8),
+                    )
+                    .padding(15)
+                    .style(card),
+                );
+            }
+        }
+
+        content.into()
     }
 }
