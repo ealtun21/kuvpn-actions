@@ -8,6 +8,8 @@ use tray_icon::{menu::MenuEvent, TrayIconEvent};
 
 // --- Constants & Styling ---
 pub const KU_LOGO_BYTES: &[u8] = include_bytes!("../assets/ku.svg");
+pub const WINDOW_ICON_32: &[u8] = include_bytes!("../assets/icon-32.png");
+pub const WINDOW_ICON_256: &[u8] = include_bytes!("../assets/icon-256.png");
 
 // Tray Icons
 pub const TRAY_ICON_NORMAL: &[u8] = include_bytes!("../assets/vpn-normal.svg");
@@ -89,6 +91,8 @@ pub enum Message {
     CopyLogs,
     DragWindow,
     MinimizeWindow,
+    QuitRequested,
+    QuitAfterCleanup,
 }
 
 #[derive(Debug)]

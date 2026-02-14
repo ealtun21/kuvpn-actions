@@ -15,6 +15,14 @@ use crate::types::{
 };
 use kuvpn::{SessionConfig, VpnSession};
 
+fn load_window_icon() -> Option<iced::window::Icon> {
+    iced::window::icon::from_file_data(
+        crate::types::WINDOW_ICON_256,
+        Some(image::ImageFormat::Png),
+    )
+    .ok()
+}
+
 pub struct KuVpnGui {
     // Settings
     pub settings: GuiSettings,
@@ -43,6 +51,7 @@ pub struct KuVpnGui {
     pub window_id: Option<iced::window::Id>,
     pub is_visible: bool,
     pub window_close_pending: bool,
+    pub window_open_pending: bool,
     pub last_tray_click: Option<std::time::Instant>,
     pub connection_start: Option<Instant>,
 }
@@ -65,6 +74,7 @@ impl KuVpnGui {
                 self.window_id = Some(id);
                 self.is_visible = true;
                 self.window_close_pending = false;
+                self.window_open_pending = false;
                 if let Some(item) = &self.show_item {
                     let _ = item.set_text("Toggle Visibility");
                 }
@@ -114,7 +124,7 @@ impl KuVpnGui {
                 Task::none()
             }
             Message::MenuEvent(event) => match event.id.as_ref() {
-                "quit" => return iced::exit(),
+                "quit" => return self.update(Message::QuitRequested),
                 "show" => {
                     let now = std::time::Instant::now();
                     if let Some(last) = self.last_tray_click {
@@ -140,27 +150,42 @@ impl KuVpnGui {
             Message::ClientDecorationsToggled(v) => {
                 self.settings.use_client_decorations = v;
                 self.save_settings();
-                // Note: Window decoration changes require restart
+                // Apply decoration change by closing and reopening window
+                if let Some(id) = self.window_id {
+                    self.is_visible = false;
+                    self.window_close_pending = true;
+                    return Task::batch(vec![
+                        iced::window::close(id),
+                        Task::perform(
+                            async { tokio::time::sleep(std::time::Duration::from_millis(100)).await },
+                            |_| Message::ToggleVisibility {
+                                from_close_request: false,
+                            },
+                        ),
+                    ]);
+                }
                 Task::none()
             }
             Message::ToggleVisibility { from_close_request } => {
                 log::info!(
-                    "ToggleVisibility called. visible={}, close_to_tray={}, from_close_request={}, close_pending={}",
+                    "ToggleVisibility called. visible={}, close_to_tray={}, from_close_request={}, close_pending={}, open_pending={}",
                     self.is_visible,
                     self.settings.close_to_tray,
                     from_close_request,
-                    self.window_close_pending
+                    self.window_close_pending,
+                    self.window_open_pending
                 );
 
-                // Ignore toggles while a close is in-flight
-                if self.window_close_pending {
+                // Ignore toggles while a close or open is in-flight
+                if self.window_close_pending || self.window_open_pending {
+                    log::info!("Ignoring toggle - operation in flight");
                     return Task::none();
                 }
 
                 if self.is_visible {
                     if from_close_request && !self.settings.close_to_tray {
                         log::info!("Exiting application due to close request");
-                        return iced::exit();
+                        return self.update(Message::QuitRequested);
                     }
                     log::info!("Closing window to hide");
                     self.is_visible = false;
@@ -176,15 +201,19 @@ impl KuVpnGui {
                     }
                 } else {
                     log::info!("Opening window to show");
-                    // Set visible immediately to prevent double-open
+                    // Set flags to prevent operations during open
                     self.is_visible = true;
+                    self.window_open_pending = true;
                     let use_csd = self.settings.use_client_decorations;
                     let (id, task) = iced::window::open(iced::window::Settings {
                         exit_on_close_request: false,
                         size: iced::Size::new(580.0, 650.0),
                         min_size: Some(iced::Size::new(560.0, 580.0)),
+                        max_size: Some(iced::Size::new(580.0, 650.0)),
+                        resizable: false,
                         decorations: !use_csd,
                         transparent: use_csd,
+                        icon: load_window_icon(),
                         ..Default::default()
                     });
                     self.window_id = Some(id);
@@ -392,7 +421,8 @@ impl KuVpnGui {
 
             Message::MfaPushReceived(code) => {
                 self.mfa_info = Some(code);
-                if !self.is_visible {
+                if !self.is_visible && !self.window_close_pending && !self.window_open_pending {
+                    log::info!("MFA received - showing window");
                     return self.update(Message::ToggleVisibility {
                         from_close_request: false,
                     });
@@ -408,7 +438,8 @@ impl KuVpnGui {
                     if let Some(req) = guard.take() {
                         self.pending_request = Some(req);
                         self.current_input = String::new();
-                        if !self.is_visible {
+                        if !self.is_visible && !self.window_close_pending && !self.window_open_pending {
+                            log::info!("Input requested - showing window");
                             return self.update(Message::ToggleVisibility {
                                 from_close_request: false,
                             });
@@ -497,9 +528,27 @@ impl KuVpnGui {
                 Task::none()
             }
             Message::ResetSettings => {
+                let old_use_csd = self.settings.use_client_decorations;
                 self.settings = GuiSettings::default();
                 self.save_settings();
                 self.oc_test_result = None;
+
+                // If window decoration setting changed, refresh window
+                if old_use_csd != self.settings.use_client_decorations {
+                    if let Some(id) = self.window_id {
+                        self.is_visible = false;
+                        self.window_close_pending = true;
+                        return Task::batch(vec![
+                            iced::window::close(id),
+                            Task::perform(
+                                async { tokio::time::sleep(std::time::Duration::from_millis(100)).await },
+                                |_| Message::ToggleVisibility {
+                                    from_close_request: false,
+                                },
+                            ),
+                        ]);
+                    }
+                }
                 Task::none()
             }
             Message::TestOpenConnect => {
@@ -543,6 +592,60 @@ impl KuVpnGui {
                 } else {
                     Task::none()
                 }
+            }
+            Message::QuitRequested => {
+                log::info!("Quit requested - cleaning up");
+                // Disconnect VPN if connected
+                if let Some(session) = &self.session {
+                    if self.status == ConnectionStatus::Connected
+                        || self.status == ConnectionStatus::Connecting
+                    {
+                        log::info!("Disconnecting VPN before quit");
+                        session.cancel();
+                        let session_clone = Arc::clone(session);
+                        // Wait for disconnection to complete, with timeout
+                        return Task::perform(
+                            async move {
+                                let start = std::time::Instant::now();
+                                let timeout = std::time::Duration::from_secs(5);
+
+                                // Wait for session to finish AND verify OpenConnect is stopped
+                                while start.elapsed() < timeout {
+                                    if session_clone.is_finished() {
+                                        log::info!("Session finished, waiting for OpenConnect to stop...");
+                                        // Give extra time for OpenConnect process to be killed
+                                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+                                        // Verify OpenConnect is actually stopped
+                                        if !kuvpn::is_openconnect_running() {
+                                            log::info!("OpenConnect stopped successfully");
+                                            break;
+                                        }
+                                        log::warn!("OpenConnect still running, waiting...");
+                                    }
+                                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                                }
+
+                                if kuvpn::is_openconnect_running() {
+                                    log::error!("OpenConnect still running after timeout, force killing...");
+                                    if let Some(pid) = kuvpn::get_openconnect_pid() {
+                                        let _ = kuvpn::kill_process(pid);
+                                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                                    }
+                                }
+
+                                log::info!("Cleanup complete, elapsed: {:?}", start.elapsed());
+                            },
+                            |_| Message::QuitAfterCleanup,
+                        );
+                    }
+                }
+                // No active connection, exit immediately
+                iced::exit()
+            }
+            Message::QuitAfterCleanup => {
+                log::info!("Cleanup complete, exiting");
+                iced::exit()
             }
         }
     }
@@ -625,6 +728,7 @@ impl Default for KuVpnGui {
             window_id: None,
             is_visible: false,
             window_close_pending: false,
+            window_open_pending: false,
             last_tray_click: None,
             connection_start: None,
         }

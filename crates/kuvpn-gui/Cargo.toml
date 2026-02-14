@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 kuvpn = { path = "../kuvpn" }
-iced = { version = "0.14", features = ["tokio", "svg"] }
+iced = { version = "0.14", features = ["tokio", "svg", "image"] }
 crossbeam-channel = "0.5"
 anyhow = "1.0.101"
 tokio = { version = "1.43", features = ["full"] }
@@ -20,3 +20,6 @@ arboard = "3.4"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18.1"
+
+[build-dependencies]
+winresource = "0.1"

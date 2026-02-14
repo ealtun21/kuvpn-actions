@@ -64,6 +64,10 @@ impl KuVpnGui {
                         })
                 )
                 .height(Length::Fill)
+                .direction(scrollable::Direction::Both {
+                    vertical: scrollable::Scrollbar::default(),
+                    horizontal: scrollable::Scrollbar::default(),
+                })
                 .style(custom_scrollbar),
             ]
             .spacing(12),

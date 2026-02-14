@@ -84,25 +84,29 @@ impl KuVpnGui {
                 .align_x(iced::alignment::Horizontal::Center)
                 .width(Length::Fill),
             container(
-                text(match self.status {
-                    ConnectionStatus::Connected => "Internal Resources Available".to_string(),
-                    ConnectionStatus::Error => self
-                        .error_message
-                        .clone()
-                        .unwrap_or_else(|| "Something went wrong. Check logs.".to_string()),
-                    ConnectionStatus::Connecting | ConnectionStatus::Disconnecting => {
-                        self.status_message.clone()
-                    }
-                    _ => "Koç University Access Restricted".to_string(),
-                })
-                .size(12)
-                .color(COLOR_TEXT_DIM)
-                .align_x(iced::alignment::Horizontal::Center)
+                iced::widget::scrollable(
+                    text(match self.status {
+                        ConnectionStatus::Connected => "Internal Resources Available".to_string(),
+                        ConnectionStatus::Error => {
+                            "Check Console for details. Try switching to Manual mode in Settings.".to_string()
+                        }
+                        ConnectionStatus::Connecting | ConnectionStatus::Disconnecting => {
+                            self.status_message.clone()
+                        }
+                        _ => "Koç University Access Restricted".to_string(),
+                    })
+                    .size(12)
+                    .color(COLOR_TEXT_DIM)
+                    .align_x(iced::alignment::Horizontal::Center)
+                    .wrapping(iced::widget::text::Wrapping::Word)
+                )
+                .height(100)
             )
             .width(Length::Fill)
+            .max_width(480.0)
             .center_x(Length::Fill),
         ]
-        .spacing(15)
+        .spacing(10)
         .align_x(Alignment::Center)
         .width(Length::Fill)
         .max_width(480.0);
@@ -119,10 +123,10 @@ impl KuVpnGui {
                 );
 
                 let mut status_col = column![row![
-                    text("Duration:").size(12).width(90).color(COLOR_TEXT_DIM),
+                    text("Duration:").size(12).width(Length::Shrink).color(COLOR_TEXT_DIM),
                     text(duration_str).size(13).color(COLOR_SUCCESS),
                 ]
-                .spacing(12)
+                .spacing(6)
                 .align_y(Alignment::Center)];
 
                 #[cfg(unix)]
@@ -131,11 +135,11 @@ impl KuVpnGui {
                         row![
                             text("Interface:")
                                 .size(12)
-                                .width(90)
+                                .width(Length::Shrink)
                                 .color(COLOR_TEXT_DIM),
                             text("kuvpn0").size(13).color(COLOR_SUCCESS),
                         ]
-                        .spacing(12)
+                        .spacing(6)
                         .align_y(Alignment::Center),
                     );
                 }
@@ -143,7 +147,7 @@ impl KuVpnGui {
                 content = content.push(
                     container(status_col.spacing(10))
                         .padding(18)
-                        .width(Length::Fill)
+                        .width(Length::Shrink)
                         .style(card),
                 );
             }

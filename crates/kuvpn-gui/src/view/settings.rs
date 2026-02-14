@@ -9,8 +9,7 @@ use kuvpn::ConnectionStatus;
 
 impl KuVpnGui {
         pub fn view_advanced_settings(&self) -> Element<'_, Message> {
-            let is_locked = self.status != ConnectionStatus::Disconnected
-                && self.status != ConnectionStatus::Error;
+            let is_locked = false; // Allow editing settings while connected
     
             let locked_hint = if is_locked {            container(
                 row![
@@ -63,13 +62,35 @@ impl KuVpnGui {
                     locked_hint,
                 ]
                 .align_y(Alignment::Center),
+                // --- Browser Section ---
+                section_label("BROWSER"),
+                self.view_unified_field(
+                    "Login Email:",
+                    "email@ku.edu.tr",
+                    &self.settings.email,
+                    "Your KU email address. Pre-fills login form in Full Auto mode",
+                    is_locked,
+                    Message::EmailChanged
+                ),
+                self.view_unified_control(
+                    "Login Mode:",
+                    self.view_segmented_control(
+                        &["Full Auto", "Visual Auto", "Manual"],
+                        &[0.0, 1.0, 2.0],
+                        self.settings.login_mode_val,
+                        is_locked,
+                        Message::LoginModeChanged
+                    ),
+                    "Full Auto: headless automation | Visual Auto: visible browser for debugging | Manual: you handle login"
+                ),
+                divider(),
                 // --- Network Section ---
                 section_label("NETWORK"),
                 self.view_unified_field(
                     "Gateway URL:",
                     "https://vpn.example.com",
                     &self.settings.url,
-                    "VPN gateway server address",
+                    "VPN gateway server address. Default: https://vpn.ku.edu.tr",
                     is_locked,
                     Message::UrlChanged
                 ),
@@ -77,7 +98,7 @@ impl KuVpnGui {
                     "DSID Domain:",
                     "vpn.example.com",
                     &self.settings.domain,
-                    "Cookie domain for authentication",
+                    "Domain for authentication cookie. Must match Gateway URL domain",
                     is_locked,
                     Message::DomainChanged
                 ),
@@ -142,35 +163,13 @@ impl KuVpnGui {
                     .spacing(10)
                     .align_y(Alignment::Center),
                     container(
-                        text("Path to openconnect binary")
+                        text("Path to OpenConnect executable. Default: 'openconnect' (searches system PATH)")
                             .size(10)
                             .color(Color::from_rgb(0.50, 0.50, 0.50))
                     )
                     .padding([0, 110])
                 ]
                 .spacing(4),
-                divider(),
-                // --- Browser Section ---
-                section_label("BROWSER"),
-                self.view_unified_field(
-                    "Login Email:",
-                    "email@ku.edu.tr",
-                    &self.settings.email,
-                    "Pre-fill email for auto-login",
-                    is_locked,
-                    Message::EmailChanged
-                ),
-                self.view_unified_control(
-                    "Login Mode:",
-                    self.view_segmented_control(
-                        &["Full Auto", "Visual Auto", "Manual"],
-                        &[0.0, 1.0, 2.0],
-                        self.settings.login_mode_val,
-                        is_locked,
-                        Message::LoginModeChanged
-                    ),
-                    "Standard | Debug | Fallback"
-                ),
                 divider(),
                 // --- System Section ---
                 section_label("SYSTEM"),
@@ -183,7 +182,7 @@ impl KuVpnGui {
                         false,
                         Message::LogLevelSliderChanged
                     ),
-                    "Higher levels show more detail"
+                    "Console verbosity. Info: normal usage | Debug/Trace: troubleshooting | Off: disable logs"
                 ),
                 {
                     #[cfg(not(windows))]
@@ -196,7 +195,7 @@ impl KuVpnGui {
                                 is_locked,
                                 Message::EscalationToolChanged,
                             ),
-                            "pkexec (default) | sudo/doas (passwordless)",
+                            "Admin privilege tool. pkexec: GUI password prompt | sudo/doas: terminal (requires NOPASSWD)",
                         )
                     }
                     #[cfg(windows)]
@@ -209,8 +208,8 @@ impl KuVpnGui {
                 self.view_unified_control(
                     "Close to Tray:",
                     self.view_segmented_control(
-                        &["NO", "YES"],
-                        &[0.0, 1.0],
+                        &["Yes", "No"],
+                        &[1.0, 0.0],
                         if self.settings.close_to_tray {
                             1.0
                         } else {
@@ -219,7 +218,7 @@ impl KuVpnGui {
                         false,
                         |val| Message::CloseToTrayToggled(val > 0.5)
                     ),
-                    "Minimize to tray instead of quitting"
+                    "Yes: window X button minimizes to tray | No: X button quits app (disconnects VPN)"
                 ),
                 self.view_unified_control(
                     "Window Style:",
@@ -234,7 +233,7 @@ impl KuVpnGui {
                         false,
                         |val| Message::ClientDecorationsToggled(val > 0.5)
                     ),
-                    "Custom: rounded borders. System: native titlebar. Requires restart"
+                    "System: native OS titlebar | Custom: modern rounded design with custom titlebar"
                 ),
                 divider(),
                 // --- Actions Section ---
@@ -401,7 +400,8 @@ impl KuVpnGui {
                 };
 
                 button(text(*label).size(11))
-                    .padding([8, 12])
+                    .padding([9, 12])
+                    .height(Length::Fixed(34.0))
                     .on_press(if locked {
                         Message::Tick
                     } else {
@@ -445,7 +445,8 @@ impl KuVpnGui {
                 };
 
                 button(text(label).size(11))
-                    .padding([8, 12])
+                    .padding([9, 12])
+                    .height(Length::Fixed(34.0))
                     .on_press(if locked {
                         Message::Tick
                     } else {
