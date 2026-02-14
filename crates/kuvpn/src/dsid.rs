@@ -1,7 +1,8 @@
 use crate::browser::create_browser;
 use crate::error::AuthError;
 use crate::handlers::page_detection::{
-    is_incorrect_password_visible, is_invalid_username_visible, is_username_warning_visible,
+    get_azure_error_details, is_azure_error_page, is_incorrect_password_visible,
+    is_invalid_username_visible, is_username_warning_visible,
 };
 use crate::handlers::{auth_handlers::*, mfa_handlers::*, page_detection::is_input_visible};
 use crate::utils::{CancellationToken, CredentialsProvider};
@@ -60,6 +61,20 @@ fn try_handle_page(
         return Ok((true, false));
     }
 
+    // Check for Azure AD error pages (ConvergedError)
+    // This must be checked early as it indicates a fatal authentication error
+    if is_azure_error_page(tab)? {
+        handled.insert("azure_error");
+        let error_msg = get_azure_error_details(tab)?;
+        log::warn!("[!] Azure AD error page detected: {}", error_msg);
+        return Err(AuthError::AuthenticationFailed {
+            reason: error_msg,
+            suggest_manual_mode: false, // This is often a simple credential error
+            suggest_clear_cache: true,
+        }
+        .into());
+    }
+
     if is_invalid_username_visible(tab)? {
         handled.insert("invalid_username");
         return Err(AuthError::InvalidUsername {
@@ -78,8 +93,12 @@ fn try_handle_page(
     }
 
     if is_incorrect_password_visible(tab)? {
-        handled.remove("password");
-        return Ok((true, false));
+        handled.insert("incorrect_password");
+        log::warn!("[!] Incorrect password detected");
+        return Err(AuthError::IncorrectPassword {
+            message: "Your account or password is incorrect.".to_string(),
+        }
+        .into());
     }
 
     if handle_remote_ngc_denied_next(tab)? {
