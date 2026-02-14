@@ -102,24 +102,27 @@ impl KuVpnGui {
                     elapsed.as_secs() % 60
                 );
 
-                content = content.push(
-                    container(
-                        column![
-                            row![
-                                text("Duration:").width(80),
-                                text(duration_str).color(COLOR_SUCCESS),
-                            ]
-                            .spacing(10),
-                            row![
-                                text("Interface:").width(80),
-                                text("kuvpn0").color(COLOR_SUCCESS),
-                            ]
-                            .spacing(10),
+                let mut status_col = column![row![
+                    text("Duration:").width(80),
+                    text(duration_str).color(COLOR_SUCCESS),
+                ]
+                .spacing(10)];
+
+                #[cfg(unix)]
+                {
+                    status_col = status_col.push(
+                        row![
+                            text("Interface:").width(80),
+                            text("kuvpn0").color(COLOR_SUCCESS),
                         ]
-                        .spacing(8),
-                    )
-                    .padding(15)
-                    .style(card),
+                        .spacing(10),
+                    );
+                }
+
+                content = content.push(
+                    container(status_col.spacing(8))
+                        .padding(15)
+                        .style(card),
                 );
             }
         }

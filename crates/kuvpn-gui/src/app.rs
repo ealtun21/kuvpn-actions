@@ -94,11 +94,12 @@ impl KuVpnGui {
                         // Debounce rapid clicks (Windows fires multiple events)
                         let now = std::time::Instant::now();
                         if let Some(last) = self.last_tray_click {
-                            if now.duration_since(last) < std::time::Duration::from_millis(300) {
+                            if now.duration_since(last) < std::time::Duration::from_millis(500) {
                                 return Task::none();
                             }
                         }
                         self.last_tray_click = Some(now);
+                        log::info!("Tray icon clicked, toggling visibility");
                         return self.update(Message::ToggleVisibility {
                             from_close_request: false,
                         });
@@ -110,6 +111,14 @@ impl KuVpnGui {
             Message::MenuEvent(event) => match event.id.as_ref() {
                 "quit" => return iced::exit(),
                 "show" => {
+                    let now = std::time::Instant::now();
+                    if let Some(last) = self.last_tray_click {
+                        if now.duration_since(last) < std::time::Duration::from_millis(500) {
+                            return Task::none();
+                        }
+                    }
+                    self.last_tray_click = Some(now);
+                    log::info!("Menu 'show' clicked, toggling visibility");
                     return self.update(Message::ToggleVisibility {
                         from_close_request: false,
                     });
