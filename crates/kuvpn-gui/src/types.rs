@@ -1,5 +1,6 @@
 use iced::widget::button;
 use iced::widget::container;
+use iced::widget::scrollable;
 use iced::{Border, Color, Shadow, Vector};
 use std::sync::{Arc, Mutex};
 use tokio::sync::oneshot;
@@ -36,6 +37,13 @@ pub const ICON_POWER_SVG: &[u8] = r#"<svg viewBox="0 0 24 24" fill="none" stroke
 
 pub use kuvpn::ConnectionStatus;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tab {
+    Connection,
+    Settings,
+    Console,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum SegmentPosition {
     Left,
@@ -46,6 +54,7 @@ pub enum SegmentPosition {
 
 #[derive(Debug, Clone)]
 pub enum Message {
+    TabChanged(Tab),
     UrlChanged(String),
     DomainChanged(String),
     EscalationToolChanged(String),
@@ -53,8 +62,6 @@ pub enum Message {
     OpenConnectPathChanged(String),
     EmailChanged(String),
     LoginModeChanged(f32),
-    ToggleAdvanced,
-    ToggleConsole,
     ConnectPressed,
     DisconnectPressed,
     LogAppended(String),
@@ -70,6 +77,7 @@ pub enum Message {
     TrayEvent(TrayIconEvent),
     MenuEvent(MenuEvent),
     CloseToTrayToggled(bool),
+    ClientDecorationsToggled(bool),
     ToggleVisibility { from_close_request: bool },
     WindowOpened(iced::window::Id),
     WindowClosed(iced::window::Id),
@@ -79,6 +87,8 @@ pub enum Message {
     TestOpenConnect,
     OpenConnectTestResult(bool),
     CopyLogs,
+    DragWindow,
+    MinimizeWindow,
 }
 
 #[derive(Debug)]
@@ -129,6 +139,59 @@ pub fn card(_theme: &iced::Theme) -> container::Style {
             blur_radius: 12.0,
         },
         ..Default::default()
+    }
+}
+
+// --- Scrollbar Style ---
+
+pub fn custom_scrollbar(_theme: &iced::Theme, status: scrollable::Status) -> scrollable::Style {
+    let scroller_color = if matches!(status, scrollable::Status::Hovered { .. }) {
+        Color::from_rgb(0.40, 0.40, 0.40)
+    } else {
+        Color::from_rgb(0.30, 0.30, 0.30)
+    };
+
+    scrollable::Style {
+        container: container::Style::default(),
+        vertical_rail: scrollable::Rail {
+            background: Some(Color::from_rgb(0.10, 0.10, 0.10).into()),
+            border: Border {
+                radius: 4.0.into(),
+                width: 0.0,
+                color: Color::TRANSPARENT,
+            },
+            scroller: scrollable::Scroller {
+                background: scroller_color.into(),
+                border: Border {
+                    radius: 4.0.into(),
+                    width: 0.0,
+                    color: Color::TRANSPARENT,
+                },
+            },
+        },
+        horizontal_rail: scrollable::Rail {
+            background: Some(Color::from_rgb(0.10, 0.10, 0.10).into()),
+            border: Border {
+                radius: 4.0.into(),
+                width: 0.0,
+                color: Color::TRANSPARENT,
+            },
+            scroller: scrollable::Scroller {
+                background: scroller_color.into(),
+                border: Border {
+                    radius: 4.0.into(),
+                    width: 0.0,
+                    color: Color::TRANSPARENT,
+                },
+            },
+        },
+        gap: None,
+        auto_scroll: scrollable::AutoScroll {
+            background: iced::Background::Color(Color::TRANSPARENT),
+            border: Border::default(),
+            shadow: Shadow::default(),
+            icon: Color::TRANSPARENT,
+        },
     }
 }
 

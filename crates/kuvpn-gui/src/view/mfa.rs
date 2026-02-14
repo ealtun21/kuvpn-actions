@@ -9,28 +9,31 @@ impl KuVpnGui {
             container(
                 row![
                     svg(svg::Handle::from_memory(ICON_PHONE_SVG))
-                        .width(40)
-                        .height(40)
+                        .width(32)
+                        .height(32)
                         .style(|_, _| svg::Style {
                             color: Some(COLOR_WARNING)
                         }),
                     column![
-                        text("Approval Required").size(14).color(COLOR_WARNING),
-                        text(mfa).size(22).color(Color::WHITE),
+                        text("Approval Required")
+                            .size(12)
+                            .color(COLOR_WARNING),
+                        text(mfa).size(20).color(Color::WHITE),
                     ]
                     .spacing(5)
                 ]
-                .spacing(20)
+                .spacing(15)
                 .align_y(Alignment::Center),
             )
-            .padding(20)
+            .padding(16)
             .width(Length::Fill)
+            .max_width(480.0)
             .style(|_| container::Style {
-                background: Some(Color::from_rgba(0.80, 0.60, 0.30, 0.05).into()),
+                background: Some(Color::from_rgba(0.80, 0.60, 0.30, 0.08).into()),
                 border: Border {
                     color: COLOR_WARNING,
-                    width: 1.0,
-                    radius: 12.0.into(),
+                    width: 1.5,
+                    radius: 10.0.into(),
                 },
                 ..Default::default()
             })

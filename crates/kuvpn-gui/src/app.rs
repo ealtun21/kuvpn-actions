@@ -11,7 +11,7 @@ use crate::config::GuiSettings;
 use crate::provider::{GuiInteraction, GuiProvider};
 use crate::types::{
     log_level_from_slider, login_mode_flags, ConnectionStatus, InputRequest, InputRequestWrapper,
-    Message,
+    Message, Tab,
 };
 use kuvpn::{SessionConfig, VpnSession};
 
@@ -20,8 +20,7 @@ pub struct KuVpnGui {
     pub settings: GuiSettings,
 
     // UI State
-    pub show_advanced: bool,
-    pub show_console: bool,
+    pub current_tab: Tab,
     pub logs: Vec<String>,
     pub status: ConnectionStatus,
     pub pending_request: Option<InputRequest>,
@@ -138,6 +137,12 @@ impl KuVpnGui {
                 self.save_settings();
                 Task::none()
             }
+            Message::ClientDecorationsToggled(v) => {
+                self.settings.use_client_decorations = v;
+                self.save_settings();
+                // Note: Window decoration changes require restart
+                Task::none()
+            }
             Message::ToggleVisibility { from_close_request } => {
                 log::info!(
                     "ToggleVisibility called. visible={}, close_to_tray={}, from_close_request={}, close_pending={}",
@@ -173,10 +178,13 @@ impl KuVpnGui {
                     log::info!("Opening window to show");
                     // Set visible immediately to prevent double-open
                     self.is_visible = true;
+                    let use_csd = self.settings.use_client_decorations;
                     let (id, task) = iced::window::open(iced::window::Settings {
                         exit_on_close_request: false,
-                        size: iced::Size::new(480.0, 820.0),
-                        min_size: Some(iced::Size::new(400.0, 600.0)),
+                        size: iced::Size::new(580.0, 650.0),
+                        min_size: Some(iced::Size::new(560.0, 580.0)),
+                        decorations: !use_csd,
+                        transparent: use_csd,
                         ..Default::default()
                     });
                     self.window_id = Some(id);
@@ -221,14 +229,6 @@ impl KuVpnGui {
             Message::LoginModeChanged(val) => {
                 self.settings.login_mode_val = val;
                 self.save_settings();
-                Task::none()
-            }
-            Message::ToggleAdvanced => {
-                self.show_advanced = !self.show_advanced;
-                Task::none()
-            }
-            Message::ToggleConsole => {
-                self.show_console = !self.show_console;
                 Task::none()
             }
             Message::Tick => {
@@ -526,6 +526,24 @@ impl KuVpnGui {
                     |_| Message::Tick,
                 )
             }
+            Message::TabChanged(tab) => {
+                self.current_tab = tab;
+                Task::none()
+            }
+            Message::DragWindow => {
+                if let Some(id) = self.window_id {
+                    iced::window::drag(id)
+                } else {
+                    Task::none()
+                }
+            }
+            Message::MinimizeWindow => {
+                if let Some(id) = self.window_id {
+                    iced::window::minimize(id, true)
+                } else {
+                    Task::none()
+                }
+            }
         }
     }
 
@@ -588,8 +606,7 @@ impl Default for KuVpnGui {
 
         Self {
             settings,
-            show_advanced: false,
-            show_console: false,
+            current_tab: Tab::Connection,
             logs: vec!["Ready for secure campus access.".to_string()],
             status: ConnectionStatus::Disconnected,
             pending_request: None,
