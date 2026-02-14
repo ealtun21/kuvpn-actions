@@ -42,27 +42,49 @@ impl VpnProcess {
                     use std::process::Command as StdCommand;
                     const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-                    // 1. Try killing all openconnect related processes by name using Admin elevation
                     log::info!("Requesting Admin elevation to stop OpenConnect...");
+
+                    // 1. Try killing openconnect.exe by name using Admin elevation
                     let mut cmd = AdminCommand::new("taskkill");
                     cmd.show(false);
                     cmd.args(&["/F", "/IM", "openconnect.exe", "/T"]);
                     let _ = cmd.status();
 
+                    // Check if process was killed successfully
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    if !is_openconnect_running() {
+                        log::info!("OpenConnect terminated successfully");
+                        return Ok(());
+                    }
+
+                    // 2. Try killing openconnect-gui.exe if it exists
                     let mut cmd_gui = AdminCommand::new("taskkill");
                     cmd_gui.show(false);
                     cmd_gui.args(&["/F", "/IM", "openconnect-gui.exe", "/T"]);
                     let _ = cmd_gui.status();
 
-                    // 2. Try killing by PID specifically if found
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    if !is_openconnect_running() {
+                        log::info!("OpenConnect GUI terminated successfully");
+                        return Ok(());
+                    }
+
+                    // 3. Try killing by PID specifically if found
                     if let Some(pid) = get_openconnect_pid() {
                         let mut cmd_pid = AdminCommand::new("taskkill");
                         cmd_pid.show(false);
                         cmd_pid.args(&["/F", "/PID", &pid.to_string(), "/T"]);
                         let _ = cmd_pid.status();
+
+                        std::thread::sleep(std::time::Duration::from_millis(500));
+                        if !is_openconnect_running() {
+                            log::info!("OpenConnect terminated by PID");
+                            return Ok(());
+                        }
                     }
 
-                    // 3. Fallback to non-elevated taskkill just in case
+                    // 4. Last resort: non-elevated taskkill
+                    log::warn!("Elevated termination failed, trying non-elevated fallback...");
                     let _ = StdCommand::new("taskkill")
                         .creation_flags(CREATE_NO_WINDOW)
                         .args(["/F", "/IM", "openconnect.exe"])
