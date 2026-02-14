@@ -4,7 +4,7 @@ use crate::types::{
     ICON_SHIELD_CHECK_SVG, ICON_SHIELD_SVG,
 };
 use iced::widget::{column, container, row, svg, text};
-use iced::{Alignment, Border, Color, Element, Shadow, Vector};
+use iced::{Alignment, Border, Color, Element, Length, Shadow, Vector};
 use kuvpn::ConnectionStatus;
 
 impl KuVpnGui {
@@ -49,8 +49,8 @@ impl KuVpnGui {
         };
 
         let mut icon_display = svg(svg::Handle::from_memory(icon_svg))
-            .width(80)
-            .height(80)
+            .width(60)
+            .height(60)
             .style(move |_, _| svg::Style { color: Some(color) });
 
         if self.status == ConnectionStatus::Connecting
@@ -60,36 +60,52 @@ impl KuVpnGui {
         }
 
         let mut content = column![
-            container(icon_display)
-                .center_x(180)
-                .center_y(180)
-                .style(move |_| container::Style {
-                    border: Border {
-                        color,
-                        width: 2.5,
-                        radius: 90.0.into(),
-                    },
-                    shadow: glow,
-                    ..Default::default()
-                }),
-            text(status_text).size(18).color(color),
-            text(match self.status {
-                ConnectionStatus::Connected => "Internal Resources Available".to_string(),
-                ConnectionStatus::Error => self
-                    .error_message
-                    .clone()
-                    .unwrap_or_else(|| "Something went wrong. Check logs.".to_string()),
-                ConnectionStatus::Connecting | ConnectionStatus::Disconnecting => {
-                    self.status_message.clone()
-                }
-                _ => "Koç University Access Restricted".to_string(),
-            })
-            .size(12)
-            .color(COLOR_TEXT_DIM)
-            .align_x(iced::alignment::Horizontal::Center),
+            container(
+                container(icon_display)
+                    .width(Length::Fixed(140.0))
+                    .height(Length::Fixed(140.0))
+                    .center_x(Length::Fixed(140.0))
+                    .center_y(Length::Fixed(140.0))
+                    .style(move |_| container::Style {
+                        border: Border {
+                            color,
+                            width: 2.5,
+                            radius: 70.0.into(),
+                        },
+                        shadow: glow,
+                        ..Default::default()
+                    })
+            )
+            .width(Length::Fill)
+            .center_x(Length::Fill),
+            text(status_text)
+                .size(17)
+                .color(color)
+                .align_x(iced::alignment::Horizontal::Center)
+                .width(Length::Fill),
+            container(
+                text(match self.status {
+                    ConnectionStatus::Connected => "Internal Resources Available".to_string(),
+                    ConnectionStatus::Error => self
+                        .error_message
+                        .clone()
+                        .unwrap_or_else(|| "Something went wrong. Check logs.".to_string()),
+                    ConnectionStatus::Connecting | ConnectionStatus::Disconnecting => {
+                        self.status_message.clone()
+                    }
+                    _ => "Koç University Access Restricted".to_string(),
+                })
+                .size(12)
+                .color(COLOR_TEXT_DIM)
+                .align_x(iced::alignment::Horizontal::Center)
+            )
+            .width(Length::Fill)
+            .center_x(Length::Fill),
         ]
         .spacing(15)
-        .align_x(Alignment::Center);
+        .align_x(Alignment::Center)
+        .width(Length::Fill)
+        .max_width(480.0);
 
         // Add connection details when connected
         if self.status == ConnectionStatus::Connected {
@@ -103,25 +119,31 @@ impl KuVpnGui {
                 );
 
                 let mut status_col = column![row![
-                    text("Duration:").width(80),
-                    text(duration_str).color(COLOR_SUCCESS),
+                    text("Duration:").size(12).width(90).color(COLOR_TEXT_DIM),
+                    text(duration_str).size(13).color(COLOR_SUCCESS),
                 ]
-                .spacing(10)];
+                .spacing(12)
+                .align_y(Alignment::Center)];
 
                 #[cfg(unix)]
                 {
                     status_col = status_col.push(
                         row![
-                            text("Interface:").width(80),
-                            text("kuvpn0").color(COLOR_SUCCESS),
+                            text("Interface:")
+                                .size(12)
+                                .width(90)
+                                .color(COLOR_TEXT_DIM),
+                            text("kuvpn0").size(13).color(COLOR_SUCCESS),
                         ]
-                        .spacing(10),
+                        .spacing(12)
+                        .align_y(Alignment::Center),
                     );
                 }
 
                 content = content.push(
-                    container(status_col.spacing(8))
-                        .padding(15)
+                    container(status_col.spacing(10))
+                        .padding(18)
+                        .width(Length::Fill)
                         .style(card),
                 );
             }

@@ -54,10 +54,13 @@ pub fn main() -> iced::Result {
                 }
             }
 
+            let use_csd = gui.settings.use_client_decorations;
             let (id, task) = iced::window::open(iced::window::Settings {
                 exit_on_close_request: false,
-                size: iced::Size::new(480.0, 820.0),
-                min_size: Some(iced::Size::new(400.0, 600.0)),
+                size: iced::Size::new(580.0, 650.0),
+                min_size: Some(iced::Size::new(560.0, 580.0)),
+                decorations: !use_csd,
+                transparent: use_csd,
                 ..Default::default()
             });
 

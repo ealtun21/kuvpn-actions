@@ -11,6 +11,7 @@ pub struct GuiSettings {
     pub openconnect_path: String,
     pub login_mode_val: f32,
     pub close_to_tray: bool,
+    pub use_client_decorations: bool,
 }
 
 impl Default for GuiSettings {
@@ -24,6 +25,7 @@ impl Default for GuiSettings {
             openconnect_path: "openconnect".to_string(),
             login_mode_val: 0.0,
             close_to_tray: true,
+            use_client_decorations: true,
         }
     }
 }
