@@ -20,5 +20,7 @@ pub use openconnect::{
     execute_openconnect, get_openconnect_pid, is_openconnect_running, is_vpn_interface_up,
     kill_process, locate_openconnect,
 };
+#[cfg(unix)]
+pub use openconnect::{find_askpass, needs_password_prompt, resolve_escalation_tool};
 pub use session::{ConnectionStatus, ParsedLog, SessionConfig, VpnSession};
 pub use utils::get_user_data_dir;
