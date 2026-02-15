@@ -1,7 +1,7 @@
-use rpassword::read_password;
+use console::{Style, Term};
+use dialoguer::{Input, Password};
 use std::env;
 use std::error::Error;
-use std::io::{self, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -36,26 +36,40 @@ pub struct TerminalCredentialsProvider;
 
 impl CredentialsProvider for TerminalCredentialsProvider {
     fn request_text(&self, msg: &str) -> String {
-        prompt_text(msg)
+        // Clear the current line in case a spinner is active on another thread
+        let term = Term::stderr();
+        let _ = term.clear_line();
+        Input::new()
+            .with_prompt(msg.trim_end_matches(": ").trim_end_matches(':'))
+            .interact_text()
+            .unwrap_or_default()
     }
 
     fn request_password(&self, msg: &str) -> String {
-        prompt_password(msg)
+        // Clear the current line in case a spinner is active on another thread
+        let term = Term::stderr();
+        let _ = term.clear_line();
+        Password::new()
+            .with_prompt(msg.trim_end_matches(": ").trim_end_matches(':'))
+            .interact()
+            .unwrap_or_default()
     }
 
     fn on_mfa_push(&self, code: &str) {
-        log::info!(
-            "MFA Push: Please approve in your Authenticator app. Code: {}",
-            code
+        let bold = Style::new().bold();
+        let cyan = Style::new().cyan().bold();
+        eprintln!();
+        eprintln!(
+            "  {} Enter {} in Microsoft Authenticator",
+            bold.apply_to(">>"),
+            cyan.apply_to(code),
         );
-        println!(
-            "MFA Push: Please approve in your Authenticator app. Code: {}",
-            code
-        );
+        eprintln!();
     }
 
     fn on_mfa_complete(&self) {
-        log::info!("MFA Push completed.");
+        let green = Style::new().green();
+        eprintln!("  {} MFA approved", green.apply_to("✓"));
     }
 }
 
@@ -170,18 +184,3 @@ pub fn js_escape(s: &str) -> String {
     s.replace("\\", "\\\\").replace("'", "\\'")
 }
 
-/// Prompts the user for text input.
-pub fn prompt_text(msg: &str) -> String {
-    print!("{}", msg);
-    io::stdout().flush().unwrap();
-    let mut input = String::new();
-    io::stdin().read_line(&mut input).unwrap();
-    input.trim().to_owned()
-}
-
-/// Prompts the user for password input (hidden).
-pub fn prompt_password(msg: &str) -> String {
-    print!("{}", msg);
-    io::stdout().flush().unwrap();
-    read_password().unwrap()
-}
