@@ -238,6 +238,7 @@ impl VpnSession {
                 }
 
                 log("Info|Initializing tunnel...".to_string());
+                thread::sleep(Duration::from_millis(100));
 
                 // 2. Locate OpenConnect
                 let oc_path = match locate_openconnect(&config.openconnect_path) {

@@ -6,8 +6,8 @@ mod args;
 
 use args::Args;
 use clap::Parser;
-use console::{Style, Term};
-use dialoguer::{Input, Password};
+use console::{Key, Style, Term};
+use dialoguer::Input;
 use indicatif::{ProgressBar, ProgressStyle};
 use kuvpn::{
     init_logger, run_login_and_get_dsid, ConnectionStatus, ParsedLog, SessionConfig, VpnSession,
@@ -34,6 +34,47 @@ fn format_duration(duration: std::time::Duration) -> String {
     }
 }
 
+/// Reads a password from stdin with masked output (asterisks).
+fn read_masked_password(prompt: &str) -> String {
+    let term = Term::stderr();
+    let _ = term.write_str(prompt);
+    let _ = term.write_str(": ");
+    let _ = term.flush();
+
+    let mut password = String::new();
+
+    loop {
+        let key = match term.read_key() {
+            Ok(k) => k,
+            Err(_) => break,
+        };
+
+        match key {
+            Key::Enter => {
+                break;
+            }
+            Key::Backspace => {
+                if !password.is_empty() {
+                    password.pop();
+                    let _ = term.move_cursor_left(1);
+                    let _ = term.clear_chars(1);
+                    let _ = term.flush();
+                }
+            }
+            Key::Char(c) => {
+                if c == '\x03' { // Ctrl+C
+                    std::process::exit(130);
+                }
+                password.push(c);
+                let _ = term.write_str("*");
+                let _ = term.flush();
+            }
+            _ => {}
+        }
+    }
+    password
+}
+
 /// CLI credentials provider that can suspend the spinner before prompting.
 struct CliCredentialsProvider {
     spinner: Arc<ProgressBar>,
@@ -54,13 +95,11 @@ impl CredentialsProvider for CliCredentialsProvider {
 
     fn request_password(&self, msg: &str) -> String {
         self.spinner.finish_and_clear();
-        let result = Password::new()
-            .with_prompt(msg.trim_end_matches(": ").trim_end_matches(':'))
-            .interact()
-            .unwrap_or_default();
+        let result = read_masked_password(msg.trim_end_matches(": ").trim_end_matches(':'));
         // Clean up the prompt line after input
         let term = Term::stderr();
-        let _ = term.clear_last_lines(1);
+        let _ = term.clear_line();
+        let _ = term.write_str("\r");
         result
     }
 
