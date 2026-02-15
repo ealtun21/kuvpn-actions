@@ -5,7 +5,7 @@ use crate::types::{
 };
 use iced::widget::{button, column, container, row, scrollable, svg, text, text_input};
 use iced::{Alignment, Border, Color, Element, Length, Padding};
-use kuvpn::ConnectionStatus;
+
 
 impl KuVpnGui {
         pub fn view_advanced_settings(&self) -> Element<'_, Message> {
