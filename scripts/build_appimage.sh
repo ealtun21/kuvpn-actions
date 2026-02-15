@@ -164,9 +164,13 @@ LIBS_TO_BUNDLE_LIST="
     libblkid.so.1
     libmount.so.1
     libselinux.so.1
+    libffi.so.8
     libffi.so.7
     libpcre.so.3
+    libpcre2-8.so.0
     libuuid.so.1
+    libssl.so.3
+    libcrypto.so.3
     libssl.so.1.1
     libcrypto.so.1.1
     libasound.so.2
