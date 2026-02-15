@@ -140,7 +140,7 @@ fn try_handle_page(
         fill_on_screen_and_click(
             tab,
             "input[name=\"passwd\"]",
-            "Password: ",
+            "KU Password: ",
             "#idSIButton9",
             true,
             None,
