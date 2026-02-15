@@ -195,7 +195,7 @@ impl KuVpnGui {
                                 is_locked,
                                 Message::EscalationToolChanged,
                             ),
-                            "Admin privilege tool. pkexec: GUI password prompt | sudo/doas: terminal (requires NOPASSWD)",
+                            "Admin privilege tool, default: pkexec, use what you have installed",
                         )
                     }
                     #[cfg(windows)]
