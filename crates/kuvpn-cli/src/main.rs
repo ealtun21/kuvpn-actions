@@ -97,9 +97,6 @@ fn main() -> ExitCode {
 
         if session.is_finished() {
             if session.status() == ConnectionStatus::Error {
-                if let Some(err) = session.last_error() {
-                    error!("Session Error: {}", err);
-                }
                 return ExitCode::FAILURE;
             }
             break;

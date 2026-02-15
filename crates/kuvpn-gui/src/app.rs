@@ -500,8 +500,6 @@ impl KuVpnGui {
                 }
 
                 if let Some(e) = err {
-                    self.logs.push(format!("[!] Session Error: {}", e));
-
                     // Store the error category for display
                     self.error_category = category;
 
