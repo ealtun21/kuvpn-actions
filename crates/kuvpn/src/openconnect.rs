@@ -203,6 +203,62 @@ pub fn locate_openconnect(user_path: &str) -> Option<PathBuf> {
     None
 }
 
+/// Searches for an available askpass program on the system.
+/// Returns the path to the askpass program if found.
+#[cfg(unix)]
+pub fn find_askpass() -> Option<PathBuf> {
+    // Check if SUDO_ASKPASS is already set
+    if let Ok(askpass) = std::env::var("SUDO_ASKPASS") {
+        let p = Path::new(&askpass);
+        if p.exists() && p.is_file() {
+            return Some(p.to_path_buf());
+        }
+    }
+
+    // Search for common askpass programs
+    let askpass_programs = [
+        "ssh-askpass",
+        "ksshaskpass",
+        "lxqt-openssh-askpass",
+        "x11-ssh-askpass",
+        "gnome-ssh-askpass",
+    ];
+    for prog in &askpass_programs {
+        if let Ok(path) = which(prog) {
+            return Some(path);
+        }
+    }
+
+    None
+}
+
+/// Determines which escalation tool will be used (for checking if password prompt is needed).
+#[cfg(unix)]
+pub fn resolve_escalation_tool(run_command: &Option<String>) -> Option<String> {
+    let mut default_tools = vec!["doas", "sudo", "pkexec"];
+
+    if let Some(custom_command) = run_command {
+        if which(custom_command).is_ok() {
+            default_tools.insert(0, custom_command.as_str());
+        }
+    }
+
+    default_tools
+        .iter()
+        .find_map(|&tool| which(tool).ok().map(|_| tool.to_string()))
+}
+
+/// Returns true if the given escalation tool needs a password piped via stdin
+/// (i.e., it's sudo or doas, not pkexec which has its own GUI prompt).
+#[cfg(unix)]
+pub fn needs_password_prompt(tool: &str) -> bool {
+    let base = Path::new(tool)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(tool);
+    matches!(base, "sudo" | "doas")
+}
+
 /// Executes the `openconnect` command.
 pub fn execute_openconnect(
     cookie_value: String,
@@ -212,6 +268,7 @@ pub fn execute_openconnect(
     _stdout: Stdio,
     _stderr: Stdio,
     interface_name: &str,
+    _sudo_password: Option<String>,
 ) -> anyhow::Result<VpnProcess> {
     #[cfg(unix)]
     {
@@ -230,8 +287,35 @@ pub fn execute_openconnect(
                 "No available tool for running openconnect (sudo/doas/pkexec not found)"
             ))?;
 
-        let child = Command::new(command_to_run)
-            .arg(openconnect_path)
+        let tool_base = Path::new(command_to_run)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(command_to_run);
+
+        let askpass = find_askpass();
+        let use_askpass = askpass.is_some() && needs_password_prompt(tool_base);
+        let use_stdin_password =
+            !use_askpass && _sudo_password.is_some() && needs_password_prompt(tool_base);
+
+        let mut cmd = Command::new(command_to_run);
+
+        // Configure password feeding method
+        if use_askpass {
+            let askpass_path = askpass.unwrap();
+            log::info!("Using askpass program: {:?}", askpass_path);
+            cmd.env("SUDO_ASKPASS", &askpass_path);
+            if tool_base == "sudo" {
+                cmd.arg("-A");
+            }
+        } else if use_stdin_password {
+            log::info!("Piping password via stdin to {}", tool_base);
+            if tool_base == "sudo" {
+                cmd.arg("-S");
+            }
+            cmd.stdin(Stdio::piped());
+        }
+
+        cmd.arg(openconnect_path)
             .arg("--protocol")
             .arg("nc")
             .arg("--interface")
@@ -240,8 +324,21 @@ pub fn execute_openconnect(
             .arg(format!("DSID={}", cookie_value))
             .arg(url)
             .stdout(_stdout)
-            .stderr(_stderr)
-            .spawn()?;
+            .stderr(_stderr);
+
+        let mut child = cmd.spawn()?;
+
+        // Pipe password to stdin if needed
+        if use_stdin_password {
+            if let Some(ref password) = _sudo_password {
+                if let Some(mut stdin) = child.stdin.take() {
+                    use std::io::Write;
+                    let _ = writeln!(stdin, "{}", password);
+                    // Drop stdin to close it so the process doesn't hang waiting for more input
+                    drop(stdin);
+                }
+            }
+        }
 
         return Ok(VpnProcess::Unix(child));
     }

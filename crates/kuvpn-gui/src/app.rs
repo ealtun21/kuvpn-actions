@@ -299,6 +299,7 @@ impl KuVpnGui {
                         },
                         escalation_tool: Some(self.settings.escalation_tool.clone()),
                         interface_name: "kuvpn0".to_string(),
+                        gui_mode: true,
                     };
 
                     let session = Arc::new(VpnSession::new(config));
