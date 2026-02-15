@@ -67,6 +67,9 @@ pub struct SessionConfig {
     pub openconnect_path: String,
     pub escalation_tool: Option<String>,
     pub interface_name: String,
+    /// When true, prompt the user for sudo/doas password via the CredentialsProvider
+    /// instead of relying on the terminal. Set to true for GUI, false for CLI.
+    pub gui_mode: bool,
 }
 
 pub struct VpnSession {
@@ -253,6 +256,49 @@ impl VpnSession {
                     }
                 };
 
+                // 2.5. Check if we need to prompt for sudo/doas password (GUI only;
+                // CLI has a terminal so sudo/doas prompt natively)
+                let sudo_password: Option<String> = {
+                    #[cfg(unix)]
+                    {
+                        use crate::openconnect::{
+                            find_askpass, needs_password_prompt, resolve_escalation_tool,
+                        };
+
+                        if config.gui_mode {
+                            let tool = resolve_escalation_tool(&config.escalation_tool);
+                            if let Some(ref tool_name) = tool {
+                                if needs_password_prompt(tool_name) && find_askpass().is_none() {
+                                    log(format!(
+                                        "Info|{} requires a password. Prompting...",
+                                        tool_name
+                                    ));
+                                    let pw = provider.request_password(&format!(
+                                        "Enter your {} password to start the VPN tunnel",
+                                        tool_name
+                                    ));
+                                    if pw.is_empty() && cancel_token.is_cancelled() {
+                                        *status.lock().unwrap() =
+                                            ConnectionStatus::Disconnected;
+                                        return;
+                                    }
+                                    Some(pw)
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        None
+                    }
+                };
+
                 // 3. Execute OpenConnect
                 let mut proc = match execute_openconnect(
                     dsid,
@@ -262,6 +308,7 @@ impl VpnSession {
                     Stdio::piped(),
                     Stdio::piped(),
                     interface_name,
+                    sudo_password,
                 ) {
                     Ok(p) => p,
                     Err(e) => {
