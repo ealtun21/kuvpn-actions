@@ -1,14 +1,13 @@
-FROM --platform=linux/amd64 ubuntu:20.04
+FROM --platform=linux/amd64 ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Configure APT for multi-arch (amd64 and arm64)
 RUN dpkg --add-architecture arm64 && \
-    sed -i 's/http:\/\/archive.ubuntu.com\/ubuntu\//[arch=amd64] http:\/\/archive.ubuntu.com\/ubuntu\//g' /etc/apt/sources.list && \
-    sed -i 's/http:\/\/security.ubuntu.com\/ubuntu\//[arch=amd64] http:\/\/security.ubuntu.com\/ubuntu\//g' /etc/apt/sources.list && \
-    echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports focal main restricted universe multiverse" >> /etc/apt/sources.list && \
-    echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports focal-updates main restricted universe multiverse" >> /etc/apt/sources.list && \
-    echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports focal-security main restricted universe multiverse" >> /etc/apt/sources.list && \
+    sed -i 's/^deb /deb [arch=amd64] /g' /etc/apt/sources.list && \
+    echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy-updates main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy-security main restricted universe multiverse" >> /etc/apt/sources.list && \
     apt-get update && apt-get install -y \
     curl \
     git \
