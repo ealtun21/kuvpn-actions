@@ -20,9 +20,9 @@ if [ "$1" != "--no-container" ] && [ ! -f /.containerenv ] && [ ! -f /run/.conta
         
         CONTAINER_ID=$(podman create kuvpn-builder-aarch64)
         mkdir -p dist
-        podman cp "$CONTAINER_ID":/build/${APP_NAME}-minimal-${ARCH}.AppImage dist/
+        podman cp "$CONTAINER_ID":/build/dist/${APP_NAME}-minimal-${ARCH}.AppImage dist/
         if [ "$1" == "--full" ]; then
-             podman cp "$CONTAINER_ID":/build/${APP_NAME}-full-${ARCH}.AppImage dist/
+             podman cp "$CONTAINER_ID":/build/dist/${APP_NAME}-full-${ARCH}.AppImage dist/
         fi
         podman rm "$CONTAINER_ID"
         

@@ -19,9 +19,9 @@ if [ "$1" != "--no-container" ] && [ ! -f /.containerenv ] && [ ! -f /run/.conta
         
         CONTAINER_ID=$(podman create kuvpn-builder)
         mkdir -p dist
-        podman cp "$CONTAINER_ID":/build/${APP_NAME}-minimal-${ARCH}.AppImage dist/
+        podman cp "$CONTAINER_ID":/build/dist/${APP_NAME}-minimal-${ARCH}.AppImage dist/
         if [ "$1" == "--full" ]; then
-             podman cp "$CONTAINER_ID":/build/${APP_NAME}-full-${ARCH}.AppImage dist/
+             podman cp "$CONTAINER_ID":/build/dist/${APP_NAME}-full-${ARCH}.AppImage dist/
         fi
         podman rm "$CONTAINER_ID"
         
@@ -33,9 +33,9 @@ if [ "$1" != "--no-container" ] && [ ! -f /.containerenv ] && [ ! -f /run/.conta
         
         CONTAINER_ID=$(docker create kuvpn-builder)
         mkdir -p dist
-        docker cp "$CONTAINER_ID":/build/${APP_NAME}-minimal-${ARCH}.AppImage dist/
+        docker cp "$CONTAINER_ID":/build/dist/${APP_NAME}-minimal-${ARCH}.AppImage dist/
         if [ "$1" == "--full" ]; then
-             docker cp "$CONTAINER_ID":/build/${APP_NAME}-full-${ARCH}.AppImage dist/
+             docker cp "$CONTAINER_ID":/build/dist/${APP_NAME}-full-${ARCH}.AppImage dist/
         fi
         docker rm "$CONTAINER_ID"
         

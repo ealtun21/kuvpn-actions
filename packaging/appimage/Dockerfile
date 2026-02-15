@@ -49,5 +49,3 @@ COPY . .
 # Build
 ARG BUILD_ARGS=""
 RUN ./scripts/build_appimage.sh --no-container $BUILD_ARGS
-
-# The output AppImage will be in the /build directory
