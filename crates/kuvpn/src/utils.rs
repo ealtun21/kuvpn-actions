@@ -60,7 +60,7 @@ impl CredentialsProvider for TerminalCredentialsProvider {
         let cyan = Style::new().cyan().bold();
         eprintln!();
         eprintln!(
-            "  {} Enter {} in Microsoft Authenticator",
+            "{} Enter {} in Authenticator",
             bold.apply_to(">>"),
             cyan.apply_to(code),
         );
