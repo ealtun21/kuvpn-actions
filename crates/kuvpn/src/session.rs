@@ -67,9 +67,6 @@ pub struct SessionConfig {
     pub openconnect_path: String,
     pub escalation_tool: Option<String>,
     pub interface_name: String,
-    /// When true, prompt the user for sudo/doas password via the CredentialsProvider
-    /// instead of relying on the terminal. Set to true for GUI, false for CLI.
-    pub gui_mode: bool,
 }
 
 pub struct VpnSession {
@@ -115,6 +112,10 @@ impl VpnSession {
     pub fn is_finished(&self) -> bool {
         let s = self.status();
         s == ConnectionStatus::Disconnected || s == ConnectionStatus::Error
+    }
+
+    pub fn cancel_token(&self) -> CancellationToken {
+        self.cancel_token.clone()
     }
 
     pub fn cancel(&self) {
@@ -256,8 +257,10 @@ impl VpnSession {
                     }
                 };
 
-                // 2.5. Check if we need to prompt for sudo/doas password (GUI only;
-                // CLI has a terminal so sudo/doas prompt natively)
+                // 2.5. Check if we need to prompt for sudo/doas password.
+                // Uses the CredentialsProvider so both CLI (dialoguer) and GUI (modal)
+                // get a proper prompt instead of relying on sudo's native terminal prompt
+                // (which breaks when stdout/stderr are piped).
                 let sudo_password: Option<String> = {
                     #[cfg(unix)]
                     {
@@ -265,27 +268,23 @@ impl VpnSession {
                             find_askpass, needs_password_prompt, resolve_escalation_tool,
                         };
 
-                        if config.gui_mode {
-                            let tool = resolve_escalation_tool(&config.escalation_tool);
-                            if let Some(ref tool_name) = tool {
-                                if needs_password_prompt(tool_name) && find_askpass().is_none() {
-                                    log(format!(
-                                        "Info|{} requires a password. Prompting...",
-                                        tool_name
-                                    ));
-                                    let pw = provider.request_password(&format!(
-                                        "Enter your {} password to start the VPN tunnel",
-                                        tool_name
-                                    ));
-                                    if pw.is_empty() && cancel_token.is_cancelled() {
-                                        *status.lock().unwrap() =
-                                            ConnectionStatus::Disconnected;
-                                        return;
-                                    }
-                                    Some(pw)
-                                } else {
-                                    None
+                        let tool = resolve_escalation_tool(&config.escalation_tool);
+                        if let Some(ref tool_name) = tool {
+                            if needs_password_prompt(tool_name) && find_askpass().is_none() {
+                                log(format!(
+                                    "Info|{} requires a password. Prompting...",
+                                    tool_name
+                                ));
+                                let pw = provider.request_password(&format!(
+                                    "Enter your {} password to start the VPN tunnel",
+                                    tool_name
+                                ));
+                                if pw.is_empty() && cancel_token.is_cancelled() {
+                                    *status.lock().unwrap() =
+                                        ConnectionStatus::Disconnected;
+                                    return;
                                 }
+                                Some(pw)
                             } else {
                                 None
                             }

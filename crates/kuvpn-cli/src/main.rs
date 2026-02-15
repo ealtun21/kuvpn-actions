@@ -1,28 +1,109 @@
-//! # VPN Connection Tool
+//! # KUVPN CLI
 //!
-//! This application fetches a DSID cookie from a specified URL using a browser
-//! and then uses that DSID to establish a VPN connection via the `openconnect` command.
+//! A clean terminal interface for connecting to Koc University's VPN.
 
 mod args;
 
 use args::Args;
 use clap::Parser;
+use console::{Style, Term};
+use dialoguer::{Input, Password};
+use indicatif::{ProgressBar, ProgressStyle};
 use kuvpn::{
     init_logger, run_login_and_get_dsid, ConnectionStatus, ParsedLog, SessionConfig, VpnSession,
 };
-use log::{error, info};
+use kuvpn::utils::CredentialsProvider;
+use log::info;
 use std::process::ExitCode;
 use std::sync::Arc;
+use std::time::Instant;
+
+/// Format a duration into a human-readable string like "1h 23m 45s".
+fn format_duration(duration: std::time::Duration) -> String {
+    let total_secs = duration.as_secs();
+    let hours = total_secs / 3600;
+    let minutes = (total_secs % 3600) / 60;
+    let seconds = total_secs % 60;
+
+    if hours > 0 {
+        format!("{}h {}m {}s", hours, minutes, seconds)
+    } else if minutes > 0 {
+        format!("{}m {}s", minutes, seconds)
+    } else {
+        format!("{}s", seconds)
+    }
+}
+
+/// CLI credentials provider that can suspend the spinner before prompting.
+struct CliCredentialsProvider {
+    spinner: Arc<ProgressBar>,
+}
+
+impl CredentialsProvider for CliCredentialsProvider {
+    fn request_text(&self, msg: &str) -> String {
+        self.spinner.finish_and_clear();
+        let result = Input::new()
+            .with_prompt(msg.trim_end_matches(": ").trim_end_matches(':'))
+            .interact_text()
+            .unwrap_or_default();
+        // Clean up the prompt line after input
+        let term = Term::stderr();
+        let _ = term.clear_last_lines(1);
+        result
+    }
+
+    fn request_password(&self, msg: &str) -> String {
+        self.spinner.finish_and_clear();
+        let result = Password::new()
+            .with_prompt(msg.trim_end_matches(": ").trim_end_matches(':'))
+            .interact()
+            .unwrap_or_default();
+        // Clean up the prompt line after input
+        let term = Term::stderr();
+        let _ = term.clear_last_lines(1);
+        result
+    }
+
+    fn on_mfa_push(&self, code: &str) {
+        self.spinner.finish_and_clear();
+        let bold = Style::new().bold();
+        let cyan = Style::new().cyan().bold();
+        eprintln!();
+        eprintln!(
+            "  {} Enter {} in Microsoft Authenticator",
+            bold.apply_to(">>"),
+            cyan.apply_to(code),
+        );
+        eprintln!();
+    }
+
+    fn on_mfa_complete(&self) {
+        let green = Style::new().green();
+        eprintln!("  {} MFA approved", green.apply_to("✓"));
+    }
+}
 
 /// The main entry point of the application.
 fn main() -> ExitCode {
-    // Parse command-line arguments.
     let args = Args::parse();
     init_logger(args.level.clone().into());
 
+    let green = Style::new().green().bold();
+    let red = Style::new().red().bold();
+    let dim = Style::new().dim();
+    let bold = Style::new().bold();
+    let yellow = Style::new().yellow().bold();
+
+    // Print banner
+    eprintln!(
+        "{} {}",
+        bold.apply_to("KUVPN"),
+        dim.apply_to(format!("v{}", env!("CARGO_PKG_VERSION"))),
+    );
+
     // Ensure only one instance is running
     if let Err(e) = kuvpn::utils::ensure_single_instance() {
-        error!("{}", e);
+        eprintln!("  {} {}", red.apply_to("✗"), e);
         return ExitCode::FAILURE;
     }
 
@@ -30,17 +111,26 @@ fn main() -> ExitCode {
     if args.clean {
         match kuvpn::utils::wipe_user_data_dir() {
             Ok(_) => {
-                info!("Session information successfully removed.");
+                eprintln!("  {} Session data wiped", green.apply_to("✓"));
                 return ExitCode::SUCCESS;
             }
             Err(e) => {
-                error!("Failed to remove session information: {}", e);
+                eprintln!("  {} Failed to wipe session data: {}", red.apply_to("✗"), e);
                 return ExitCode::FAILURE;
             }
         }
     }
 
     if args.get_dsid {
+        let spinner = ProgressBar::new_spinner();
+        spinner.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner:.cyan} {msg}")
+                .unwrap(),
+        );
+        spinner.set_message("Retrieving DSID...");
+        spinner.enable_steady_tick(std::time::Duration::from_millis(80));
+
         match run_login_and_get_dsid(
             !args.disable_headless,
             &args.url,
@@ -53,11 +143,13 @@ fn main() -> ExitCode {
             None,
         ) {
             Ok(dsid) => {
+                spinner.finish_and_clear();
                 println!("{}", dsid);
                 return ExitCode::SUCCESS;
             }
             Err(e) => {
-                error!("Login process failed: {}", e);
+                spinner.finish_and_clear();
+                eprintln!("  {} Login failed: {}", red.apply_to("✗"), e);
                 return ExitCode::FAILURE;
             }
         }
@@ -73,23 +165,162 @@ fn main() -> ExitCode {
         openconnect_path: args.openconnect_path.clone(),
         escalation_tool: args.run_command.clone(),
         interface_name: args.interface_name.clone(),
-        gui_mode: false,
     };
+
+    // Create a shared spinner so the credentials provider can suspend it
+    let spinner = Arc::new(ProgressBar::new_spinner());
+    spinner.set_style(
+        ProgressStyle::default_spinner()
+            .template("{spinner:.cyan} {msg}")
+            .unwrap(),
+    );
 
     let session = VpnSession::new(config);
     let (log_tx, log_rx) = crossbeam_channel::unbounded();
     session.set_logs_tx(log_tx);
 
-    let provider = Arc::new(kuvpn::utils::TerminalCredentialsProvider);
+    let provider = Arc::new(CliCredentialsProvider {
+        spinner: Arc::clone(&spinner),
+    });
     let _join_handle = session.connect(provider);
+
+    // Set up Ctrl+C handler for graceful disconnect
+    let cancel_session = session.cancel_token();
+    ctrlc::set_handler(move || {
+        cancel_session.cancel();
+    })
+    .ok();
+
+    let mut connection_start: Option<Instant> = None;
+    let mut spinner_active = false;
 
     loop {
         while let Ok(log_msg) = log_rx.try_recv() {
             if let Some(parsed) = ParsedLog::parse(&log_msg) {
+                let msg = &parsed.message;
+
+                // Handle key status messages directly (bypass log system)
+                match msg.as_str() {
+                    "Accessing campus gateway..." => {
+                        if !spinner_active {
+                            spinner.enable_steady_tick(std::time::Duration::from_millis(80));
+                            spinner_active = true;
+                        }
+                        spinner.set_message("Accessing campus gateway...");
+                        continue;
+                    }
+                    "Initializing tunnel..." => {
+                        if spinner_active {
+                            spinner.finish_and_clear();
+                            spinner_active = false;
+                        }
+                        eprintln!(
+                            "  {} Initializing tunnel...",
+                            green.apply_to("✓"),
+                        );
+                        continue;
+                    }
+                    "VPN interface already active, monitoring..." => {
+                        if spinner_active {
+                            spinner.finish_and_clear();
+                            spinner_active = false;
+                        }
+                        eprintln!(
+                            "  {} VPN already active, monitoring connection",
+                            yellow.apply_to("~"),
+                        );
+                        connection_start = Some(Instant::now());
+                        continue;
+                    }
+                    "Connected." => {
+                        if spinner_active {
+                            spinner.finish_and_clear();
+                            spinner_active = false;
+                        }
+                        connection_start = Some(Instant::now());
+
+                        #[cfg(unix)]
+                        eprintln!(
+                            "  {} Connected to KU VPN {}",
+                            green.apply_to("✓"),
+                            dim.apply_to(format!("(interface: {})", args.interface_name)),
+                        );
+                        #[cfg(not(unix))]
+                        eprintln!(
+                            "  {} Connected to KU VPN",
+                            green.apply_to("✓"),
+                        );
+
+                        eprintln!(
+                            "    {}",
+                            dim.apply_to("Press Ctrl+C to disconnect"),
+                        );
+                        continue;
+                    }
+                    "Disconnecting..." => {
+                        if spinner_active {
+                            spinner.finish_and_clear();
+                        }
+                        spinner.set_message("Disconnecting...");
+                        spinner.enable_steady_tick(std::time::Duration::from_millis(80));
+                        spinner_active = true;
+                        continue;
+                    }
+                    "Disconnected." => {
+                        if spinner_active {
+                            spinner.finish_and_clear();
+                            spinner_active = false;
+                        }
+                        let duration_str = connection_start
+                            .map(|s| format!(" (session: {})", format_duration(s.elapsed())))
+                            .unwrap_or_default();
+                        eprintln!(
+                            "  {} Disconnected{}",
+                            dim.apply_to("●"),
+                            dim.apply_to(duration_str),
+                        );
+                        continue;
+                    }
+                    _ => {
+                        // Suppress password prompt log messages (provider handles the prompt)
+                        if msg.ends_with("requires a password. Prompting...") {
+                            continue;
+                        }
+                    }
+                }
+
+                // Handle errors - always print
+                if parsed.level == log::Level::Error {
+                    if spinner_active {
+                        spinner.finish_and_clear();
+                        spinner_active = false;
+                    }
+                    eprintln!("  {} {}", red.apply_to("✗"), msg);
+
+                    // Show recovery suggestions for auth errors
+                    if msg.contains("Full Auto mode unable to complete login")
+                        || msg.contains("Could not find a handler")
+                    {
+                        eprintln!();
+                        eprintln!("  {} Try the following:", bold.apply_to("Suggestions:"));
+                        eprintln!(
+                            "    {} Switch to manual mode: {}",
+                            dim.apply_to("•"),
+                            bold.apply_to("--no-auto-login --disable-headless"),
+                        );
+                        eprintln!(
+                            "    {} Wipe session cache:    {}",
+                            dim.apply_to("•"),
+                            bold.apply_to("--clean"),
+                        );
+                    }
+                    continue;
+                }
+
+                // Other messages go through the log system
                 match parsed.level {
-                    log::Level::Error => error!("{}", parsed.message),
-                    log::Level::Warn => log::warn!("{}", parsed.message),
-                    _ => info!("{}", parsed.message),
+                    log::Level::Warn => log::warn!("{}", msg),
+                    _ => info!("{}", msg),
                 }
             } else {
                 info!("{}", log_msg);
@@ -97,6 +328,9 @@ fn main() -> ExitCode {
         }
 
         if session.is_finished() {
+            if spinner_active {
+                spinner.finish_and_clear();
+            }
             if session.status() == ConnectionStatus::Error {
                 return ExitCode::FAILURE;
             }
