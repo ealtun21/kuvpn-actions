@@ -7,12 +7,25 @@ pub mod settings;
 pub mod status;
 
 use crate::app::KuVpnGui;
-use crate::types::{Message, Tab, COLOR_ACCENT, COLOR_BG, COLOR_SURFACE, COLOR_TEXT, COLOR_TEXT_DIM};
-use iced::widget::{button, column, container, mouse_area, row, stack, svg, text};
-use iced::{Alignment, Border, Color, Element, Length, Shadow, Vector};
+use crate::types::{
+    btn_segment_selected, btn_segment_unselected, Message, SegmentPosition, Tab, COLOR_BG,
+    COLOR_SUCCESS, COLOR_SURFACE, COLOR_TEXT, COLOR_TEXT_DIM, COLOR_WARNING,
+    ICON_SETTINGS_SVG, ICON_SHIELD_SVG, ICON_TERMINAL_SVG,
+};
+use iced::widget::{button, column, container, mouse_area, row, stack, svg, text, Space};
+use iced::{Alignment, Border, Color, Element, Length, Shadow};
+use kuvpn::ConnectionStatus;
 
 impl KuVpnGui {
     fn view_title_bar(&self) -> Element<'_, Message> {
+        let (dot_color, bar_label) = match self.status {
+            ConnectionStatus::Connected => (COLOR_SUCCESS, "Connected"),
+            ConnectionStatus::Connecting => (COLOR_WARNING, "Connecting..."),
+            ConnectionStatus::Disconnecting => (COLOR_WARNING, "Disconnecting..."),
+            ConnectionStatus::Error => (Color::from_rgb(0.8, 0.2, 0.2), "Error"),
+            ConnectionStatus::Disconnected => (COLOR_TEXT_DIM, "Ready"),
+        };
+
         let title_bar_content = row![
             svg(svg::Handle::from_memory(crate::types::KU_LOGO_BYTES))
                 .width(20)
@@ -22,8 +35,22 @@ impl KuVpnGui {
                 }),
             text("KUVPN")
                 .size(14)
-                .color(iced::Color::WHITE)
-                .width(Length::Fill),
+                .color(iced::Color::WHITE),
+            container(Space::new().width(0).height(0))
+                .width(6)
+                .height(6)
+                .style(move |_| container::Style {
+                    background: Some(dot_color.into()),
+                    border: Border {
+                        radius: 3.0.into(),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }),
+            text(bar_label)
+                .size(11)
+                .color(Color::from_rgb(0.45, 0.45, 0.45)),
+            Space::new().width(Length::Fill),
             button(text("−").size(18).color(COLOR_TEXT))
                 .padding([0, 12])
                 .on_press(Message::MinimizeWindow)
@@ -70,7 +97,7 @@ impl KuVpnGui {
                 .style(|_| container::Style {
                     background: Some(COLOR_SURFACE.into()),
                     ..Default::default()
-                })
+                }),
         )
         .on_press(Message::DragWindow)
         .into()
@@ -79,7 +106,7 @@ impl KuVpnGui {
     pub fn view(&self, _id: iced::window::Id) -> Element<'_, Message> {
         let use_csd = self.settings.use_client_decorations;
 
-        // OpenConnect warning banner (always visible if needed)
+        // OpenConnect warning banner
         let oc_warning: Element<'_, Message> = if self.oc_test_result == Some(false) {
             container(
                 row![
@@ -109,13 +136,11 @@ impl KuVpnGui {
             })
             .into()
         } else {
-            container(iced::widget::Space::new().height(0)).into()
+            container(Space::new().height(0)).into()
         };
 
-        // Tab bar
         let tab_bar = self.view_tab_bar();
 
-        // Tab content
         let tab_content = match self.current_tab {
             Tab::Connection => self.view_connection_tab(),
             Tab::Settings => self.view_settings_tab(),
@@ -124,33 +149,29 @@ impl KuVpnGui {
 
         let content = container(
             column![oc_warning, tab_bar, tab_content]
-                .spacing(18)
-                .width(Length::Fill)
+                .spacing(12)
+                .width(Length::Fill),
         )
-        .padding(20)
+        .padding(16)
         .width(Length::Fill)
         .max_width(680.0)
         .center_x(Length::Fill);
 
-        // Build content with or without custom title bar
         let window_content = if use_csd {
             let title_bar = self.view_title_bar();
-            container(
-                column![title_bar, content]
-                    .width(Length::Fill)
-            )
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .style(|_| container::Style {
-                background: Some(COLOR_BG.into()),
-                text_color: Some(COLOR_TEXT.into()),
-                border: Border {
-                    color: Color::from_rgb(0.20, 0.20, 0.20),
-                    width: 1.0,
-                    radius: 0.0.into(),
-                },
-                ..Default::default()
-            })
+            container(column![title_bar, content].width(Length::Fill))
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .style(|_| container::Style {
+                    background: Some(COLOR_BG.into()),
+                    text_color: Some(COLOR_TEXT.into()),
+                    border: Border {
+                        color: Color::from_rgb(0.20, 0.20, 0.20),
+                        width: 1.0,
+                        radius: 0.0.into(),
+                    },
+                    ..Default::default()
+                })
         } else {
             container(content)
                 .width(Length::Fill)
@@ -174,14 +195,13 @@ impl KuVpnGui {
     }
 
     fn view_tab_bar(&self) -> Element<'_, Message> {
-        // Connection tab button
         let conn_active = self.current_tab == Tab::Connection;
         let conn_btn = button(
             container(
                 row![
-                    svg(svg::Handle::from_memory(crate::types::ICON_SHIELD_SVG))
-                        .width(16)
-                        .height(16)
+                    svg(svg::Handle::from_memory(ICON_SHIELD_SVG))
+                        .width(15)
+                        .height(15)
                         .style(move |_theme: &iced::Theme, _status| svg::Style {
                             color: Some(if conn_active {
                                 iced::Color::WHITE
@@ -191,55 +211,30 @@ impl KuVpnGui {
                         }),
                     text("Connection").size(13),
                 ]
-                .spacing(8)
-                .align_y(Alignment::Center)
+                .spacing(6)
+                .align_y(Alignment::Center),
             )
             .width(Length::Fill)
-            .center_x(Length::Fill)
+            .center_x(Length::Fill),
         )
-        .padding([10, 18])
+        .padding([10, 0])
         .width(Length::Fill)
         .on_press(Message::TabChanged(Tab::Connection))
-        .style(move |_theme, status| {
+        .style(move |theme, status| {
             if conn_active {
-                button::Style {
-                    background: Some(COLOR_ACCENT.into()),
-                    text_color: iced::Color::WHITE,
-                    border: Border {
-                        radius: 10.0.into(),
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                }
+                btn_segment_selected(theme, status, SegmentPosition::Left)
             } else {
-                let base = button::Style {
-                    background: Some(iced::Color::TRANSPARENT.into()),
-                    text_color: COLOR_TEXT_DIM,
-                    border: Border {
-                        radius: 10.0.into(),
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                };
-                match status {
-                    button::Status::Hovered => button::Style {
-                        background: Some(crate::types::COLOR_SURFACE.into()),
-                        text_color: COLOR_TEXT,
-                        ..base
-                    },
-                    _ => base,
-                }
+                btn_segment_unselected(theme, status, SegmentPosition::Left)
             }
         });
 
-        // Settings tab button
         let settings_active = self.current_tab == Tab::Settings;
         let settings_btn = button(
             container(
                 row![
-                    svg(svg::Handle::from_memory(crate::types::ICON_SETTINGS_SVG))
-                        .width(16)
-                        .height(16)
+                    svg(svg::Handle::from_memory(ICON_SETTINGS_SVG))
+                        .width(15)
+                        .height(15)
                         .style(move |_theme: &iced::Theme, _status| svg::Style {
                             color: Some(if settings_active {
                                 iced::Color::WHITE
@@ -249,55 +244,30 @@ impl KuVpnGui {
                         }),
                     text("Settings").size(13),
                 ]
-                .spacing(8)
-                .align_y(Alignment::Center)
+                .spacing(6)
+                .align_y(Alignment::Center),
             )
             .width(Length::Fill)
-            .center_x(Length::Fill)
+            .center_x(Length::Fill),
         )
-        .padding([10, 18])
+        .padding([10, 0])
         .width(Length::Fill)
         .on_press(Message::TabChanged(Tab::Settings))
-        .style(move |_theme, status| {
+        .style(move |theme, status| {
             if settings_active {
-                button::Style {
-                    background: Some(COLOR_ACCENT.into()),
-                    text_color: iced::Color::WHITE,
-                    border: Border {
-                        radius: 10.0.into(),
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                }
+                btn_segment_selected(theme, status, SegmentPosition::Middle)
             } else {
-                let base = button::Style {
-                    background: Some(iced::Color::TRANSPARENT.into()),
-                    text_color: COLOR_TEXT_DIM,
-                    border: Border {
-                        radius: 10.0.into(),
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                };
-                match status {
-                    button::Status::Hovered => button::Style {
-                        background: Some(crate::types::COLOR_SURFACE.into()),
-                        text_color: COLOR_TEXT,
-                        ..base
-                    },
-                    _ => base,
-                }
+                btn_segment_unselected(theme, status, SegmentPosition::Middle)
             }
         });
 
-        // Console tab button
         let console_active = self.current_tab == Tab::Console;
         let console_btn = button(
             container(
                 row![
-                    svg(svg::Handle::from_memory(crate::types::ICON_TERMINAL_SVG))
-                        .width(16)
-                        .height(16)
+                    svg(svg::Handle::from_memory(ICON_TERMINAL_SVG))
+                        .width(15)
+                        .height(15)
                         .style(move |_theme: &iced::Theme, _status| svg::Style {
                             color: Some(if console_active {
                                 iced::Color::WHITE
@@ -307,70 +277,73 @@ impl KuVpnGui {
                         }),
                     text("Console").size(13),
                 ]
-                .spacing(8)
-                .align_y(Alignment::Center)
+                .spacing(6)
+                .align_y(Alignment::Center),
             )
             .width(Length::Fill)
-            .center_x(Length::Fill)
+            .center_x(Length::Fill),
         )
-        .padding([10, 18])
+        .padding([10, 0])
         .width(Length::Fill)
         .on_press(Message::TabChanged(Tab::Console))
-        .style(move |_theme, status| {
+        .style(move |theme, status| {
             if console_active {
-                button::Style {
-                    background: Some(COLOR_ACCENT.into()),
-                    text_color: iced::Color::WHITE,
-                    border: Border {
-                        radius: 10.0.into(),
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                }
+                btn_segment_selected(theme, status, SegmentPosition::Right)
             } else {
-                let base = button::Style {
-                    background: Some(iced::Color::TRANSPARENT.into()),
-                    text_color: COLOR_TEXT_DIM,
-                    border: Border {
-                        radius: 10.0.into(),
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                };
-                match status {
-                    button::Status::Hovered => button::Style {
-                        background: Some(crate::types::COLOR_SURFACE.into()),
-                        text_color: COLOR_TEXT,
-                        ..base
-                    },
-                    _ => base,
-                }
+                btn_segment_unselected(theme, status, SegmentPosition::Right)
             }
         });
 
         row![conn_btn, settings_btn, console_btn]
-            .spacing(8)
+            .spacing(0)
             .into()
     }
 
     fn view_connection_tab(&self) -> Element<'_, Message> {
-        let status_view = self.view_status_circle();
-        let action_section = self.view_actions();
+        let status_hero = self.view_status_circle();
+        let action = self.view_actions();
 
-        // Banners are now part of status_view, so we don't need them separately
+        let mut content = column![]
+            .align_x(Alignment::Center)
+            .width(Length::Fill)
+            .height(Length::Fill);
 
-        // Main connection card
-        container(
-            column![status_view, action_section]
-                .spacing(10)
-                .align_x(Alignment::Center)
+        // Top spacer — pushes hero to vertical center
+        content = content.push(Space::new().height(Length::Fill));
+
+        // Status hero (circle + text + subtitle)
+        content = content.push(status_hero);
+
+        // Connection details pills when connected
+        if self.status == ConnectionStatus::Connected {
+            content = content.push(Space::new().height(14));
+            content = content.push(self.view_connection_details());
+        }
+
+        // Bottom spacer — pushes banners + button to bottom
+        content = content.push(Space::new().height(Length::Fill));
+
+        // MFA banner
+        if let Some(code) = &self.mfa_info {
+            content = content.push(self.view_mfa_card(code));
+            content = content.push(Space::new().height(10));
+        }
+
+        // Automation warning
+        if let Some(warning) = &self.automation_warning {
+            content = content.push(self.view_warning_card(warning));
+            content = content.push(Space::new().height(10));
+        }
+
+        // Action button
+        content = content.push(action);
+
+        container(content)
             .padding([20, 20])
-        )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .center_x(Length::Fill)
-        .style(crate::types::card)
-        .into()
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(crate::types::card)
+            .into()
     }
 
     fn view_settings_tab(&self) -> Element<'_, Message> {
