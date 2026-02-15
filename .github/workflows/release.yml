@@ -27,6 +27,7 @@ jobs:
           toolchain: stable
           target: x86_64-unknown-linux-musl
           cache: true
+          rustflags: ""
 
       - name: Install musl-tools
         run: sudo apt-get update && sudo apt-get install -y musl-tools
@@ -109,6 +110,7 @@ jobs:
           toolchain: stable
           target: x86_64-pc-windows-msvc
           cache: true
+          rustflags: ""
 
       - name: Build CLI and GUI
         run: |
@@ -173,6 +175,7 @@ jobs:
           toolchain: stable
           target: x86_64-apple-darwin
           cache: true
+          rustflags: ""
 
       - name: Build CLI and GUI
         run: |
@@ -266,6 +269,7 @@ jobs:
           toolchain: stable
           target: aarch64-apple-darwin
           cache: true
+          rustflags: ""
 
       - name: Build CLI and GUI
         run: |
