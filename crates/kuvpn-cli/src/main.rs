@@ -107,7 +107,7 @@ impl CredentialsProvider for CliCredentialsProvider {
         let bold = Style::new().bold();
         let cyan = Style::new().cyan().bold();
         eprintln!(
-            "  {} Enter {} in Microsoft Authenticator",
+            "{} Enter {} in Authenticator",
             bold.apply_to(">>"),
             cyan.apply_to(code),
         );
@@ -248,6 +248,10 @@ fn main() -> ExitCode {
                     "Initializing tunnel..." => {
                         if spinner_active {
                             spinner.finish_and_clear();
+                            eprintln!(
+                                "  {} Accessing campus gateway...",
+                                green.apply_to("✓"),
+                            );
                             spinner_active = false;
                         }
                         eprintln!(
