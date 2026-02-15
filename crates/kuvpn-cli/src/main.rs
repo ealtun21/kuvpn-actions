@@ -56,7 +56,6 @@ fn read_masked_password(prompt: &str) -> String {
             Key::Backspace => {
                 if !password.is_empty() {
                     password.pop();
-                    let _ = term.move_cursor_left(1);
                     let _ = term.clear_chars(1);
                     let _ = term.flush();
                 }
@@ -107,18 +106,16 @@ impl CredentialsProvider for CliCredentialsProvider {
         self.spinner.finish_and_clear();
         let bold = Style::new().bold();
         let cyan = Style::new().cyan().bold();
-        eprintln!();
         eprintln!(
             "  {} Enter {} in Microsoft Authenticator",
             bold.apply_to(">>"),
             cyan.apply_to(code),
         );
-        eprintln!();
     }
 
     fn on_mfa_complete(&self) {
-        let green = Style::new().green();
-        eprintln!("  {} MFA approved", green.apply_to("✓"));
+        let term = Term::stderr();
+        let _ = term.clear_last_lines(1);
     }
 }
 
