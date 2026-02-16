@@ -93,10 +93,10 @@ jobs:
           extra_nix_config: |
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build AppImage
+      - name: Build Bundled Binary
         run: |
-          nix run github:ralismark/nix-appimage -- .#default
-          mv kuvpn-gui-aarch64-linux.AppImage kuvpn-gui-linux-aarch64.AppImage
+          nix run github:matthewbauer/nix-bundle -- .#default
+          mv kuvpn-gui kuvpn-gui-linux-aarch64.AppImage
 
       - name: Upload
         uses: actions/upload-artifact@v4
