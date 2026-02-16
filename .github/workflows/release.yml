@@ -73,8 +73,8 @@ jobs:
 
       - name: Build AppImage
         run: |
-          nix run github:ralismark/nix-appimage -- .#default
-          mv kuvpn-gui-x86_64-linux.AppImage kuvpn-gui-linux-x86_64.AppImage
+          nix bundle --bundler github:ralismark/nix-appimage .#default
+          mv kuvpn-gui kuvpn-gui-linux-x86_64.AppImage
 
       - name: Upload
         uses: actions/upload-artifact@v4
@@ -93,9 +93,9 @@ jobs:
           extra_nix_config: |
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Bundled Binary
+      - name: Build AppImage
         run: |
-          nix run github:matthewbauer/nix-bundle -- .#default
+          nix bundle --bundler github:ralismark/nix-appimage .#default
           mv kuvpn-gui kuvpn-gui-linux-aarch64.AppImage
 
       - name: Upload
