@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=KUVPN
+GenericName=VPN Client
+Comment=Connect to Koc University Network
+Exec=kuvpn-gui
+Icon=kuvpn
+Categories=Network;
+Terminal=false
+StartupNotify=true
+Keywords=vpn;network;koc;university;openconnect;
