@@ -74,7 +74,8 @@ jobs:
       - name: Build AppImage
         run: |
           nix bundle --bundler github:ralismark/nix-appimage .#default
-          mv kuvpn-gui kuvpn-gui-linux-x86_64.AppImage
+          ls -lh
+          mv *.AppImage kuvpn-gui-linux-x86_64.AppImage
 
       - name: Upload
         uses: actions/upload-artifact@v4
@@ -96,7 +97,8 @@ jobs:
       - name: Build AppImage
         run: |
           nix bundle --bundler github:ralismark/nix-appimage .#default
-          mv kuvpn-gui kuvpn-gui-linux-aarch64.AppImage
+          ls -lh
+          mv *.AppImage kuvpn-gui-linux-aarch64.AppImage
 
       - name: Upload
         uses: actions/upload-artifact@v4
