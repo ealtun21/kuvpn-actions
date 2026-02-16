@@ -58,45 +58,76 @@ jobs:
           name: kuvpn-cli-linux-aarch64
           path: target/aarch64-unknown-linux-musl/release/kuvpn-cli
 
-  # ─── Linux AppImage (x86_64, built in container) ────────────────────
-  linux-appimage-x86_64:
+  # ─── Linux GUI (native binaries) ─────────────────────────────────────
+  linux-gui-x86_64:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build AppImage in Docker
-        run: |
-          docker build -t kuvpn-appimage-builder -f packaging/appimage/Dockerfile .
-          CONTAINER_ID=$(docker create kuvpn-appimage-builder)
-          mkdir -p dist
-          docker cp "$CONTAINER_ID":/build/dist/. dist/
-          docker rm "$CONTAINER_ID"
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          cache: true
+          rustflags: ""
 
-      - name: Upload Minimal AppImage
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            pkg-config \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            libdbus-1-dev \
+            libxdo-dev \
+            libxkbcommon-dev \
+            libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libasound2-dev \
+            libfontconfig1-dev libfreetype6-dev \
+            libssl-dev
+
+      - name: Build GUI
+        run: cargo build --release -p kuvpn-gui
+
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: kuvpn-appimage-x86_64
-          path: dist/KUVPN-minimal-x86_64.AppImage
+          name: kuvpn-gui-linux-x86_64
+          path: target/release/kuvpn-gui
 
-  # ─── Linux AppImage (aarch64, cross-compiled in container) ──────────
-  linux-appimage-aarch64:
-    runs-on: ubuntu-latest
+  linux-gui-aarch64:
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build aarch64 AppImage in Docker
-        run: |
-          docker build -t kuvpn-appimage-builder-aarch64 -f packaging/appimage/Dockerfile.aarch64 .
-          CONTAINER_ID=$(docker create kuvpn-appimage-builder-aarch64)
-          mkdir -p dist
-          docker cp "$CONTAINER_ID":/build/dist/. dist/
-          docker rm "$CONTAINER_ID"
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          cache: true
+          rustflags: ""
 
-      - name: Upload Minimal AppImage
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            pkg-config \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            libdbus-1-dev \
+            libxdo-dev \
+            libxkbcommon-dev \
+            libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libasound2-dev \
+            libfontconfig1-dev libfreetype6-dev \
+            libssl-dev
+
+      - name: Build GUI
+        run: cargo build --release -p kuvpn-gui
+
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: kuvpn-appimage-aarch64
-          path: dist/KUVPN-minimal-aarch64.AppImage
+          name: kuvpn-gui-linux-aarch64
+          path: target/release/kuvpn-gui
 
   # ─── Windows (native MSVC build + Inno Setup installer) ─────────────
   windows-x86_64:
@@ -354,8 +385,8 @@ jobs:
     needs:
       - linux-cli-x86_64
       - linux-cli-aarch64
-      - linux-appimage-x86_64
-      - linux-appimage-aarch64
+      - linux-gui-x86_64
+      - linux-gui-aarch64
       - windows-x86_64
       - macos-x86_64
       - macos-aarch64
@@ -378,11 +409,11 @@ jobs:
           cp artifacts/kuvpn-cli-linux-aarch64/kuvpn-cli release/kuvpn-cli-linux-aarch64
           chmod +x release/kuvpn-cli-linux-aarch64
 
-          # Linux AppImage
-          cp artifacts/kuvpn-appimage-x86_64/KUVPN-minimal-x86_64.AppImage release/KUVPN-x86_64.AppImage
-          chmod +x release/KUVPN-x86_64.AppImage
-          cp artifacts/kuvpn-appimage-aarch64/KUVPN-minimal-aarch64.AppImage release/KUVPN-aarch64.AppImage
-          chmod +x release/KUVPN-aarch64.AppImage
+          # Linux GUI
+          cp artifacts/kuvpn-gui-linux-x86_64/kuvpn-gui release/kuvpn-gui-linux-x86_64
+          chmod +x release/kuvpn-gui-linux-x86_64
+          cp artifacts/kuvpn-gui-linux-aarch64/kuvpn-gui release/kuvpn-gui-linux-aarch64
+          chmod +x release/kuvpn-gui-linux-aarch64
 
           # Windows
           cp artifacts/kuvpn-windows-x64/target/release/kuvpn-cli.exe release/kuvpn-cli-windows-x86_64.exe
@@ -410,11 +441,16 @@ jobs:
             ### Windows
             Download `KUVPN-Setup-x86_64.exe` and run the installer.
 
-            ### Linux (GUI - AppImage)
-            Download the `.AppImage` file for your architecture, make it executable (`chmod +x`), and run it.
+            ### Linux (GUI)
+            ```bash
+            curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash -s -- --gui
+            ```
+            **Requirements:** GTK3, libayatana-appindicator3 (install via your package manager).
 
             ### Linux (CLI only)
-            Download `kuvpn-cli-linux-x86_64` (or `aarch64`), make it executable, and run it.
+            ```bash
+            curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash
+            ```
 
             ### macOS
             Download the `.dmg` for your architecture (Intel = x86_64, Apple Silicon = aarch64).
