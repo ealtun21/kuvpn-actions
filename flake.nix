@@ -51,7 +51,7 @@
             lockFile = ./Cargo.lock;
           };
 
-          nativeBuildInputs = [ pkgs.pkg-config pkgs.copyDesktopItems pkgs.wrapGAppsHook3 ];
+          nativeBuildInputs = [ pkgs.pkg-config pkgs.copyDesktopItems ];
           buildInputs = commonBuildInputs;
 
           # Fix for missing libraries at runtime
