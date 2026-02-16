@@ -21,21 +21,25 @@
         };
 
         commonBuildInputs = with pkgs; [
-          pkg-config
           openssl
           dbus
           glib
           gtk3
           libappindicator-gtk3
-          xorg.libX11
-          xorg.libxcb
-          xorg.libXdmcp
-          xorg.libXtst
-          xorg.libXinerama
-          xorg.libxkbfile
+          libayatana-appindicator
+          libcanberra-gtk3
+          xapp
+          libX11
+          libxcb
+          libXdmcp
+          libXtst
+          libXinerama
+          libxkbfile
           libxkbcommon
           librsvg
           xdotool
+          gsettings-desktop-schemas
+          hicolor-icon-theme
         ];
 
         kuvpnGui = rustPlatform.buildRustPackage {
@@ -47,7 +51,7 @@
             lockFile = ./Cargo.lock;
           };
 
-          nativeBuildInputs = [ pkgs.pkg-config pkgs.copyDesktopItems ];
+          nativeBuildInputs = [ pkgs.pkg-config pkgs.copyDesktopItems pkgs.wrapGAppsHook3 ];
           buildInputs = commonBuildInputs;
 
           # Fix for missing libraries at runtime
@@ -79,13 +83,17 @@
             pkgs.atk
             pkgs.libappindicator-gtk3
             pkgs.libayatana-appindicator
+            pkgs.libcanberra-gtk3
+            pkgs.xapp
             pkgs.xdotool
-            pkgs.xorg.libX11
-            pkgs.xorg.libXtst
+            pkgs.libX11
+            pkgs.libXtst
             pkgs.libxkbcommon
             pkgs.dbus
             pkgs.openssl
             pkgs.librsvg
+            pkgs.gsettings-desktop-schemas
+            pkgs.hicolor-icon-theme
           ];
         };
       in
