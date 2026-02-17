@@ -58,9 +58,11 @@
           nativeBuildInputs = [ pkgs.pkg-config pkgs.copyDesktopItems pkgs.wrapGAppsHook3 ];
           buildInputs = commonBuildInputs;
 
-          # tray-icon loads libayatana-appindicator3 via dlopen at runtime;
-          # add it to LD_LIBRARY_PATH so the wrapper references it and Nix
-          # pulls it into the closure (needed for AppImage builds).
+          # Runtime library paths for dlopen'd libraries.
+          # tray-icon loads libayatana-appindicator3 via dlopen at runtime.
+          # Vulkan/wgpu: Do NOT set VK_ICD_FILENAMES here — the AppImage
+          # bind-mounts the host's /usr, so the host's Vulkan ICDs are found
+          # automatically by the loader's default search paths.
           preFixup = ''
             gappsWrapperArgs+=(
               --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath [
@@ -91,8 +93,21 @@
 
         mkAppImage = nix-appimage.lib.${system}.mkAppImage;
 
+        # Wrapper script for the AppImage entry point.
+        # nix-appimage bind-mounts the host's entire / except /nix, so
+        # the host's Vulkan ICD files (e.g. /usr/share/vulkan/icd.d/)
+        # are accessible. We must ensure no Nix wrapper has overridden
+        # VK_ICD_FILENAMES to point only at Nix store paths, which would
+        # hide the host GPU drivers from the Vulkan loader.
+        appimageWrapper = pkgs.writeShellScript "kuvpn-gui-appimage" ''
+          # Clear any Nix-injected Vulkan ICD overrides so the host GPU is used
+          unset VK_ICD_FILENAMES
+          unset VK_DRIVER_FILES
+          exec "${kuvpnGui}/bin/kuvpn-gui" "$@"
+        '';
+
         appimage = mkAppImage {
-          program = "${kuvpnGui}/bin/kuvpn-gui";
+          program = appimageWrapper;
         };
       in
       {
