@@ -5,9 +5,10 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     rust-overlay.url = "github:oxalica/rust-overlay";
     flake-utils.url = "github:numtide/flake-utils";
+    nix-appimage.url = "github:ralismark/nix-appimage";
   };
 
-  outputs = { self, nixpkgs, rust-overlay, flake-utils, ... }:
+  outputs = { self, nixpkgs, rust-overlay, flake-utils, nix-appimage, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         overlays = [ (import rust-overlay) ];
@@ -66,7 +67,7 @@
             )
           '';
 
-          # Fix for missing libraries at runtime
+          # Install desktop file and icon
           postInstall = ''
             mkdir -p $out/share/applications $out/share/icons/hicolor/256x256/apps
             cp packaging/linux/kuvpn.desktop $out/share/applications/
@@ -82,31 +83,10 @@
           };
         };
 
-        appimage = pkgs.appimageTools.wrapType2 {
-          pname = "kuvpn-gui";
-          version = "2.0.3";
-          src = kuvpnGui;
-          
-          extraPkgs = pkgs: [
-            pkgs.gtk3
-            pkgs.gdk-pixbuf
-            pkgs.cairo
-            pkgs.pango
-            pkgs.atk
-            pkgs.libappindicator-gtk3
-            pkgs.libayatana-appindicator
-            pkgs.libcanberra-gtk3
-            pkgs.xapp
-            pkgs.xdotool
-            pkgs.libX11
-            pkgs.libXtst
-            pkgs.libxkbcommon
-            pkgs.dbus
-            pkgs.openssl
-            pkgs.librsvg
-            pkgs.gsettings-desktop-schemas
-            pkgs.hicolor-icon-theme
-          ];
+        mkAppImage = nix-appimage.lib.${system}.mkAppImage;
+
+        appimage = mkAppImage {
+          program = "${kuvpnGui}/bin/kuvpn-gui";
         };
       in
       {
@@ -120,7 +100,7 @@
             pkgs.rust-bin.stable.latest.default
             pkgs.rust-analyzer
           ];
-          
+
           LD_LIBRARY_PATH = "${pkgs.lib.makeLibraryPath commonBuildInputs}";
         };
       }
