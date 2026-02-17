@@ -51,8 +51,20 @@
             lockFile = ./Cargo.lock;
           };
 
-          nativeBuildInputs = [ pkgs.pkg-config pkgs.copyDesktopItems ];
+          nativeBuildInputs = [ pkgs.pkg-config pkgs.copyDesktopItems pkgs.wrapGAppsHook3 ];
           buildInputs = commonBuildInputs;
+
+          # tray-icon loads libayatana-appindicator3 via dlopen at runtime;
+          # add it to LD_LIBRARY_PATH so the wrapper references it and Nix
+          # pulls it into the closure (needed for AppImage builds).
+          preFixup = ''
+            gappsWrapperArgs+=(
+              --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath [
+                pkgs.libappindicator-gtk3
+                pkgs.libayatana-appindicator
+              ]}"
+            )
+          '';
 
           # Fix for missing libraries at runtime
           postInstall = ''
