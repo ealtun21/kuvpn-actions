@@ -107,7 +107,8 @@
         '';
 
         appimage = mkAppImage {
-          program = appimageWrapper;
+          program = "${appimageWrapper}";
+          pname = "kuvpn-gui";
         };
       in
       {
