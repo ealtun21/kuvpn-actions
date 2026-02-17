@@ -68,11 +68,11 @@ jobs:
           extra_nix_config: |
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate flake.lock
-        run: nix flake lock
-
       - name: Build AppImage
         run: |
+          # Ensure flake.lock is valid (empty file causes JSON parse error)
+          [ -s flake.lock ] || rm -f flake.lock
+          nix flake lock
           nix build .#appimage
           # mkAppImage output is a single .AppImage file
           if [ -f result ]; then
@@ -100,11 +100,11 @@ jobs:
           extra_nix_config: |
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate flake.lock
-        run: nix flake lock
-
       - name: Build AppImage
         run: |
+          # Ensure flake.lock is valid (empty file causes JSON parse error)
+          [ -s flake.lock ] || rm -f flake.lock
+          nix flake lock
           nix build .#appimage
           # mkAppImage output is a single .AppImage file
           if [ -f result ]; then
