@@ -68,6 +68,9 @@ jobs:
           extra_nix_config: |
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
 
+      - name: Generate flake.lock
+        run: nix flake lock
+
       - name: Build AppImage
         run: |
           nix build .#appimage
@@ -96,6 +99,9 @@ jobs:
         with:
           extra_nix_config: |
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate flake.lock
+        run: nix flake lock
 
       - name: Build AppImage
         run: |
