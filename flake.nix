@@ -41,6 +41,9 @@
           xdotool
           gsettings-desktop-schemas
           hicolor-icon-theme
+          # wgpu backend requirements
+          vulkan-loader
+          wayland
         ];
 
         kuvpnGui = rustPlatform.buildRustPackage {
@@ -63,6 +66,9 @@
               --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath [
                 pkgs.libappindicator-gtk3
                 pkgs.libayatana-appindicator
+                pkgs.vulkan-loader
+                pkgs.wayland
+                pkgs.libxkbcommon
               ]}"
             )
           '';
