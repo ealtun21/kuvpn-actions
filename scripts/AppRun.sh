@@ -2,8 +2,10 @@
 export SELF=$(readlink -f "$0")
 export HERE="${SELF%/*}"
 
-# Prioritize bundled libs
-export LD_LIBRARY_PATH="${HERE}/usr/lib:${HERE}/usr/lib/x86_64-linux-gnu:${HERE}/lib/x86_64-linux-gnu:${HERE}/lib:${LD_LIBRARY_PATH}"
+# Host system libs FIRST so the Vulkan loader and GPU drivers (which must come
+# from the host) are found before any bundled copies. Bundled AppImage libs are
+# appended so app-specific deps still resolve from the bundle.
+export LD_LIBRARY_PATH="/usr/lib:/usr/lib64:/usr/lib/x86_64-linux-gnu:${HERE}/usr/lib:${HERE}/usr/lib/x86_64-linux-gnu:${HERE}/lib/x86_64-linux-gnu:${HERE}/lib:${LD_LIBRARY_PATH}"
 export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 export GIO_MODULE_DIR="${HERE}/usr/lib/gio/modules"
 export GSETTINGS_SCHEMA_DIR="${HERE}/usr/share/glib-2.0/schemas"
@@ -12,11 +14,11 @@ export GSETTINGS_SCHEMA_DIR="${HERE}/usr/share/glib-2.0/schemas"
 export GTK_MODULES=""
 export GTK_PATH=""
 
-# Force use of bundled glib/gobject/gio to avoid host symbol mismatches 
-# when dlopening appindicator or other plugins.
-# Note: We specifically EXCLUDE libX11 and libxcb to avoid conflicts with host drivers.
+# Preload only appindicator/dbusmenu libs from the bundle to avoid crashes.
+# We intentionally do NOT preload glib, libstdc++, or other core libs — doing
+# so would shadow the host's versions and break the Vulkan GPU driver loading.
 PRELOAD_LIBS=""
-for lib in libglib-2.0.so.0 libgobject-2.0.so.0 libgio-2.0.so.0 libgmodule-2.0.so.0 libdbus-1.so.3 libproxy.so.1 libstdc++.so.6 libgcc_s.so.1 libdbusmenu-gtk3.so.4 libdbusmenu-glib.so.4 libfontconfig.so.1 libfreetype.so.6 libatk-1.0.so.0 libatk-bridge-2.0.so.0 libxkbcommon-x11.so.0 libxcb-xkb.so.1 libX11-xcb.so.1; do
+for lib in libdbusmenu-gtk3.so.4 libdbusmenu-glib.so.4 libayatana-appindicator3.so.1 libayatana-ido3-0.4.so.0 libayatana-indicator3.so.7; do
     FOUND=""
     for dir in "${HERE}/usr/lib" "${HERE}/usr/lib/x86_64-linux-gnu" "${HERE}/lib" "${HERE}/lib/x86_64-linux-gnu"; do
         if [ -f "$dir/$lib" ]; then
@@ -36,6 +38,20 @@ done
 
 if [ -n "$PRELOAD_LIBS" ]; then
     export LD_PRELOAD="$PRELOAD_LIBS${LD_PRELOAD:+:$LD_PRELOAD}"
+fi
+
+# Vulkan ICD discovery: scan standard host paths for Vulkan ICD JSON files
+# so wgpu can find the host's GPU drivers (AMD, NVIDIA, Intel, etc.)
+if [ -z "$VK_ICD_FILENAMES" ]; then
+    VK_ICD_FILES=""
+    for icd_dir in /usr/share/vulkan/icd.d /etc/vulkan/icd.d /usr/local/share/vulkan/icd.d; do
+        if [ -d "$icd_dir" ]; then
+            for f in "$icd_dir"/*.json; do
+                [ -f "$f" ] && VK_ICD_FILES="${VK_ICD_FILES:+$VK_ICD_FILES:}$f"
+            done
+        fi
+    done
+    [ -n "$VK_ICD_FILES" ] && export VK_ICD_FILENAMES="$VK_ICD_FILES"
 fi
 
 # Chrome path for full version
