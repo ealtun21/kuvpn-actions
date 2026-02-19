@@ -90,7 +90,7 @@ pub enum Message {
     GtkTick,
     ResetSettings,
     TestOpenConnect,
-    OpenConnectTestResult(bool),
+    OpenConnectTestResult(Option<String>),
     CopyLogs,
     DragWindow,
     MinimizeWindow,
