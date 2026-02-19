@@ -162,7 +162,8 @@ impl KuVpnGui {
                 .align_y(Alignment::Center);
 
             #[cfg(unix)]
-            {
+            if let Some(ref iface_name) = self.active_interface {
+                let iface_display = iface_name.clone();
                 let interface_pill = container(
                     row![
                         svg(svg::Handle::from_memory(crate::types::ICON_GLOBE_SVG))
@@ -171,7 +172,7 @@ impl KuVpnGui {
                             .style(|_, _| svg::Style {
                                 color: Some(COLOR_SUCCESS)
                             }),
-                        text("kuvpn0").size(12).color(COLOR_SUCCESS),
+                        text(iface_display).size(12).color(COLOR_SUCCESS),
                     ]
                     .spacing(6)
                     .align_y(Alignment::Center),
