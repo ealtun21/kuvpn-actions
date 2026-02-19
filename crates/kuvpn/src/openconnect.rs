@@ -168,7 +168,13 @@ pub fn locate_openconnect(user_path: &str) -> Option<PathBuf> {
     // Step 3: Fallback to searching in common sbin directories.
     #[cfg(unix)]
     {
-        let fallback_dirs = ["/sbin", "/usr/sbin", "/usr/local/sbin"];
+        let fallback_dirs = [
+            "/sbin",
+            "/usr/sbin",
+            "/usr/local/sbin",
+            "/usr/local/bin",
+            "/opt/homebrew/bin",
+        ];
         for dir in &fallback_dirs {
             let path_in_dir = Path::new(dir).join("openconnect");
             if path_in_dir.exists() && path_in_dir.is_file() {

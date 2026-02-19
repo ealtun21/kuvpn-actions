@@ -104,24 +104,7 @@ impl KuVpnGui {
                 }
                 Task::none()
             }
-            Message::TrayEvent(event) => {
-                match event {
-                    TrayIconEvent::Click { .. } => {
-                        // Debounce rapid clicks (Windows fires multiple events)
-                        let now = std::time::Instant::now();
-                        if let Some(last) = self.last_tray_click {
-                            if now.duration_since(last) < std::time::Duration::from_millis(500) {
-                                return Task::none();
-                            }
-                        }
-                        self.last_tray_click = Some(now);
-                        log::info!("Tray icon clicked, toggling visibility");
-                        return self.update(Message::ToggleVisibility {
-                            from_close_request: false,
-                        });
-                    }
-                    _ => {}
-                }
+            Message::TrayEvent(_event) => {
                 Task::none()
             }
             Message::MenuEvent(event) => match event.id.as_ref() {
@@ -570,12 +553,19 @@ impl KuVpnGui {
             Message::TestOpenConnect => {
                 let path = self.settings.openconnect_path.clone();
                 Task::perform(
-                    async move { kuvpn::locate_openconnect(&path).is_some() },
+                    async move {
+                        kuvpn::locate_openconnect(&path)
+                            .map(|p| p.to_string_lossy().into_owned())
+                    },
                     Message::OpenConnectTestResult,
                 )
             }
-            Message::OpenConnectTestResult(success) => {
-                self.oc_test_result = Some(success);
+            Message::OpenConnectTestResult(resolved) => {
+                self.oc_test_result = Some(resolved.is_some());
+                if let Some(path) = resolved {
+                    self.settings.openconnect_path = path;
+                    self.save_settings();
+                }
                 Task::none()
             }
             Message::CopyLogs => {
