@@ -55,6 +55,9 @@ pub struct KuVpnGui {
     pub window_open_pending: bool,
     pub last_tray_click: Option<std::time::Instant>,
     pub connection_start: Option<Instant>,
+    /// Detected name of the active VPN interface (e.g. "kuvpn0" on Linux, "utun3" on macOS).
+    /// `None` when not connected or on platforms where it cannot be determined (Windows).
+    pub active_interface: Option<String>,
 }
 
 impl KuVpnGui {
@@ -476,6 +479,7 @@ impl KuVpnGui {
                 };
                 self.mfa_info = None;
                 self.connection_start = None;
+                self.active_interface = None;
 
                 // Update tray icon based on final status
                 if let Some(tray) = &self.tray_icon {
@@ -518,6 +522,19 @@ impl KuVpnGui {
                     }
                     if let Some(item) = &self.disconnect_item {
                         let _ = item.set_enabled(status == ConnectionStatus::Connected);
+                    }
+                    // Detect and store the active VPN interface name when connected.
+                    // On Linux this checks sysfs; on macOS it reads ifconfig for utun%d.
+                    if status == ConnectionStatus::Connected {
+                        #[cfg(unix)]
+                        {
+                            self.active_interface =
+                                kuvpn::get_vpn_interface_name("kuvpn0");
+                        }
+                    } else if status == ConnectionStatus::Disconnected
+                        || status == ConnectionStatus::Error
+                    {
+                        self.active_interface = None;
                     }
                     // Update tray icon based on new status
                     if let Some(tray) = &self.tray_icon {
@@ -738,6 +755,7 @@ impl Default for KuVpnGui {
             window_open_pending: false,
             last_tray_click: None,
             connection_start: None,
+            active_interface: None,
         }
     }
 }

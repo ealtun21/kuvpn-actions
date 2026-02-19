@@ -265,6 +265,70 @@ pub fn needs_password_prompt(tool: &str) -> bool {
     matches!(base, "sudo" | "doas")
 }
 
+/// Detects an active VPN utun interface on macOS by parsing `ifconfig` output.
+/// Returns the name of a utun interface that has an IPv4 `inet` address, which indicates
+/// an active point-to-point VPN tunnel (as opposed to system-managed utun interfaces that
+/// typically only carry IPv6 link-local addresses).
+#[cfg(target_os = "macos")]
+fn detect_active_utun() -> Option<String> {
+    let output = Command::new("/sbin/ifconfig").output().ok()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    let mut current_utun: Option<String> = None;
+    let mut found: Option<String> = None;
+
+    for line in stdout.lines() {
+        // Interface header lines have no leading whitespace: "utunN: flags=..."
+        if !line.starts_with('\t') && !line.starts_with(' ') {
+            if let Some(colon_pos) = line.find(':') {
+                let iface = &line[..colon_pos];
+                current_utun = if iface.starts_with("utun") {
+                    Some(iface.to_string())
+                } else {
+                    None
+                };
+            }
+        } else if current_utun.is_some() {
+            // Indented lines hold the interface configuration
+            let trimmed = line.trim_start();
+            // `inet ` (IPv4) — not `inet6 ` — signals an active VPN tunnel
+            if trimmed.starts_with("inet ") {
+                found = current_utun.clone();
+            }
+        }
+    }
+
+    found
+}
+
+/// Returns the name of the currently active VPN interface, or `None` if it cannot be
+/// determined.
+///
+/// - **Linux**: returns `configured_name` when the interface exists in sysfs.
+/// - **macOS**: detects the active `utun%d` interface via `ifconfig` (ignores `configured_name`
+///   because macOS does not support custom TUN interface names; OpenConnect auto-assigns one).
+/// - **Windows**: always returns `None`.
+pub fn get_vpn_interface_name(configured_name: &str) -> Option<String> {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = configured_name;
+        return detect_active_utun();
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let sys_path = format!("/sys/class/net/{}", configured_name);
+        if std::path::Path::new(&sys_path).exists() {
+            return Some(configured_name.to_string());
+        }
+        return None;
+    }
+    #[cfg(windows)]
+    {
+        let _ = configured_name;
+        return None;
+    }
+}
+
 /// Executes the `openconnect` command.
 pub fn execute_openconnect(
     cookie_value: String,
@@ -321,12 +385,14 @@ pub fn execute_openconnect(
             cmd.stdin(Stdio::piped());
         }
 
-        cmd.arg(openconnect_path)
-            .arg("--protocol")
-            .arg("nc")
-            .arg("--interface")
-            .arg(interface_name)
-            .arg("-C")
+        cmd.arg(openconnect_path).arg("--protocol").arg("nc");
+
+        // macOS does not support custom TUN interface names; OpenConnect auto-assigns a
+        // utun%d interface. Only pass --interface on Linux and other non-macOS Unix.
+        #[cfg(not(target_os = "macos"))]
+        cmd.arg("--interface").arg(interface_name);
+
+        cmd.arg("-C")
             .arg(format!("DSID={}", cookie_value))
             .arg(url)
             .stdout(_stdout)
@@ -425,18 +491,29 @@ pub fn is_openconnect_running() -> bool {
 pub fn is_vpn_interface_up(interface_name: &str) -> bool {
     #[cfg(unix)]
     {
-        // Check /sys/class/net/<interface_name> existence
-        let sys_path = format!("/sys/class/net/{}", interface_name);
-        let path = std::path::Path::new(&sys_path);
-        if !path.exists() {
-            return false;
+        #[cfg(target_os = "macos")]
+        {
+            // On macOS, OpenConnect auto-assigns a utun%d interface so the configured
+            // name is not meaningful; detect any active utun with an IPv4 address instead.
+            let _ = interface_name;
+            return detect_active_utun().is_some();
         }
-        // TUN devices report "unknown" when active, "down" when inactive
-        let operstate_path = format!("{}/operstate", sys_path);
-        if let Ok(state) = std::fs::read_to_string(&operstate_path) {
-            return state.trim() != "down";
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            // Check /sys/class/net/<interface_name> existence
+            let sys_path = format!("/sys/class/net/{}", interface_name);
+            let path = std::path::Path::new(&sys_path);
+            if !path.exists() {
+                return false;
+            }
+            // TUN devices report "unknown" when active, "down" when inactive
+            let operstate_path = format!("{}/operstate", sys_path);
+            if let Ok(state) = std::fs::read_to_string(&operstate_path) {
+                return state.trim() != "down";
+            }
+            true
         }
-        true
     }
     #[cfg(windows)]
     {

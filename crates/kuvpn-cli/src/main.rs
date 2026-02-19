@@ -280,11 +280,15 @@ fn main() -> ExitCode {
                         connection_start = Some(Instant::now());
 
                         #[cfg(unix)]
-                        eprintln!(
-                            "  {} Connected to KU VPN {}",
-                            green.apply_to("✓"),
-                            dim.apply_to(format!("(interface: {})", args.interface_name)),
-                        );
+                        {
+                            let iface = kuvpn::get_vpn_interface_name(&args.interface_name)
+                                .unwrap_or_else(|| args.interface_name.clone());
+                            eprintln!(
+                                "  {} Connected to KU VPN {}",
+                                green.apply_to("✓"),
+                                dim.apply_to(format!("(interface: {})", iface)),
+                            );
+                        }
                         #[cfg(not(unix))]
                         eprintln!(
                             "  {} Connected to KU VPN",
