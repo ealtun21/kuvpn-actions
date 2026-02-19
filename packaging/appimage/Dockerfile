@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y \
     libxcb-util-dev \
     libxcb-image0-dev \
     libxcb1-dev \
+    libvulkan-dev \
     libfuse2 \
     file \
     wget \
