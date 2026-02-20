@@ -74,10 +74,10 @@ detect_platform() {
             ;;
         Linux)
             if [ "$ARCH" = "x86_64" ]; then
-                GUI_PLATFORM="x86_64"
+                GUI_PLATFORM="linux-x86_64"
                 CLI_ARCH="x86_64"
             elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
-                GUI_PLATFORM="aarch64"
+                GUI_PLATFORM="linux-aarch64"
                 CLI_ARCH="aarch64"
             else
                 log_fail "Unsupported Linux architecture: $ARCH"
