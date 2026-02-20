@@ -1,7 +1,8 @@
 use crate::app::KuVpnGui;
 use crate::types::{
     btn_secondary, btn_segment_selected, btn_segment_unselected, card, custom_scrollbar, Message,
-    SegmentPosition, COLOR_TEXT, COLOR_TEXT_DIM, ICON_INFO_SVG, ICON_REFRESH_SVG, ICON_TRASH_SVG,
+    SegmentPosition, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_DIM, ICON_INFO_SVG, ICON_REFRESH_SVG,
+    ICON_TRASH_SVG,
 };
 use iced::widget::{button, column, container, row, scrollable, svg, text, text_input};
 use iced::{Alignment, Border, Color, Element, Length, Padding};
@@ -51,6 +52,38 @@ impl KuVpnGui {
                 })
                 .into()
         };
+
+        // Inline notification shown when the Test button replaced the entered path.
+        let oc_path_notif: Element<'_, Message> =
+            if let Some(msg) = &self.oc_path_notification {
+                container(
+                    row![
+                        svg(svg::Handle::from_memory(ICON_INFO_SVG))
+                            .width(13)
+                            .height(13)
+                            .style(|_, _| svg::Style {
+                                color: Some(COLOR_SUCCESS)
+                            }),
+                        text(msg.as_str()).size(10).color(COLOR_SUCCESS),
+                    ]
+                    .spacing(6)
+                    .align_y(Alignment::Center),
+                )
+                .width(Length::Fill)
+                .padding([6, 110])
+                .style(|_| container::Style {
+                    background: Some(Color::from_rgba(0.42, 0.55, 0.35, 0.07).into()),
+                    border: Border {
+                        radius: 6.0.into(),
+                        color: Color::from_rgba(0.42, 0.55, 0.35, 0.25),
+                        width: 1.0,
+                    },
+                    ..Default::default()
+                })
+                .into()
+            } else {
+                iced::widget::Space::new().height(0).into()
+            };
 
         let settings_content = column![
                 // Header
@@ -102,74 +135,87 @@ impl KuVpnGui {
                     is_locked,
                     Message::DomainChanged
                 ),
-                column![
-                    row![
-                        text("OC Path:").size(11).width(Length::Fixed(100.0)),
-                        text_input("openconnect", &self.settings.openconnect_path)
-                            .on_input(if is_locked {
-                                |_| Message::Tick
-                            } else {
-                                Message::OpenConnectPathChanged
-                            })
-                            .padding(10)
-                            .width(Length::Fill)
-                            .style(move |_theme, status| {
-                                let mut style = text_input::default(_theme, status);
-                                style.background =
-                                    iced::Background::Color(Color::from_rgb(0.08, 0.08, 0.08));
-                                style.border = Border {
-                                    color: match status {
-                                        text_input::Status::Active => Color::from_rgb(0.20, 0.20, 0.20),
-                                        text_input::Status::Focused { is_hovered } => {
-                                            if is_hovered {
-                                                Color::from_rgb(0.35, 0.35, 0.35)
-                                            } else {
-                                                Color::from_rgb(0.30, 0.30, 0.30)
+                {
+                    #[cfg(windows)]
+                    let oc_placeholder = r"openconnect\openconnect.exe";
+                    #[cfg(not(windows))]
+                    let oc_placeholder = "openconnect";
+
+                    #[cfg(windows)]
+                    let oc_helper = r"Path to openconnect.exe. Default: '.\openconnect\openconnect.exe' (bundled). Press Test to auto-detect.";
+                    #[cfg(not(windows))]
+                    let oc_helper = "Path to OpenConnect executable. Default: 'openconnect' (searches system PATH)";
+
+                    column![
+                        row![
+                            text("OC Path:").size(11).width(Length::Fixed(100.0)),
+                            text_input(oc_placeholder, &self.settings.openconnect_path)
+                                .on_input(if is_locked {
+                                    |_| Message::Tick
+                                } else {
+                                    Message::OpenConnectPathChanged
+                                })
+                                .padding(10)
+                                .width(Length::Fill)
+                                .style(move |_theme, status| {
+                                    let mut style = text_input::default(_theme, status);
+                                    style.background =
+                                        iced::Background::Color(Color::from_rgb(0.08, 0.08, 0.08));
+                                    style.border = Border {
+                                        color: match status {
+                                            text_input::Status::Active => Color::from_rgb(0.20, 0.20, 0.20),
+                                            text_input::Status::Focused { is_hovered } => {
+                                                if is_hovered {
+                                                    Color::from_rgb(0.35, 0.35, 0.35)
+                                                } else {
+                                                    Color::from_rgb(0.30, 0.30, 0.30)
+                                                }
                                             }
-                                        }
-                                        text_input::Status::Hovered => {
-                                            Color::from_rgb(0.25, 0.25, 0.25)
-                                        }
-                                        text_input::Status::Disabled => {
-                                            Color::from_rgb(0.15, 0.15, 0.15)
-                                        }
-                                    },
-                                    width: 1.0,
-                                    radius: 6.0.into(),
-                                };
-                                style
+                                            text_input::Status::Hovered => {
+                                                Color::from_rgb(0.25, 0.25, 0.25)
+                                            }
+                                            text_input::Status::Disabled => {
+                                                Color::from_rgb(0.15, 0.15, 0.15)
+                                            }
+                                        },
+                                        width: 1.0,
+                                        radius: 6.0.into(),
+                                    };
+                                    style
+                                }),
+                            button(text(if self.oc_test_result == Some(true) {
+                                "✓"
+                            } else if self.oc_test_result == Some(false) {
+                                "✗"
+                            } else {
+                                "Test"
+                            }).size(11))
+                            .padding([8, 12])
+                            .on_press(if is_locked {
+                                Message::Tick
+                            } else {
+                                Message::TestOpenConnect
+                            })
+                            .style(if self.oc_test_result == Some(true) {
+                                button::success
+                            } else if self.oc_test_result == Some(false) {
+                                button::danger
+                            } else {
+                                button::secondary
                             }),
-                        button(text(if self.oc_test_result == Some(true) {
-                            "✓"
-                        } else if self.oc_test_result == Some(false) {
-                            "✗"
-                        } else {
-                            "Test"
-                        }).size(11))
-                        .padding([8, 12])
-                        .on_press(if is_locked {
-                            Message::Tick
-                        } else {
-                            Message::TestOpenConnect
-                        })
-                        .style(if self.oc_test_result == Some(true) {
-                            button::success
-                        } else if self.oc_test_result == Some(false) {
-                            button::danger
-                        } else {
-                            button::secondary
-                        }),
+                        ]
+                        .spacing(10)
+                        .align_y(Alignment::Center),
+                        container(
+                            text(oc_helper)
+                                .size(10)
+                                .color(Color::from_rgb(0.50, 0.50, 0.50))
+                        )
+                        .padding([0, 110])
                     ]
-                    .spacing(10)
-                    .align_y(Alignment::Center),
-                    container(
-                        text("Path to OpenConnect executable. Default: 'openconnect' (searches system PATH)")
-                            .size(10)
-                            .color(Color::from_rgb(0.50, 0.50, 0.50))
-                    )
-                    .padding([0, 110])
-                ]
-                .spacing(4),
+                    .spacing(4)
+                },
+                oc_path_notif,
                 divider(),
                 // --- System Section ---
                 section_label("SYSTEM"),
