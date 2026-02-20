@@ -395,16 +395,17 @@ pub fn get_vpn_interface_name(configured_name: &str) -> Option<String> {
         if std::path::Path::new(&sys_path).exists() {
             return Some(configured_name.to_string());
         }
-        return None;
+        None
     }
     #[cfg(windows)]
     {
         let _ = configured_name;
-        return None;
+        None
     }
 }
 
 /// Executes the `openconnect` command.
+#[allow(clippy::too_many_arguments)]
 pub fn execute_openconnect(
     cookie_value: String,
     url: String,
@@ -487,7 +488,7 @@ pub fn execute_openconnect(
             }
         }
 
-        return Ok(VpnProcess::Unix(child));
+        Ok(VpnProcess::Unix(child))
     }
 
     #[cfg(windows)]
