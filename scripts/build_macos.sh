@@ -56,9 +56,10 @@ mkdir -p "$APP_BUNDLE/Contents/MacOS"
 mkdir -p "$APP_BUNDLE/Contents/Resources"
 
 cp "target/${TARGET}/release/kuvpn-gui" "$APP_BUNDLE/Contents/MacOS/"
-cp crates/kuvpn-gui/assets/ku.svg "$APP_BUNDLE/Contents/Resources/"
+cp crates/kuvpn-gui/assets/kuvpn.icns "$APP_BUNDLE/Contents/Resources/"
 
 # Create Info.plist
+# CFBundleIconFile: reference without extension — macOS locates kuvpn.icns automatically.
 cat > "$APP_BUNDLE/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -77,7 +78,7 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<EOF
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleIconFile</key>
-    <string>ku.svg</string>
+    <string>kuvpn</string>
     <key>LSMinimumSystemVersion</key>
     <string>10.15</string>
 </dict>
