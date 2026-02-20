@@ -43,12 +43,7 @@ fn read_masked_password(prompt: &str) -> String {
 
     let mut password = String::new();
 
-    loop {
-        let key = match term.read_key() {
-            Ok(k) => k,
-            Err(_) => break,
-        };
-
+    while let Ok(key) = term.read_key() {
         match key {
             Key::Enter => {
                 break;

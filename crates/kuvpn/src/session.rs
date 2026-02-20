@@ -329,11 +329,9 @@ impl VpnSession {
                         let logs_tx_stdout = Arc::clone(&logs_tx);
                         thread::spawn(move || {
                             let reader = BufReader::new(stdout);
-                            for line in reader.lines() {
-                                if let Ok(l) = line {
-                                    if let Some(tx) = logs_tx_stdout.lock().unwrap().as_ref() {
-                                        let _ = tx.send(format!("Info|{}", l));
-                                    }
+                            for l in reader.lines().map_while(Result::ok) {
+                                if let Some(tx) = logs_tx_stdout.lock().unwrap().as_ref() {
+                                    let _ = tx.send(format!("Info|{}", l));
                                 }
                             }
                         });
@@ -343,11 +341,9 @@ impl VpnSession {
                         let logs_tx_stderr = Arc::clone(&logs_tx);
                         thread::spawn(move || {
                             let reader = BufReader::new(stderr);
-                            for line in reader.lines() {
-                                if let Ok(l) = line {
-                                    if let Some(tx) = logs_tx_stderr.lock().unwrap().as_ref() {
-                                        let _ = tx.send(format!("Warn|{}", l));
-                                    }
+                            for l in reader.lines().map_while(Result::ok) {
+                                if let Some(tx) = logs_tx_stderr.lock().unwrap().as_ref() {
+                                    let _ = tx.send(format!("Warn|{}", l));
                                 }
                             }
                         });

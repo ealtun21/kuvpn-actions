@@ -197,7 +197,7 @@ impl KuVpnGui {
                 .height(Length::Fill)
                 .style(|_| container::Style {
                     background: Some(COLOR_BG.into()),
-                    text_color: Some(COLOR_TEXT.into()),
+                    text_color: Some(COLOR_TEXT),
                     border: Border {
                         color: Color::from_rgb(0.20, 0.20, 0.20),
                         width: 1.0,
@@ -211,7 +211,7 @@ impl KuVpnGui {
                 .height(Length::Fill)
                 .style(|_| container::Style {
                     background: Some(COLOR_BG.into()),
-                    text_color: Some(COLOR_TEXT.into()),
+                    text_color: Some(COLOR_TEXT),
                     ..Default::default()
                 })
         };
