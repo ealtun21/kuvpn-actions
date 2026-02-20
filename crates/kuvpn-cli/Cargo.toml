@@ -1,6 +1,6 @@
 [package]
 name = "kuvpn-cli"
-version = "2.0.3"
+version.workspace = true
 edition = "2021"
 description = "CLI for connecting to Koç University's VPN"
 repository = "https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn"
@@ -12,7 +12,7 @@ anyhow = "1.0.101"
 clap = { version = "4.5.57", features = ["derive"] }
 log = "0.4.29"
 crossbeam-channel = "0.5"
-console = "0.15"
-dialoguer = "0.11"
-indicatif = "0.17"
+console = "0.16"
+dialoguer = "0.12"
+indicatif = "0.18.4"
 ctrlc = "3.4"

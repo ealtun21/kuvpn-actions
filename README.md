@@ -1,4 +1,4 @@
-# KUVPN v2.0.3
+# KUVPN v3.0.0
 
 KUVPN is a VPN client for Koç University that automates the Microsoft Azure AD / MFA browser login to retrieve a DSID cookie, then hands off to OpenConnect to establish the VPN tunnel.
 
