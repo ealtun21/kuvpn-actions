@@ -37,10 +37,10 @@ RUN apt-get update && apt-get install -y \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Rust and MUSL target
+# Install Rust and appropriate target
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
-RUN rustup target add x86_64-unknown-linux-musl
+RUN rustup target add $(uname -m)-unknown-linux-musl
 
 WORKDIR /build
 

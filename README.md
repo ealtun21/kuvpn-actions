@@ -1,17 +1,17 @@
 # KUVPN v2.0.2
 
-KUVPN is a simple CLI tool written in Rust that retrieves the DSID cookie and executes the OpenConnect command to connect to the VPN for Koç University.
-
+KUVPN is a simple VPN client for Koç University that retrieves the DSID cookie and executes the OpenConnect command. It provides both a modern GUI and a powerful CLI.
 
 ## Table of Contents
 
 - [Features](#features)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
-  - [Binary Install (Recommended)](#binary-install-recommended)
-  - [Binary Install (Manual)](#binary-install-manual)
-  - [Build & Install from Source](#build--install-from-source)
+  - [GUI Installation (Recommended)](#gui-installation-recommended)
+  - [CLI Installation](#cli-installation)
+  - [Build from Source](#build--install-from-source)
 - [Usage](#usage)
+  - [GUI Usage](#gui-usage)
   - [Command-line Options](#command-line-options)
 - [License](#license)
 - [Contributing](#contributing)
@@ -19,149 +19,56 @@ KUVPN is a simple CLI tool written in Rust that retrieves the DSID cookie and ex
 
 ## Features
 
-- ✅ **Login** to vpn.ku.edu.tr on Linux/Mac.
-- ✅ **Retrieve DSID cookie**
-- ✅ **Execute OpenConnect command**
-- ✅ **Headless Execution**
-- ✅ **Automatic or Manuel Login Navigation**
-- ✅ **Session management**
-- ✅ **CLI Based**
-- ✅ **Openconnect Wrapper**
-
+- ✅ **Modern GUI** for easy connection management.
+- ✅ **System Tray** integration with status indicators.
+- ✅ **OS Notifications** for important events (MFA, connection status).
+- ✅ **Login** to vpn.ku.edu.tr on Windows, Linux, and macOS.
+- ✅ **Retrieves DSID cookie** automatically.
+- ✅ **Executes OpenConnect** with correct parameters.
+- ✅ **Headless/Automatic** or Manual login modes.
+- ✅ **Session Management** to remember your login.
 
 ## Prerequisites
 
 - **Mandatory:** OpenConnect  
-  - On Ubuntu:  
-    ```bash
-    sudo apt install openconnect
-    ```
+  - On Ubuntu: `sudo apt install openconnect`
+  - On macOS: `brew install openconnect`
+  - On Windows: Included in the installer.
 
 ## Installation
 
-### Binary Install (Recommended)
+### GUI Installation (Recommended)
 
-Install KUVPN with the following command:
+1. **Windows:** Download `KUVPN-Setup-x86_64.exe` from the [Releases](https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/releases) page and run it.
+2. **Linux:** Download the `.AppImage` for your architecture (x86_64 or aarch64), make it executable (`chmod +x KUVPN-x86_64.AppImage`), and run it.
+3. **macOS:** Download the `.dmg` for your architecture, open it, and drag KUVPN to your Applications folder.
+
+### CLI Installation
+
+Install the KUVPN CLI with the following command:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash
 ```
 
-> **Note:** Always inspect scripts before running commands from the internet!
-
-### Binary Install (Manual)
-
-1. **Download:** Get the latest binary from the [GitHub releases page](https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/releases).
-
-2. **Move the binary:** Place it in a directory that's in your `$PATH` (e.g., `/usr/local/bin/`):
-
-   ```bash
-   sudo mv kuvpn /usr/local/bin/
-   ```
-
-3. **Make it executable:**
-
-   ```bash
-   sudo chmod +x /usr/local/bin/kuvpn
-   ```
-
-4. **Verify installation:**
-
-   ```bash
-   kuvpn --version
-   ```
-
-### Build & Install from Source
-
-1. **Install Rustup:**  
-   Use the following command (or your package manager) to install Rustup. Although Cargo is available through some package managers, using Rustup is recommended:
-
-   ```bash
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   ```
-
-2. **Install KUVPN from source:**
-
-   ```bash
-   cargo install --git https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn
-   ```
-
 ## Usage
 
-Simply run KUVPN with: ( No arguments required )
+### GUI Usage
 
-```bash
-kuvpn
-```
+Launch **KUVPN** from your application menu.
+1. Enter your university email (optional, helps with auto-login).
+2. Click **Connect**.
+3. If prompted, complete the MFA authentication in the window or via your phone.
+4. The app will stay in your system tray while connected.
 
-For help and more details:
+### Command-line Options 
+
+Simply run `kuvpn` in your terminal. For more options:
 
 ```bash
 kuvpn --help
 ```
 
-### Command-line Options 
-
-Below is the help message displayed when running `kuvpn --help`:
-
-```text
-A convenient tool for connecting to Koç University's VPN using OpenConnect.
-
-Usage: kuvpn [OPTIONS]
-
-Options:
-  -u, --url <URL>
-          The URL to the page where we will start logging in and looking for DSID
-          
-          [default: https://vpn.ku.edu.tr]
-
-  -l, --level <LEVEL>
-          The level of logging
-
-          Possible values:
-          - off:   No logs
-          - info:  Informational messages
-          - warn:  Warning messages
-          - debug: Debugging messages
-          - error: Error messages
-          - trace: Detailed stacktrace messages
-          
-          [default: error]
-
-      --domain <DOMAIN>
-          The Domain of the DSID found
-          
-          [default: vpn.ku.edu.tr]
-
-  -g, --get-dsid
-          Gives the user the dsid without running openconnect
-
-  -d, --disable-headless
-          Gets DSID without headless mode
-
-  -c, --clean
-          Delete session information
-
-  -r, --run-command <RUN_COMMAND>
-          Command to run openconnect with (e.g., doas, sudo, pkexec, or a custom script)
-
-      --openconnect-path <OPENCONNECT_PATH>
-          Path or command name for openconnect. Defaults to 'openconnect'. Can be a relative or absolute path
-          
-          [default: openconnect]
-
-      --no-auto-login
-          Disable automatic login handlers and only poll for DSID in a headful browser
-
-      --email <EMAIL>
-          Email for login (optional)
-
-  -h, --help
-          Print help (see a summary with '-h')
-
-  -V, --version
-          Print version
-```
 
 ### Troubleshooting: Cookie Rejection
 
