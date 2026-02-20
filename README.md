@@ -1,108 +1,94 @@
-# KUVPN v2.0.2
+# KUVPN v2.0.3
 
-KUVPN is a simple VPN client for Koç University that retrieves the DSID cookie and executes the OpenConnect command. It provides both a modern GUI and a powerful CLI.
+KUVPN is a VPN client for Koç University that automates the Microsoft Azure AD / MFA browser login to retrieve a DSID cookie, then hands off to OpenConnect to establish the VPN tunnel.
 
-## Table of Contents
+> **KUVPN** is the graphical app (system tray, GUI window).
+> **kuvpn** is the command-line tool (run `kuvpn` in a terminal).
+> Both connect to the same VPN — pick whichever fits your workflow.
 
-- [Features](#features)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-  - [GUI Installation (Recommended)](#gui-installation-recommended)
-  - [CLI Installation](#cli-installation)
-  - [Build from Source](#build--install-from-source)
-- [Usage](#usage)
-  - [GUI Usage](#gui-usage)
-  - [Command-line Options](#command-line-options)
-- [License](#license)
-- [Contributing](#contributing)
+---
 
+## Documentation
 
-## Features
+<table>
+<tr>
+<td align="center" width="33%">
 
-- ✅ **Modern GUI** for easy connection management.
-- ✅ **System Tray** integration with status indicators.
-- ✅ **OS Notifications** for important events (MFA, connection status).
-- ✅ **Login** to vpn.ku.edu.tr on Windows, Linux, and macOS.
-- ✅ **Retrieves DSID cookie** automatically.
-- ✅ **Executes OpenConnect** with correct parameters.
-- ✅ **Headless/Automatic** or Manual login modes.
-- ✅ **Session Management** to remember your login.
+### [Install](https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn#installation)
+Get up and running on any platform
 
-## Prerequisites
+</td>
+<td align="center" width="33%">
 
-- **Mandatory:** OpenConnect  
-  - On Ubuntu: `sudo apt install openconnect`
-  - On macOS: `brew install openconnect`
-  - On Windows: Included in the installer.
+### [GUI Docs](docs/gui.md)
+Graphical app — KUVPN
+
+</td>
+<td align="center" width="33%">
+
+### [CLI Docs](docs/cli.md)
+Command-line tool — kuvpn
+
+</td>
+</tr>
+</table>
+
+---
 
 ## Installation
 
-### GUI Installation (Recommended)
-
-1. **Windows:** Download `KUVPN-Setup-x86_64.exe` from the [Releases](https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/releases) page and run it.
-2. **Linux:** Download the `.AppImage` for your architecture (x86_64 or aarch64), make it executable (`chmod +x KUVPN-x86_64.AppImage`), and run it.
-3. **macOS:** Download the `.dmg` for your architecture, open it, and drag KUVPN to your Applications folder.
-
-### CLI Installation
-
-Install the KUVPN CLI with the following command:
+**Linux / macOS:**
 
 ```bash
-curl --proto '=https' --tlsv1.2 -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash
+curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash
 ```
 
-## Usage
+The script will ask what to install (GUI, CLI, or both), set up your PATH, and check for OpenConnect.
 
-### GUI Usage
+**Windows:** Download and run [`KUVPN-Setup-windows-x86_64.exe`](https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/releases/latest) from the Releases page.
 
-Launch **KUVPN** from your application menu.
-1. Enter your university email (optional, helps with auto-login).
-2. Click **Connect**.
-3. If prompted, complete the MFA authentication in the window or via your phone.
-4. The app will stay in your system tray while connected.
-
-### Command-line Options 
-
-Simply run `kuvpn` in your terminal. For more options:
+<details><summary>Non-interactive flags (for scripting / automation)</summary>
 
 ```bash
-kuvpn --help
+# Install both
+curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash -s -- --all
+
+# GUI only
+curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash -s -- --gui
+
+# CLI only
+curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash -s -- --cli
 ```
 
+</details>
 
-### Troubleshooting: Cookie Rejection
+---
 
-If you get this error, the easiest fix is to clear your session:
-```
-Unexpected 302 result from server
-Creating SSL connection failed
-Cookie was rejected by server; exiting.
-```
+## Prerequisites
 
-You can clear your session like this:
-```
-kuvpn -c
-```
+- **OpenConnect** must be installed to establish VPN connections.
+  - The installer will offer to install it for you.
+  - On Windows it is bundled inside the installer — nothing extra needed.
+  - On Linux/macOS you can also install it manually: `sudo apt install openconnect` / `brew install openconnect`.
 
-### Troubleshooting: Unable to login?
+---
 
-If you aren't able to login via the cli'a automation, you can disable the auto login so that you can do it via the browser's gui.
-To do this run the following command:
-```
-kuvpn --no-auto-login --disable-headless
-```
+## Features
 
-Later, once you login, it will remember your session so you can login without the need for this, on the next logins.
+- Modern GUI with system tray and status icons
+- OS notifications for MFA codes and connection events
+- Auto-shows the window when input or MFA is required
+- Full Auto, Visual Auto, and Manual login modes
+- Headless (background) browser for seamless authentication
+- Session persistence — stays logged in across reconnects
+- Static CLI binary, no runtime dependencies
 
-### Waiting forever: seeminly doing nothing?
-In this case, kuvpn may be trying to download a static chrome to run, you can check logs using `-l debug`, if after a long time it still fails to download & run chrome, you can install chrome/chromium by hand to the machine, to bypass this issue.
+---
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
-
+MIT — see [LICENSE](LICENSE).
 
 ## Contributing
 
-Contributions are welcome! If you have ideas, bug fixes, or improvements, please open an issue or submit a pull request.
+Issues and pull requests are welcome.
