@@ -358,7 +358,7 @@ pub fn btn_segment_selected(
         background: Some(COLOR_ACCENT.into()),
         text_color: Color::WHITE,
         border: Border {
-            radius: radius,
+            radius,
             ..Default::default()
         },
         shadow: Shadow::default(),
@@ -404,7 +404,7 @@ pub fn btn_segment_unselected(
         border: Border {
             color: Color::from_rgb(0.25, 0.25, 0.25),
             width: 1.0,
-            radius: radius,
+            radius,
         },
         shadow: Shadow::default(),
         ..Default::default()
@@ -416,7 +416,7 @@ pub fn btn_segment_unselected(
             border: Border {
                 color: Color::from_rgb(0.35, 0.35, 0.35),
                 width: 1.0,
-                radius: radius,
+                radius,
             },
             ..base
         },

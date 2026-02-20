@@ -86,7 +86,7 @@ impl KuVpnGui {
                 self.window_close_pending = false;
                 self.window_open_pending = false;
                 if let Some(item) = &self.show_item {
-                    let _ = item.set_text("Toggle Visibility");
+                    item.set_text("Toggle Visibility");
                 }
                 Task::none()
             }
@@ -115,7 +115,7 @@ impl KuVpnGui {
             }
             Message::TrayEvent(_event) => Task::none(),
             Message::MenuEvent(event) => match event.id.as_ref() {
-                "quit" => return self.update(Message::QuitRequested),
+                "quit" => self.update(Message::QuitRequested),
                 "show" => {
                     let now = std::time::Instant::now();
                     if let Some(last) = self.last_tray_click {
@@ -125,12 +125,12 @@ impl KuVpnGui {
                     }
                     self.last_tray_click = Some(now);
                     log::info!("Menu 'show' clicked, toggling visibility");
-                    return self.update(Message::ToggleVisibility {
+                    self.update(Message::ToggleVisibility {
                         from_close_request: false,
-                    });
+                    })
                 }
-                "connect" => return self.update(Message::ConnectPressed),
-                "disconnect" => return self.update(Message::DisconnectPressed),
+                "connect" => self.update(Message::ConnectPressed),
+                "disconnect" => self.update(Message::DisconnectPressed),
                 _ => Task::none(),
             },
             Message::CloseToTrayToggled(v) => {
@@ -547,10 +547,10 @@ impl KuVpnGui {
                 if self.status != status {
                     self.status = status;
                     if let Some(item) = &self.connect_item {
-                        let _ = item.set_enabled(status == ConnectionStatus::Disconnected);
+                        item.set_enabled(status == ConnectionStatus::Disconnected);
                     }
                     if let Some(item) = &self.disconnect_item {
-                        let _ = item.set_enabled(status == ConnectionStatus::Connected);
+                        item.set_enabled(status == ConnectionStatus::Connected);
                     }
                     // Detect and store the active VPN interface name when connected.
                     // On Linux this checks sysfs; on macOS it reads ifconfig for utun%d.

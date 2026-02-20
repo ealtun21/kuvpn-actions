@@ -45,6 +45,7 @@ pub fn main() -> iced::Result {
         let _ = gtk::init();
     }
 
+    #[allow(clippy::arc_with_non_send_sync)]
     let components = Arc::new(Mutex::new(Some(init_tray())));
 
     iced::daemon(

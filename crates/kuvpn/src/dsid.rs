@@ -201,6 +201,7 @@ fn try_handle_page(
 }
 
 /// Main function to run login process and retrieve DSID.
+#[allow(clippy::too_many_arguments)]
 pub fn run_login_and_get_dsid(
     headless: bool,
     url: &str,
