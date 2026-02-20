@@ -3,7 +3,8 @@ set -e
 
 # Configuration
 APP_NAME="KUVPN"
-VERSION="2.0.2"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+VERSION=$(grep '^version = ' "$SCRIPT_DIR/../Cargo.toml" | head -1 | sed 's/version = "\(.*\)"/\1/')
 OPENCONNECT_URL="https://github.com/openconnect/openconnect-gui/releases/download/v1.5.3/openconnect-gui-1.5.3-win32.exe"
 INNO_SETUP_URL="https://files.jrsoftware.org/is/6/innosetup-6.2.2.exe"
 
