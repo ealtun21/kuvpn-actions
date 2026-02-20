@@ -16,11 +16,8 @@ use iced::Task;
 use std::sync::{Arc, Mutex};
 
 pub fn load_window_icon() -> Option<iced::window::Icon> {
-    iced::window::icon::from_file_data(
-        crate::types::WINDOW_ICON,
-        Some(image::ImageFormat::Png),
-    )
-    .ok()
+    iced::window::icon::from_file_data(crate::types::WINDOW_ICON, Some(image::ImageFormat::Png))
+        .ok()
 }
 
 fn get_title(_: &KuVpnGui, _: iced::window::Id) -> String {

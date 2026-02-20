@@ -7,12 +7,12 @@ use crate::types::{
 use iced::widget::{button, column, container, row, scrollable, svg, text, text_input};
 use iced::{Alignment, Border, Color, Element, Length, Padding};
 
-
 impl KuVpnGui {
-        pub fn view_advanced_settings(&self) -> Element<'_, Message> {
-            let is_locked = false; // Allow editing settings while connected
-    
-            let locked_hint = if is_locked {            container(
+    pub fn view_advanced_settings(&self) -> Element<'_, Message> {
+        let is_locked = false; // Allow editing settings while connected
+
+        let locked_hint = if is_locked {
+            container(
                 row![
                     svg(svg::Handle::from_memory(ICON_INFO_SVG))
                         .width(14)
@@ -36,7 +36,7 @@ impl KuVpnGui {
             container(
                 text(label)
                     .size(10)
-                    .color(Color::from_rgb(0.45, 0.45, 0.45))
+                    .color(Color::from_rgb(0.45, 0.45, 0.45)),
             )
             .padding([8, 0])
             .into()
@@ -54,36 +54,35 @@ impl KuVpnGui {
         };
 
         // Inline notification shown when the Test button replaced the entered path.
-        let oc_path_notif: Element<'_, Message> =
-            if let Some(msg) = &self.oc_path_notification {
-                container(
-                    row![
-                        svg(svg::Handle::from_memory(ICON_INFO_SVG))
-                            .width(13)
-                            .height(13)
-                            .style(|_, _| svg::Style {
-                                color: Some(COLOR_SUCCESS)
-                            }),
-                        text(msg.as_str()).size(10).color(COLOR_SUCCESS),
-                    ]
-                    .spacing(6)
-                    .align_y(Alignment::Center),
-                )
-                .width(Length::Fill)
-                .padding([6, 110])
-                .style(|_| container::Style {
-                    background: Some(Color::from_rgba(0.42, 0.55, 0.35, 0.07).into()),
-                    border: Border {
-                        radius: 6.0.into(),
-                        color: Color::from_rgba(0.42, 0.55, 0.35, 0.25),
-                        width: 1.0,
-                    },
-                    ..Default::default()
-                })
-                .into()
-            } else {
-                iced::widget::Space::new().height(0).into()
-            };
+        let oc_path_notif: Element<'_, Message> = if let Some(msg) = &self.oc_path_notification {
+            container(
+                row![
+                    svg(svg::Handle::from_memory(ICON_INFO_SVG))
+                        .width(13)
+                        .height(13)
+                        .style(|_, _| svg::Style {
+                            color: Some(COLOR_SUCCESS)
+                        }),
+                    text(msg.as_str()).size(10).color(COLOR_SUCCESS),
+                ]
+                .spacing(6)
+                .align_y(Alignment::Center),
+            )
+            .width(Length::Fill)
+            .padding([6, 110])
+            .style(|_| container::Style {
+                background: Some(Color::from_rgba(0.42, 0.55, 0.35, 0.07).into()),
+                border: Border {
+                    radius: 6.0.into(),
+                    color: Color::from_rgba(0.42, 0.55, 0.35, 0.25),
+                    width: 1.0,
+                },
+                ..Default::default()
+            })
+            .into()
+        } else {
+            iced::widget::Space::new().height(0).into()
+        };
 
         let settings_content = column![
                 // Header
@@ -350,17 +349,14 @@ impl KuVpnGui {
             .spacing(12);
 
         container(
-            scrollable(
-                container(settings_content)
-                    .padding(Padding {
-                        top: 0.0,
-                        right: 24.0,
-                        bottom: 0.0,
-                        left: 0.0,
-                    })
-            )
+            scrollable(container(settings_content).padding(Padding {
+                top: 0.0,
+                right: 24.0,
+                bottom: 0.0,
+                left: 0.0,
+            }))
             .height(Length::Fill)
-            .style(custom_scrollbar)
+            .style(custom_scrollbar),
         )
         .padding(24)
         .width(Length::Fill)
@@ -386,7 +382,8 @@ impl KuVpnGui {
                     .width(Length::Fill)
                     .style(move |_theme, status| {
                         let mut style = text_input::default(_theme, status);
-                        style.background = iced::Background::Color(Color::from_rgb(0.08, 0.08, 0.08));
+                        style.background =
+                            iced::Background::Color(Color::from_rgb(0.08, 0.08, 0.08));
                         style.border = Border {
                             color: match status {
                                 text_input::Status::Active => Color::from_rgb(0.20, 0.20, 0.20),
@@ -426,12 +423,9 @@ impl KuVpnGui {
         helper_text: &'a str,
     ) -> Element<'a, Message> {
         column![
-            row![
-                text(label).size(11).width(Length::Fixed(100.0)),
-                control,
-            ]
-            .spacing(10)
-            .align_y(Alignment::Center),
+            row![text(label).size(11).width(Length::Fixed(100.0)), control,]
+                .spacing(10)
+                .align_y(Alignment::Center),
             container(
                 text(helper_text)
                     .size(10)

@@ -17,11 +17,8 @@ use crate::types::{
 use kuvpn::{SessionConfig, VpnSession};
 
 fn load_window_icon() -> Option<iced::window::Icon> {
-    iced::window::icon::from_file_data(
-        crate::types::WINDOW_ICON,
-        Some(image::ImageFormat::Png),
-    )
-    .ok()
+    iced::window::icon::from_file_data(crate::types::WINDOW_ICON, Some(image::ImageFormat::Png))
+        .ok()
 }
 
 pub struct KuVpnGui {
@@ -116,9 +113,7 @@ impl KuVpnGui {
                 }
                 Task::none()
             }
-            Message::TrayEvent(_event) => {
-                Task::none()
-            }
+            Message::TrayEvent(_event) => Task::none(),
             Message::MenuEvent(event) => match event.id.as_ref() {
                 "quit" => return self.update(Message::QuitRequested),
                 "show" => {
@@ -153,7 +148,9 @@ impl KuVpnGui {
                     return Task::batch(vec![
                         iced::window::close(id),
                         Task::perform(
-                            async { tokio::time::sleep(std::time::Duration::from_millis(100)).await },
+                            async {
+                                tokio::time::sleep(std::time::Duration::from_millis(100)).await
+                            },
                             |_| Message::ToggleVisibility {
                                 from_close_request: false,
                             },
@@ -190,7 +187,9 @@ impl KuVpnGui {
                         return Task::batch(vec![
                             iced::window::close(id),
                             Task::perform(
-                                async { tokio::time::sleep(std::time::Duration::from_millis(500)).await },
+                                async {
+                                    tokio::time::sleep(std::time::Duration::from_millis(500)).await
+                                },
                                 |_| Message::ResetClosePending,
                             ),
                         ]);
@@ -452,7 +451,10 @@ impl KuVpnGui {
                         );
                         self.pending_request = Some(req);
                         self.current_input = String::new();
-                        if !self.is_visible && !self.window_close_pending && !self.window_open_pending {
+                        if !self.is_visible
+                            && !self.window_close_pending
+                            && !self.window_open_pending
+                        {
                             log::info!("Input requested - showing window");
                             return self.update(Message::ToggleVisibility {
                                 from_close_request: false,
@@ -576,11 +578,11 @@ impl KuVpnGui {
                 // Auto-select first available tool if the default (pkexec) isn't installed
                 #[cfg(unix)]
                 if !self.available_escalation_tools.is_empty()
-                    && !self.available_escalation_tools
+                    && !self
+                        .available_escalation_tools
                         .contains(&self.settings.escalation_tool.as_str())
                 {
-                    self.settings.escalation_tool =
-                        self.available_escalation_tools[0].to_string();
+                    self.settings.escalation_tool = self.available_escalation_tools[0].to_string();
                 }
                 self.save_settings();
                 self.oc_test_result = None;
@@ -595,7 +597,9 @@ impl KuVpnGui {
                         return Task::batch(vec![
                             iced::window::close(id),
                             Task::perform(
-                                async { tokio::time::sleep(std::time::Duration::from_millis(100)).await },
+                                async {
+                                    tokio::time::sleep(std::time::Duration::from_millis(100)).await
+                                },
                                 |_| Message::ToggleVisibility {
                                     from_close_request: false,
                                 },
@@ -609,8 +613,7 @@ impl KuVpnGui {
                 let path = self.settings.openconnect_path.clone();
                 Task::perform(
                     async move {
-                        kuvpn::locate_openconnect(&path)
-                            .map(|p| p.to_string_lossy().into_owned())
+                        kuvpn::locate_openconnect(&path).map(|p| p.to_string_lossy().into_owned())
                     },
                     Message::OpenConnectTestResult,
                 )
@@ -689,9 +692,12 @@ impl KuVpnGui {
                                 // Wait for session to finish AND verify OpenConnect is stopped
                                 while start.elapsed() < timeout {
                                     if session_clone.is_finished() {
-                                        log::info!("Session finished, waiting for OpenConnect to stop...");
+                                        log::info!(
+                                            "Session finished, waiting for OpenConnect to stop..."
+                                        );
                                         // Give extra time for OpenConnect process to be killed
-                                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                                        tokio::time::sleep(std::time::Duration::from_millis(500))
+                                            .await;
 
                                         // Verify OpenConnect is actually stopped
                                         if !kuvpn::is_openconnect_running() {
@@ -704,10 +710,13 @@ impl KuVpnGui {
                                 }
 
                                 if kuvpn::is_openconnect_running() {
-                                    log::error!("OpenConnect still running after timeout, force killing...");
+                                    log::error!(
+                                        "OpenConnect still running after timeout, force killing..."
+                                    );
                                     if let Some(pid) = kuvpn::get_openconnect_pid() {
                                         let _ = kuvpn::kill_process(pid);
-                                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                                        tokio::time::sleep(std::time::Duration::from_millis(500))
+                                            .await;
                                     }
                                 }
 
@@ -788,17 +797,20 @@ impl Default for KuVpnGui {
         // On Windows this is always empty (elevation is handled differently).
         let available_escalation_tools: Vec<&'static str> = {
             #[cfg(unix)]
-            { kuvpn::list_available_escalation_tools() }
+            {
+                kuvpn::list_available_escalation_tools()
+            }
             #[cfg(not(unix))]
-            { vec![] }
+            {
+                vec![]
+            }
         };
 
         // If the saved escalation tool is no longer installed, auto-select the first
         // available one so the user doesn't start in a broken state.
         #[cfg(unix)]
         if !available_escalation_tools.is_empty()
-            && !available_escalation_tools
-                .contains(&settings.escalation_tool.as_str())
+            && !available_escalation_tools.contains(&settings.escalation_tool.as_str())
         {
             settings.escalation_tool = available_escalation_tools[0].to_string();
             let _ = settings.save();

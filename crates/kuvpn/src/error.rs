@@ -87,7 +87,8 @@ impl AuthError {
     pub fn should_suggest_clear_cache(&self) -> bool {
         match self {
             AuthError::AuthenticationFailed {
-                suggest_clear_cache, ..
+                suggest_clear_cache,
+                ..
             } => *suggest_clear_cache,
             AuthError::BrowserError { .. } => true,
             _ => false,
@@ -98,7 +99,10 @@ impl AuthError {
     pub fn user_message(&self) -> String {
         match self {
             AuthError::InvalidUsername { message } => {
-                format!("Invalid username.\n\n{}\n\nPlease check your email address and try again.", message)
+                format!(
+                    "Invalid username.\n\n{}\n\nPlease check your email address and try again.",
+                    message
+                )
             }
             AuthError::UsernameWarning { warning_text } => {
                 format!(
@@ -107,7 +111,10 @@ impl AuthError {
                 )
             }
             AuthError::IncorrectPassword { message } => {
-                format!("Incorrect password.\n\n{}\n\nPlease re-enter your password and try again.", message)
+                format!(
+                    "Incorrect password.\n\n{}\n\nPlease re-enter your password and try again.",
+                    message
+                )
             }
             AuthError::AuthenticationFailed { reason, .. } => {
                 format!("Authentication failed.\n\n{}", reason)

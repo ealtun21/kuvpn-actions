@@ -9,10 +9,10 @@ use clap::Parser;
 use console::{Key, Style, Term};
 use dialoguer::Input;
 use indicatif::{ProgressBar, ProgressStyle};
+use kuvpn::utils::CredentialsProvider;
 use kuvpn::{
     init_logger, run_login_and_get_dsid, ConnectionStatus, ParsedLog, SessionConfig, VpnSession,
 };
-use kuvpn::utils::CredentialsProvider;
 use log::info;
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -61,7 +61,8 @@ fn read_masked_password(prompt: &str) -> String {
                 }
             }
             Key::Char(c) => {
-                if c == '\x03' { // Ctrl+C
+                if c == '\x03' {
+                    // Ctrl+C
                     std::process::exit(130);
                 }
                 password.push(c);
@@ -248,16 +249,10 @@ fn main() -> ExitCode {
                     "Initializing tunnel..." => {
                         if spinner_active {
                             spinner.finish_and_clear();
-                            eprintln!(
-                                "  {} Accessing campus gateway...",
-                                green.apply_to("✓"),
-                            );
+                            eprintln!("  {} Accessing campus gateway...", green.apply_to("✓"),);
                             spinner_active = false;
                         }
-                        eprintln!(
-                            "  {} Initializing tunnel...",
-                            green.apply_to("✓"),
-                        );
+                        eprintln!("  {} Initializing tunnel...", green.apply_to("✓"),);
                         continue;
                     }
                     "VPN interface already active, monitoring..." => {
@@ -290,15 +285,9 @@ fn main() -> ExitCode {
                             );
                         }
                         #[cfg(not(unix))]
-                        eprintln!(
-                            "  {} Connected to KU VPN",
-                            green.apply_to("✓"),
-                        );
+                        eprintln!("  {} Connected to KU VPN", green.apply_to("✓"),);
 
-                        eprintln!(
-                            "    {}",
-                            dim.apply_to("Press Ctrl+C to disconnect"),
-                        );
+                        eprintln!("    {}", dim.apply_to("Press Ctrl+C to disconnect"),);
                         continue;
                     }
                     "Disconnecting..." => {

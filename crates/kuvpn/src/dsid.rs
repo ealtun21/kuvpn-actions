@@ -78,7 +78,8 @@ fn try_handle_page(
     if is_invalid_username_visible(tab)? {
         handled.insert("invalid_username");
         return Err(AuthError::InvalidUsername {
-            message: "The username you entered may be incorrect or the account does not exist.".to_string(),
+            message: "The username you entered may be incorrect or the account does not exist."
+                .to_string(),
         }
         .into());
     }
@@ -169,9 +170,7 @@ fn try_handle_page(
     // Generic fallback detection for unexpected errors or page states
     // This catches scenarios we haven't explicitly coded for
     if !handled.contains("generic_error") {
-        if let Some(error_msg) =
-            crate::handlers::generic_detection::detect_generic_error(tab)?
-        {
+        if let Some(error_msg) = crate::handlers::generic_detection::detect_generic_error(tab)? {
             handled.insert("generic_error");
             log::warn!("[!] Generic error detected: {}", error_msg);
             return Err(AuthError::AuthenticationFailed {

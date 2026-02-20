@@ -704,10 +704,7 @@ pub fn kill_process(pid: u32) -> anyhow::Result<()> {
     {
         let mut cmd = AdminCommand::new("taskkill");
         cmd.show(false);
-        cmd.arg("/F")
-            .arg("/T")
-            .arg("/PID")
-            .arg(pid.to_string());
+        cmd.arg("/F").arg("/T").arg("/PID").arg(pid.to_string());
         cmd.status()?;
     }
     Ok(())

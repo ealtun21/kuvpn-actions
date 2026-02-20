@@ -7,8 +7,8 @@ pub mod status;
 use crate::app::KuVpnGui;
 use crate::types::{
     btn_segment_selected, btn_segment_unselected, Message, SegmentPosition, Tab, COLOR_BG,
-    COLOR_SUCCESS, COLOR_SURFACE, COLOR_TEXT, COLOR_TEXT_DIM, COLOR_WARNING,
-    ICON_SETTINGS_SVG, ICON_SHIELD_SVG, ICON_TERMINAL_SVG,
+    COLOR_SUCCESS, COLOR_SURFACE, COLOR_TEXT, COLOR_TEXT_DIM, COLOR_WARNING, ICON_SETTINGS_SVG,
+    ICON_SHIELD_SVG, ICON_TERMINAL_SVG,
 };
 use iced::widget::{button, column, container, mouse_area, row, stack, svg, text, Space};
 use iced::{Alignment, Border, Color, Element, Length, Shadow};
@@ -31,9 +31,7 @@ impl KuVpnGui {
                 .style(|_, _| svg::Style {
                     color: Some(iced::Color::WHITE)
                 }),
-            text("KUVPN")
-                .size(14)
-                .color(iced::Color::WHITE),
+            text("KUVPN").size(14).color(iced::Color::WHITE),
             container(Space::new().width(0).height(0))
                 .width(6)
                 .height(6)
@@ -106,41 +104,40 @@ impl KuVpnGui {
 
         // Escalation tool warning banner (Unix only — on Windows elevation is built-in)
         #[cfg(not(windows))]
-        let escalation_warning: Element<'_, Message> =
-            if self.available_escalation_tools.is_empty() {
-                container(
-                    row![
-                        svg(svg::Handle::from_memory(crate::types::ICON_INFO_SVG))
-                            .width(14)
-                            .height(14)
-                            .style(|_, _| svg::Style {
-                                color: Some(crate::types::COLOR_WARNING)
-                            }),
-                        text("No privilege tool found! Install sudo, doas, or pkexec to use the VPN.")
-                            .size(12)
-                            .color(crate::types::COLOR_WARNING),
-                    ]
-                    .spacing(8)
-                    .align_y(Alignment::Center),
-                )
-                .width(Length::Fill)
-                .padding(10)
-                .style(|_| container::Style {
-                    background: Some(crate::types::COLOR_SURFACE.into()),
-                    border: Border {
-                        color: crate::types::COLOR_WARNING,
-                        width: 1.0,
-                        radius: 6.0.into(),
-                    },
-                    ..Default::default()
-                })
-                .into()
-            } else {
-                container(Space::new().height(0)).into()
-            };
+        let escalation_warning: Element<'_, Message> = if self.available_escalation_tools.is_empty()
+        {
+            container(
+                row![
+                    svg(svg::Handle::from_memory(crate::types::ICON_INFO_SVG))
+                        .width(14)
+                        .height(14)
+                        .style(|_, _| svg::Style {
+                            color: Some(crate::types::COLOR_WARNING)
+                        }),
+                    text("No privilege tool found! Install sudo, doas, or pkexec to use the VPN.")
+                        .size(12)
+                        .color(crate::types::COLOR_WARNING),
+                ]
+                .spacing(8)
+                .align_y(Alignment::Center),
+            )
+            .width(Length::Fill)
+            .padding(10)
+            .style(|_| container::Style {
+                background: Some(crate::types::COLOR_SURFACE.into()),
+                border: Border {
+                    color: crate::types::COLOR_WARNING,
+                    width: 1.0,
+                    radius: 6.0.into(),
+                },
+                ..Default::default()
+            })
+            .into()
+        } else {
+            container(Space::new().height(0)).into()
+        };
         #[cfg(windows)]
-        let escalation_warning: Element<'_, Message> =
-            container(Space::new().height(0)).into();
+        let escalation_warning: Element<'_, Message> = container(Space::new().height(0)).into();
 
         // OpenConnect warning banner
         let oc_warning: Element<'_, Message> = if self.oc_test_result == Some(false) {
@@ -330,9 +327,7 @@ impl KuVpnGui {
             }
         });
 
-        row![conn_btn, settings_btn, console_btn]
-            .spacing(0)
-            .into()
+        row![conn_btn, settings_btn, console_btn].spacing(0).into()
     }
 
     fn view_connection_tab(&self) -> Element<'_, Message> {

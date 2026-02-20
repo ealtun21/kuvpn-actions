@@ -33,15 +33,11 @@ impl KuVpnGui {
                         .on_submit(Message::SubmitInput)
                         .padding(12)
                 },
-                button(
-                    text("VERIFY")
-                        .size(14)
-                        .color(Color::WHITE)
-                )
-                .width(Length::Fill)
-                .padding([12, 16])
-                .on_press(Message::SubmitInput)
-                .style(btn_primary)
+                button(text("VERIFY").size(14).color(Color::WHITE))
+                    .width(Length::Fill)
+                    .padding([12, 16])
+                    .on_press(Message::SubmitInput)
+                    .style(btn_primary)
             ]
             .spacing(20)
             .padding(32),
