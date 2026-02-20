@@ -63,6 +63,9 @@ pub struct KuVpnGui {
     /// Detected name of the active VPN interface (e.g. "kuvpn0" on Linux, "utun3" on macOS).
     /// `None` when not connected or on platforms where it cannot be determined (Windows).
     pub active_interface: Option<String>,
+    /// Privilege escalation tools found on this system (e.g. ["pkexec", "sudo"]).
+    /// Empty on Windows. Empty on Unix means no tool is installed — VPN cannot start.
+    pub available_escalation_tools: Vec<&'static str>,
 }
 
 impl KuVpnGui {
@@ -552,6 +555,15 @@ impl KuVpnGui {
             Message::ResetSettings => {
                 let old_use_csd = self.settings.use_client_decorations;
                 self.settings = GuiSettings::default();
+                // Auto-select first available tool if the default (pkexec) isn't installed
+                #[cfg(unix)]
+                if !self.available_escalation_tools.is_empty()
+                    && !self.available_escalation_tools
+                        .contains(&self.settings.escalation_tool.as_str())
+                {
+                    self.settings.escalation_tool =
+                        self.available_escalation_tools[0].to_string();
+                }
                 self.save_settings();
                 self.oc_test_result = None;
                 self.oc_path_notification = None;
@@ -748,10 +760,30 @@ impl KuVpnGui {
 
 impl Default for KuVpnGui {
     fn default() -> Self {
-        let settings = GuiSettings::load();
+        let mut settings = GuiSettings::load();
 
         if let Ok(mut guard) = crate::logger::GUI_LOGGER.user_level.lock() {
             *guard = log_level_from_slider(settings.log_level_val);
+        }
+
+        // Detect which privilege escalation tools are installed on this system.
+        // On Windows this is always empty (elevation is handled differently).
+        let available_escalation_tools: Vec<&'static str> = {
+            #[cfg(unix)]
+            { kuvpn::list_available_escalation_tools() }
+            #[cfg(not(unix))]
+            { vec![] }
+        };
+
+        // If the saved escalation tool is no longer installed, auto-select the first
+        // available one so the user doesn't start in a broken state.
+        #[cfg(unix)]
+        if !available_escalation_tools.is_empty()
+            && !available_escalation_tools
+                .contains(&settings.escalation_tool.as_str())
+        {
+            settings.escalation_tool = available_escalation_tools[0].to_string();
+            let _ = settings.save();
         }
 
         Self {
@@ -782,6 +814,7 @@ impl Default for KuVpnGui {
             last_tray_click: None,
             connection_start: None,
             active_interface: None,
+            available_escalation_tools,
         }
     }
 }
