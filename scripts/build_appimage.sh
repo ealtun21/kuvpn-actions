@@ -4,7 +4,7 @@ set -e
 # Configuration
 APP_NAME="KUVPN"
 VERSION="2.0.2"
-ARCH="x86_64"
+ARCH=$(uname -m)
 
 # Podman/Docker detection and wrapper
 if [ "$1" != "--no-container" ] && [ ! -f /.containerenv ] && [ ! -f /run/.containerenv ]; then
@@ -28,7 +28,7 @@ if [ "$1" != "--no-container" ] && [ ! -f /.containerenv ] && [ ! -f /run/.conta
         echo "Successfully built and extracted AppImage(s) to dist/."
         exit 0
     elif command -v docker >/dev/null 2>&1; then
-        echo "Using Docker to build AppImage for maximum compatibility..."
+        echo "Using Docker to build AppImage for maximum compatibility ($ARCH)..."
         docker build --build-arg BUILD_ARGS="$BUILD_ARGS" -t kuvpn-builder -f packaging/appimage/Dockerfile .
         
         CONTAINER_ID=$(docker create kuvpn-builder)
@@ -94,7 +94,7 @@ fi
 
 # Download linuxdeploy if needed
 if [ ! -f "packaging/appimage/linuxdeploy" ]; then
-    curl -L -o packaging/appimage/linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+    curl -L -o packaging/appimage/linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${ARCH}.AppImage
     chmod +x packaging/appimage/linuxdeploy
 fi
 
@@ -106,7 +106,7 @@ fi
 
 # Download appimagetool if needed
 if [ ! -f "packaging/appimage/appimagetool" ]; then
-    curl -L -o packaging/appimage/appimagetool https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+    curl -L -o packaging/appimage/appimagetool https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-${ARCH}.AppImage
     chmod +x packaging/appimage/appimagetool
 fi
 
@@ -189,15 +189,28 @@ LIBS_TO_BUNDLE_LIST="
 "
 
 LIBS_TO_BUNDLE=""
+# Determine multiarch lib path
+if [ "$ARCH" == "x86_64" ]; then
+    LIB_ARCH="x86_64-linux-gnu"
+else
+    LIB_ARCH="aarch64-linux-gnu"
+fi
+
 for lib in $LIBS_TO_BUNDLE_LIST; do
-    LIB_PATH=$(find /usr/lib -name "$lib" | head -n 1)
+    LIB_PATH=$(find /usr/lib/$LIB_ARCH -name "$lib" | head -n 1)
     if [ -n "$LIB_PATH" ]; then
         LIBS_TO_BUNDLE="$LIBS_TO_BUNDLE --library $LIB_PATH"
     else
-        # Try /lib too
-        LIB_PATH=$(find /lib -name "$lib" | head -n 1)
+        # Try generic /usr/lib
+        LIB_PATH=$(find /usr/lib -name "$lib" | head -n 1)
         if [ -n "$LIB_PATH" ]; then
             LIBS_TO_BUNDLE="$LIBS_TO_BUNDLE --library $LIB_PATH"
+        else
+            # Try /lib
+            LIB_PATH=$(find /lib -name "$lib" | head -n 1)
+            if [ -n "$LIB_PATH" ]; then
+                LIBS_TO_BUNDLE="$LIBS_TO_BUNDLE --library $LIB_PATH"
+            fi
         fi
     fi
 done
@@ -211,13 +224,13 @@ done
     --custom-apprun scripts/AppRun.sh
  
     # Flatten libraries to ensure LD_PRELOAD and LD_LIBRARY_PATH find them easily
-    if [ -d "$APPDIR/usr/lib/x86_64-linux-gnu" ]; then
-        cp -rn "$APPDIR"/usr/lib/x86_64-linux-gnu/* "$APPDIR/usr/lib/" || true
+    if [ -d "$APPDIR/usr/lib/$LIB_ARCH" ]; then
+        cp -rn "$APPDIR"/usr/lib/$LIB_ARCH/* "$APPDIR/usr/lib/" || true
     fi
 
     # Bundle GIO modules from the build environment
     mkdir -p "$APPDIR/usr/lib/gio/modules"
-    cp -L /usr/lib/x86_64-linux-gnu/gio/modules/*.so "$APPDIR/usr/lib/gio/modules/" || true
+    cp -L /usr/lib/$LIB_ARCH/gio/modules/*.so "$APPDIR/usr/lib/gio/modules/" || true
 
     # Bundle and compile GSettings schemas
     mkdir -p "$APPDIR/usr/share/glib-2.0/schemas"
@@ -232,8 +245,12 @@ ARCH=$ARCH ./packaging/appimage/appimagetool --appimage-extract-and-run "$APPDIR
 # Build Full AppImage (Optional)
 if [ "$1" == "--full" ]; then
     echo "Downloading Chromium for full AppImage..."
-    REVISION=$(curl -s "https://www.googleapis.com/download/storage/v1/b/chromium-browser-snapshots/o/Linux_x64%2FLAST_CHANGE?alt=media")
-    curl -L -o packaging/chromium.zip "https://www.googleapis.com/download/storage/v1/b/chromium-browser-snapshots/o/Linux_x64%2F${REVISION}%2Fchrome-linux.zip?alt=media"
+    CHROMIUM_ARCH="Linux_x64"
+    if [ "$ARCH" == "aarch64" ]; then
+        CHROMIUM_ARCH="Linux_Arm64"
+    fi
+    REVISION=$(curl -s "https://www.googleapis.com/download/storage/v1/b/chromium-browser-snapshots/o/${CHROMIUM_ARCH}%2FLAST_CHANGE?alt=media")
+    curl -L -o packaging/chromium.zip "https://www.googleapis.com/download/storage/v1/b/chromium-browser-snapshots/o/${CHROMIUM_ARCH}%2F${REVISION}%2Fchrome-linux.zip?alt=media"
     mkdir -p "$APPDIR/usr/lib/chromium"
     unzip -q packaging/chromium.zip -d packaging/appimage/AppDir/usr/lib/
     mv "$APPDIR/usr/lib/chrome-linux/"* "$APPDIR/usr/lib/chromium/"

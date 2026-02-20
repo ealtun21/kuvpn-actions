@@ -2,10 +2,17 @@
 export SELF=$(readlink -f "$0")
 export HERE="${SELF%/*}"
 
+ARCH=$(uname -m)
+if [ "$ARCH" = "x86_64" ]; then
+    LIB_ARCH="x86_64-linux-gnu"
+elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+    LIB_ARCH="aarch64-linux-gnu"
+fi
+
 # Host system libs FIRST so the Vulkan loader and GPU drivers (which must come
 # from the host) are found before any bundled copies. Bundled AppImage libs are
 # appended so app-specific deps still resolve from the bundle.
-export LD_LIBRARY_PATH="/usr/lib:/usr/lib64:/usr/lib/x86_64-linux-gnu:${HERE}/usr/lib:${HERE}/usr/lib/x86_64-linux-gnu:${HERE}/lib/x86_64-linux-gnu:${HERE}/lib:${LD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH="/usr/lib:/usr/lib64:/usr/lib/$LIB_ARCH:${HERE}/usr/lib:${HERE}/usr/lib/$LIB_ARCH:${HERE}/lib/$LIB_ARCH:${HERE}/lib:${LD_LIBRARY_PATH}"
 export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 export GIO_MODULE_DIR="${HERE}/usr/lib/gio/modules"
 export GSETTINGS_SCHEMA_DIR="${HERE}/usr/share/glib-2.0/schemas"
@@ -20,7 +27,7 @@ export GTK_PATH=""
 PRELOAD_LIBS=""
 for lib in libdbusmenu-gtk3.so.4 libdbusmenu-glib.so.4 libayatana-appindicator3.so.1 libayatana-ido3-0.4.so.0 libayatana-indicator3.so.7; do
     FOUND=""
-    for dir in "${HERE}/usr/lib" "${HERE}/usr/lib/x86_64-linux-gnu" "${HERE}/lib" "${HERE}/lib/x86_64-linux-gnu"; do
+    for dir in "${HERE}/usr/lib" "${HERE}/usr/lib/$LIB_ARCH" "${HERE}/lib" "${HERE}/lib/$LIB_ARCH"; do
         if [ -f "$dir/$lib" ]; then
             FOUND="$dir/$lib"
             break

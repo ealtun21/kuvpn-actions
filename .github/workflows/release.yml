@@ -78,15 +78,15 @@ jobs:
           name: kuvpn-appimage-x86_64
           path: dist/KUVPN-minimal-x86_64.AppImage
 
-  # ─── Linux AppImage (aarch64, cross-compiled in container) ──────────
+  # ─── Linux AppImage (aarch64, built natively on arm64 runner) ──────────
   linux-appimage-aarch64:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build aarch64 AppImage in Docker
+      - name: Build AppImage in Docker
         run: |
-          docker build -t kuvpn-appimage-builder-aarch64 -f packaging/appimage/Dockerfile.aarch64 .
+          docker build -t kuvpn-appimage-builder-aarch64 -f packaging/appimage/Dockerfile .
           CONTAINER_ID=$(docker create kuvpn-appimage-builder-aarch64)
           mkdir -p dist
           docker cp "$CONTAINER_ID":/build/dist/. dist/

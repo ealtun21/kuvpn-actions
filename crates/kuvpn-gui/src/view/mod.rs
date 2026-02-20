@@ -1,7 +1,5 @@
 pub mod actions;
 pub mod console;
-pub mod header;
-pub mod mfa;
 pub mod modal;
 pub mod settings;
 pub mod status;
