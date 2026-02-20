@@ -8,6 +8,7 @@ use tray_icon::{
 };
 
 use crate::config::GuiSettings;
+use crate::notifications::send_notification;
 use crate::provider::{GuiInteraction, GuiProvider};
 use crate::types::{
     log_level_from_slider, login_mode_flags, ConnectionStatus, InputRequest, InputRequestWrapper,
@@ -421,12 +422,20 @@ impl KuVpnGui {
             }
 
             Message::MfaPushReceived(code) => {
-                self.mfa_info = Some(code);
+                self.mfa_info = Some(code.clone());
+                send_notification(
+                    "MFA Authentication Required",
+                    &format!("Please enter this code or approve the push: {}", code),
+                );
                 if !self.is_visible && !self.window_close_pending && !self.window_open_pending {
                     log::info!("MFA received - showing window");
                     return self.update(Message::ToggleVisibility {
                         from_close_request: false,
                     });
+                } else if self.is_visible {
+                    if let Some(id) = self.window_id {
+                        return iced::window::gain_focus(id);
+                    }
                 }
                 Task::none()
             }
@@ -437,6 +446,10 @@ impl KuVpnGui {
             Message::RequestInput(wrapper) => {
                 if let Ok(mut guard) = wrapper.0.lock() {
                     if let Some(req) = guard.take() {
+                        send_notification(
+                            "Action Required",
+                            &format!("{}. Please open the app to provide it.", req.msg),
+                        );
                         self.pending_request = Some(req);
                         self.current_input = String::new();
                         if !self.is_visible && !self.window_close_pending && !self.window_open_pending {
@@ -444,6 +457,10 @@ impl KuVpnGui {
                             return self.update(Message::ToggleVisibility {
                                 from_close_request: false,
                             });
+                        } else if self.is_visible {
+                            if let Some(id) = self.window_id {
+                                return iced::window::gain_focus(id);
+                            }
                         }
                     }
                 }
@@ -496,6 +513,7 @@ impl KuVpnGui {
                 }
 
                 if let Some(e) = err {
+                    send_notification("VPN Connection Error", &e);
                     // Store the error category for display
                     self.error_category = category;
 
@@ -535,10 +553,10 @@ impl KuVpnGui {
                     // Detect and store the active VPN interface name when connected.
                     // On Linux this checks sysfs; on macOS it reads ifconfig for utun%d.
                     if status == ConnectionStatus::Connected {
+                        send_notification("VPN Connected", "You are now connected to KUVPN.");
                         #[cfg(unix)]
                         {
-                            self.active_interface =
-                                kuvpn::get_vpn_interface_name("kuvpn0");
+                            self.active_interface = kuvpn::get_vpn_interface_name("kuvpn0");
                         }
                     } else if status == ConnectionStatus::Disconnected
                         || status == ConnectionStatus::Error

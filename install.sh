@@ -7,7 +7,10 @@ set -e
 REPO="KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn"
 INSTALL_DIR="$HOME/.local/bin"
 BINARY_NAME="kuvpn"
+GUI_NAME="KUVPN"
 VERSION="${VERSION:-latest}"
+INSTALL_CLI=1
+INSTALL_GUI=0
 
 # --- Colors ---
 if [ -t 1 ]; then
@@ -37,18 +40,18 @@ detect_platform() {
     case "$OS" in
         Darwin)
             if [ "$ARCH" = "x86_64" ]; then
-                PLATFORM="x86_64-apple-darwin"
+                GUI_PLATFORM="macOS-x86_64"
             elif [ "$ARCH" = "arm64" ]; then
-                PLATFORM="aarch64-apple-darwin"
+                GUI_PLATFORM="macOS-aarch64"
             else
                 log_fail "Unsupported macOS architecture: $ARCH"
             fi
             ;;
         Linux)
             if [ "$ARCH" = "x86_64" ]; then
-                PLATFORM="x86_64-unknown-linux-musl"
+                GUI_PLATFORM="x86_64"
             elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
-                PLATFORM="aarch64-unknown-linux-musl"
+                GUI_PLATFORM="aarch64"
             else
                 log_fail "Unsupported Linux architecture: $ARCH"
             fi
@@ -81,82 +84,22 @@ resolve_version() {
     log_info "Selected version: $TAG"
 }
 
-# --- Pre-Install Check ---
-# Returns 0 if we should proceed, 1 if we should abort
-check_existing_installation() {
-    local BIN_PATH="$INSTALL_DIR/$BINARY_NAME"
-    
-    # If binary doesn't exist, proceed automatically
-    if [ ! -f "$BIN_PATH" ]; then
-        return 0
-    fi
-
-    # Check if force flag is on
-    if [ "$FORCE_INSTALL" == "1" ]; then
-        log_info "Force mode enabled. Overwriting existing installation."
-        return 0
-    fi
-
-    # Try to extract current version
-    # Output format expected: "kuvpn 2.0.0" -> awk prints "2.0.0"
-    local CURRENT_VER_RAW=$("$BIN_PATH" --version 2>/dev/null || echo "unknown unknown")
-    local CURRENT_VER=$(echo "$CURRENT_VER_RAW" | awk '{print $2}')
-    
-    # Clean 'v' from tag for comparison (v2.0.1 -> 2.0.1)
-    local TARGET_VER=${TAG#v} 
-
-    if [ "$CURRENT_VER" == "$TARGET_VER" ]; then
-        # SAME VERSION
-        log_warn "Version $TAG is already installed."
-        if [ -t 0 ]; then
-            printf "Re-install anyway? [y/N] "
-            read -r REPLY
-            if [[ ! "$REPLY" =~ ^[Yy]$ ]]; then
-                log_warn "Aborted by user."
-                return 1
-            fi
-        fi
-    else
-        # DIFFERENT VERSION
-        log_warn "Existing installation found."
-        printf "  Current: ${COLOR_PRIMARY}%s${COLOR_RESET}\n" "$CURRENT_VER"
-        printf "  Target:  ${COLOR_PRIMARY}%s${COLOR_RESET}\n" "$TARGET_VER"
-        
-        if [ -t 0 ]; then
-            printf "Do you want to update/replace? [Y/n] "
-            read -r REPLY
-            # Default to Yes if empty
-            if [[ -n "$REPLY" && ! "$REPLY" =~ ^[Yy]$ ]]; then
-                log_warn "Aborted by user."
-                return 1
-            fi
-        fi
-    fi
-
-    return 0
-}
-
 # --- Download Logic ---
-install_binary() {
-    DOWNLOAD_URL="https://github.com/$REPO/releases/download/${TAG}/${BINARY_NAME}-${PLATFORM}"
+install_cli_binary() {
+    if [ "$OS" = "Darwin" ]; then
+        DOWNLOAD_URL="https://github.com/$REPO/releases/download/${TAG}/${BINARY_NAME}-macos-${GUI_PLATFORM#macOS-}"
+    else
+        DOWNLOAD_URL="https://github.com/$REPO/releases/download/${TAG}/${BINARY_NAME}-linux-${GUI_PLATFORM}"
+    fi
+
     TMP_DIR=$(mktemp -d)
     TMP_FILE="$TMP_DIR/$BINARY_NAME"
 
-    log_info "Downloading from: $DOWNLOAD_URL"
+    log_info "Downloading CLI from: $DOWNLOAD_URL"
     
-    if command -v curl >/dev/null 2>&1; then
-        if ! curl --proto '=https' --tlsv1.2 -sSfL "$DOWNLOAD_URL" -o "$TMP_FILE"; then
-            rm -rf "$TMP_DIR"
-            log_fail "Download failed."
-        fi
-    elif command -v wget >/dev/null 2>&1; then
-        if ! wget -qO "$TMP_FILE" "$DOWNLOAD_URL"; then
-            rm -rf "$TMP_DIR"
-            log_fail "Download failed."
-        fi
-    else
+    if ! curl --proto '=https' --tlsv1.2 -sSfL "$DOWNLOAD_URL" -o "$TMP_FILE"; then
         rm -rf "$TMP_DIR"
-        log_fail "Neither curl nor wget found."
+        log_fail "Download failed."
     fi
 
     mkdir -p "$INSTALL_DIR"
@@ -164,7 +107,40 @@ install_binary() {
     chmod +x "$INSTALL_DIR/$BINARY_NAME"
     rm -rf "$TMP_DIR"
     
-    log_success "Installed at $INSTALL_DIR/$BINARY_NAME"
+    log_success "CLI installed at $INSTALL_DIR/$BINARY_NAME"
+}
+
+install_gui_binary() {
+    if [ "$OS" = "Darwin" ]; then
+        DOWNLOAD_URL="https://github.com/$REPO/releases/download/${TAG}/${GUI_NAME}-${GUI_PLATFORM}.dmg"
+        log_info "Downloading macOS GUI (DMG) from: $DOWNLOAD_URL"
+        DEST="$HOME/Downloads/${GUI_NAME}-${TAG}.dmg"
+        curl -L "$DOWNLOAD_URL" -o "$DEST"
+        log_success "GUI DMG downloaded to $DEST"
+        log_warn "Please open the DMG and drag KUVPN to Applications."
+    else
+        DOWNLOAD_URL="https://github.com/$REPO/releases/download/${TAG}/${GUI_NAME}-${GUI_PLATFORM}.AppImage"
+        log_info "Downloading Linux GUI (AppImage) from: $DOWNLOAD_URL"
+        mkdir -p "$INSTALL_DIR"
+        DEST="$INSTALL_DIR/${GUI_NAME}.AppImage"
+        curl -L "$DOWNLOAD_URL" -o "$DEST"
+        chmod +x "$DEST"
+        log_success "GUI installed at $DEST"
+        
+        # Create Desktop Entry
+        DESKTOP_FILE="$HOME/.local/share/applications/kuvpn.desktop"
+        mkdir -p "$(dirname "$DESKTOP_FILE")"
+        cat > "$DESKTOP_FILE" <<EOF
+[Desktop Entry]
+Name=KUVPN
+Exec=$DEST
+Icon=network-vpn
+Type=Application
+Categories=Network;
+Comment=Connect to Koç University VPN
+EOF
+        log_success "Created desktop entry at $DESKTOP_FILE"
+    fi
 }
 
 # --- Shell Configuration ---
@@ -183,41 +159,34 @@ update_shell_config() {
     local MARKER="# Added by kuvpn installer"
     local UPDATED=0
 
-    # 1. Update Standard Shells
+    # Update Standard Shells
     local FILES=("$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.zshrc" "$HOME/.profile")
 
     for config_file in "${FILES[@]}"; do
         if [ -f "$config_file" ]; then
-            # Check for our marker comment OR the exact export line
             if ! grep -qF "$MARKER" "$config_file" && ! grep -qF 'export PATH="$HOME/.local/bin:$PATH"' "$config_file"; then
                 echo "" >> "$config_file"
                 echo "$MARKER" >> "$config_file"
                 echo "$SH_CMD" >> "$config_file"
                 log_success "Added to PATH in $config_file"
                 UPDATED=1
-            else
-                log_info "Already in PATH: $config_file"
             fi
         fi
     done
 
-    # 2. Update Fish Shell
+    # Update Fish Shell
     local FISH_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"
     if [ -d "$(dirname "$FISH_CONFIG")" ]; then
         touch "$FISH_CONFIG"
-        # Check for our marker comment OR the exact fish PATH line
         if ! grep -qF "$MARKER" "$FISH_CONFIG" && ! grep -qF 'set -gx PATH $HOME/.local/bin $PATH' "$FISH_CONFIG"; then
             echo "" >> "$FISH_CONFIG"
             echo "$MARKER" >> "$FISH_CONFIG"
             echo "$FISH_CMD" >> "$FISH_CONFIG"
             log_success "Added to PATH in $FISH_CONFIG"
             UPDATED=1
-        else
-            log_info "Already in PATH: $FISH_CONFIG"
         fi
     fi
 
-    echo ""
     if [ $UPDATED -eq 1 ]; then
         log_info "Please restart your terminal or run: source <your_shell_config>"
     fi
@@ -226,27 +195,50 @@ update_shell_config() {
 # --- Main Execution ---
 
 echo ""
-log_info "Starting KUVPN Installer..."
+log_info "KUVPN Installer"
 
-FORCE_INSTALL=0
-for arg in "$@"; do
-    case $arg in
-        -y|--yes|--force) FORCE_INSTALL=1 ;;
-        --version=*) VERSION="${arg#*=}" ;;
-    esac
-done
+# Default if no arguments provided: install CLI
+if [ $# -eq 0 ]; then
+    INSTALL_CLI=1
+    INSTALL_GUI=0
+else
+    # If arguments are provided, we reset defaults and only install what is requested
+    INSTALL_CLI=0
+    INSTALL_GUI=0
+    for arg in "$@"; do
+        case $arg in
+            --cli) INSTALL_CLI=1 ;;
+            --gui) INSTALL_GUI=1 ;;
+            --all) INSTALL_CLI=1; INSTALL_GUI=1 ;;
+            --version=*) VERSION="${arg#*=}" ;;
+            -y|--yes|--force) FORCE_INSTALL=1 ;; # Keep support for force flag
+        esac
+    done
+    # Fallback: if user provided args but neither --cli, --gui, nor --all, default to CLI
+    if [ "$INSTALL_CLI" -eq 0 ] && [ "$INSTALL_GUI" -eq 0 ]; then
+        INSTALL_CLI=1
+    fi
+fi
 
 detect_platform
 resolve_version
 
-# Check if we should proceed (version check happens here)
-if check_existing_installation; then
-    install_binary
-    update_shell_config
-    echo ""
-    log_success "Installation Complete! Run 'kuvpn --help' to start."
-    echo ""
-else
-    # We exit gracefully if check_existing_installation returns 1
-    exit 0
+if [ "$INSTALL_CLI" -eq 1 ]; then
+    install_cli_binary
 fi
+
+if [ "$INSTALL_GUI" -eq 1 ]; then
+    install_gui_binary
+fi
+
+update_shell_config
+
+echo ""
+log_success "Done!"
+if [ "$INSTALL_CLI" -eq 1 ]; then
+    echo "Run 'kuvpn' to use the CLI."
+fi
+if [ "$INSTALL_GUI" -eq 1 ] && [ "$OS" = "Linux" ]; then
+    echo "You can find KUVPN in your application menu."
+fi
+echo ""
