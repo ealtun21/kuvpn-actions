@@ -40,6 +40,11 @@ pub struct KuVpnGui {
     pub rotation: f32,
     pub oc_test_result: Option<bool>,
     pub automation_warning: Option<String>,
+    /// Set when the Test button resolves a different path than what was entered.
+    pub oc_path_notification: Option<String>,
+    /// True after the first (startup) auto-test completes; used to suppress
+    /// the replacement notification for the initial auto-detection pass.
+    pub oc_startup_tested: bool,
 
     // VPN Session
     pub session: Option<Arc<VpnSession>>,
@@ -234,6 +239,7 @@ impl KuVpnGui {
             Message::OpenConnectPathChanged(p) => {
                 self.settings.openconnect_path = p;
                 self.oc_test_result = None;
+                self.oc_path_notification = None;
                 self.save_settings();
                 Task::none()
             }
@@ -548,6 +554,8 @@ impl KuVpnGui {
                 self.settings = GuiSettings::default();
                 self.save_settings();
                 self.oc_test_result = None;
+                self.oc_path_notification = None;
+                self.oc_startup_tested = false; // treat the next test as a fresh startup
 
                 // If window decoration setting changed, refresh window
                 if old_use_csd != self.settings.use_client_decorations {
@@ -578,11 +586,27 @@ impl KuVpnGui {
                 )
             }
             Message::OpenConnectTestResult(resolved) => {
+                let old_path = self.settings.openconnect_path.trim().to_string();
                 self.oc_test_result = Some(resolved.is_some());
-                if let Some(path) = resolved {
-                    self.settings.openconnect_path = path;
+                if let Some(new_path) = resolved {
+                    // Show a notification when the user explicitly tested a path and
+                    // it was replaced (skip on the silent startup auto-test).
+                    if self.oc_startup_tested
+                        && new_path.trim().to_lowercase() != old_path.to_lowercase()
+                    {
+                        self.oc_path_notification = Some(format!(
+                            "'{}' was not found or invalid — auto-resolved to: {}",
+                            old_path, new_path
+                        ));
+                    } else {
+                        self.oc_path_notification = None;
+                    }
+                    self.settings.openconnect_path = new_path;
                     self.save_settings();
+                } else {
+                    self.oc_path_notification = None;
                 }
+                self.oc_startup_tested = true;
                 Task::none()
             }
             Message::CopyLogs => {
@@ -744,6 +768,8 @@ impl Default for KuVpnGui {
             rotation: 0.0,
             oc_test_result: None,
             automation_warning: None,
+            oc_path_notification: None,
+            oc_startup_tested: false,
             session: None,
             tray_icon: None,
             show_item: None,
