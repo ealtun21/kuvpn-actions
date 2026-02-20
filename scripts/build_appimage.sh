@@ -3,7 +3,8 @@ set -e
 
 # Configuration
 APP_NAME="KUVPN"
-VERSION="2.0.2"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+VERSION=$(grep '^version = ' "$SCRIPT_DIR/../Cargo.toml" | head -1 | sed 's/version = "\(.*\)"/\1/')
 ARCH=$(uname -m)
 
 # Podman/Docker detection and wrapper
