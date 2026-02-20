@@ -1,8 +1,8 @@
 use crate::app::KuVpnGui;
 use crate::types::{
     btn_secondary, btn_segment_selected, btn_segment_unselected, card, custom_scrollbar, Message,
-    SegmentPosition, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_DIM, ICON_INFO_SVG, ICON_REFRESH_SVG,
-    ICON_TRASH_SVG,
+    SegmentPosition, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_DIM, COLOR_WARNING, ICON_INFO_SVG,
+    ICON_REFRESH_SVG, ICON_TRASH_SVG,
 };
 use iced::widget::{button, column, container, row, scrollable, svg, text, text_input};
 use iced::{Alignment, Border, Color, Element, Length, Padding};
@@ -233,16 +233,39 @@ impl KuVpnGui {
                 {
                     #[cfg(not(windows))]
                     {
-                        self.view_unified_control(
-                            "Elevation:",
-                            self.view_segmented_control_str(
-                                &["pkexec", "sudo", "doas"],
-                                &self.settings.escalation_tool,
-                                is_locked,
-                                Message::EscalationToolChanged,
-                            ),
-                            "Admin privilege tool, default: pkexec, use what you have installed",
-                        )
+                        if self.available_escalation_tools.is_empty() {
+                            self.view_unified_control(
+                                "Elevation:",
+                                container(
+                                    row![
+                                        svg(svg::Handle::from_memory(ICON_INFO_SVG))
+                                            .width(13)
+                                            .height(13)
+                                            .style(|_, _| svg::Style {
+                                                color: Some(COLOR_WARNING)
+                                            }),
+                                        text("No privilege tool found! Install sudo, doas, or pkexec.")
+                                            .size(11)
+                                            .color(COLOR_WARNING),
+                                    ]
+                                    .spacing(6)
+                                    .align_y(Alignment::Center),
+                                )
+                                .into(),
+                                "Install sudo, doas, or pkexec so OpenConnect can create the VPN tunnel as root",
+                            )
+                        } else {
+                            self.view_unified_control(
+                                "Elevation:",
+                                self.view_segmented_control_str(
+                                    &self.available_escalation_tools,
+                                    &self.settings.escalation_tool,
+                                    is_locked,
+                                    Message::EscalationToolChanged,
+                                ),
+                                "Privilege tool used to run OpenConnect as root. Only installed tools are shown",
+                            )
+                        }
                     }
                     #[cfg(windows)]
                     {

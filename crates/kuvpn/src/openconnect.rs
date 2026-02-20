@@ -29,8 +29,62 @@ impl VpnProcess {
                 {
                     use nix::sys::signal::{self, Signal};
                     use nix::unistd::Pid;
+
                     let pid = Pid::from_raw(_child.id() as i32);
-                    let _ = signal::kill(pid, Signal::SIGINT);
+
+                    // Step 1: Send SIGTERM to the escalation process (sudo/doas/pkexec).
+                    // sudo and doas forward this to openconnect; pkexec does NOT.
+                    let _ = signal::kill(pid, Signal::SIGTERM);
+
+                    // Step 2: Kill openconnect directly using the available privilege tools.
+                    // Since we just ran `sudo/doas openconnect`, credentials are cached so
+                    // `sudo -n` / `doas -n` work without another password prompt. For pkexec
+                    // users (pkexec doesn't forward signals), this is the only reliable path.
+                    if let Some(oc_pid) = get_openconnect_pid() {
+                        let oc_pid_str = oc_pid.to_string();
+                        // sudo -n: cached credentials, no dialog
+                        if let Ok(sudo_path) = which("sudo") {
+                            let _ = Command::new(sudo_path)
+                                .args(["-n", "kill", "-15", &oc_pid_str])
+                                .stdout(Stdio::null())
+                                .stderr(Stdio::null())
+                                .status();
+                        }
+                        // doas -n: cached credentials, no dialog
+                        if let Ok(doas_path) = which("doas") {
+                            let _ = Command::new(doas_path)
+                                .args(["-n", "kill", &oc_pid_str])
+                                .stdout(Stdio::null())
+                                .stderr(Stdio::null())
+                                .status();
+                        }
+                        // pkexec: last resort for pure-pkexec systems (may show auth dialog)
+                        if let Ok(pkexec_path) = which("pkexec") {
+                            let _ = Command::new(pkexec_path)
+                                .args(["kill", &oc_pid_str])
+                                .stdout(Stdio::null())
+                                .stderr(Stdio::null())
+                                .status();
+                        }
+                    }
+
+                    // Step 3: Wait with a timeout instead of blocking indefinitely.
+                    // Without a timeout, if openconnect ignores the signal (or pkexec
+                    // already exited without cleaning up), _child.wait() blocks forever.
+                    let start = std::time::Instant::now();
+                    loop {
+                        match _child.try_wait() {
+                            Ok(Some(_)) => break,
+                            Ok(None) => {
+                                if start.elapsed() > std::time::Duration::from_secs(5) {
+                                    let _ = signal::kill(pid, Signal::SIGKILL);
+                                    break;
+                                }
+                                std::thread::sleep(std::time::Duration::from_millis(200));
+                            }
+                            Err(_) => break,
+                        }
+                    }
                     let _ = _child.wait();
                 }
                 Ok(())
@@ -252,6 +306,27 @@ pub fn resolve_escalation_tool(run_command: &Option<String>) -> Option<String> {
     default_tools
         .iter()
         .find_map(|&tool| which(tool).ok().map(|_| tool.to_string()))
+}
+
+/// Returns the ordered list of escalation tools that are actually installed on this system.
+///
+/// - On macOS: pkexec is never included (it is not available on macOS).
+/// - On other Unix: pkexec, sudo, doas are checked in preference order.
+///
+/// Only tools found via `which` are returned, so callers can use this list to populate
+/// a UI selector showing only the options the user can actually use.
+#[cfg(unix)]
+pub fn list_available_escalation_tools() -> Vec<&'static str> {
+    let candidates: &[&'static str] = if cfg!(target_os = "macos") {
+        &["sudo", "doas"]
+    } else {
+        &["pkexec", "sudo", "doas"]
+    };
+    candidates
+        .iter()
+        .copied()
+        .filter(|&tool| which(tool).is_ok())
+        .collect()
 }
 
 /// Returns true if the given escalation tool needs a password piped via stdin
@@ -578,8 +653,52 @@ pub fn kill_process(pid: u32) -> anyhow::Result<()> {
     {
         use nix::sys::signal::{self, Signal};
         use nix::unistd::Pid;
-        let pid = Pid::from_raw(pid as i32);
-        let _ = signal::kill(pid, Signal::SIGINT);
+
+        let pid_str = pid.to_string();
+
+        // Prefer killing via privilege tools with cached credentials (no password prompt).
+        // openconnect runs as root, so direct signals from a non-root process fail with EPERM.
+        // Try each tool in order; stop as soon as one succeeds.
+        let elevated_ok =
+            // sudo -n: uses cached credentials, never prompts
+            if let Ok(sudo_path) = which("sudo") {
+                Command::new(sudo_path)
+                    .args(["-n", "kill", "-15", &pid_str])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                    .map(|s| s.success())
+                    .unwrap_or(false)
+            } else { false }
+            // doas -n: uses cached credentials, never prompts
+            || if let Ok(doas_path) = which("doas") {
+                Command::new(doas_path)
+                    .args(["-n", "kill", &pid_str])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                    .map(|s| s.success())
+                    .unwrap_or(false)
+            } else { false }
+            // pkexec: last resort for pure-pkexec systems; may show a brief auth dialog
+            || if let Ok(pkexec_path) = which("pkexec") {
+                Command::new(pkexec_path)
+                    .args(["kill", &pid_str])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                    .map(|s| s.success())
+                    .unwrap_or(false)
+            } else { false };
+
+        if !elevated_ok {
+            // Fallback: direct signal. May fail with EPERM for root processes,
+            // but worth trying (e.g. if openconnect wasn't started as root).
+            let nix_pid = Pid::from_raw(pid as i32);
+            let _ = signal::kill(nix_pid, Signal::SIGTERM);
+            std::thread::sleep(std::time::Duration::from_millis(1000));
+            let _ = signal::kill(nix_pid, Signal::SIGKILL);
+        }
     }
     #[cfg(windows)]
     {
