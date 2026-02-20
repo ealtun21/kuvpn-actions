@@ -186,7 +186,6 @@ jobs:
         run: |
           APP_NAME="KUVPN"
           VERSION="2.0.3"
-          ARCH="x86_64"
           TARGET="x86_64-apple-darwin"
           APP_BUNDLE="${APP_NAME}.app"
           rm -rf "$APP_BUNDLE"
@@ -196,21 +195,19 @@ jobs:
           cp "target/${TARGET}/release/kuvpn-gui" "$APP_BUNDLE/Contents/MacOS/"
           cp "target/${TARGET}/release/kuvpn-cli" "$APP_BUNDLE/Contents/MacOS/"
 
-          # Convert SVG icon to icns for proper macOS icon support
-          if command -v rsvg-convert &>/dev/null && command -v iconutil &>/dev/null; then
-            mkdir -p icon.iconset
-            for size in 16 32 64 128 256 512; do
-              rsvg-convert -w $size -h $size crates/kuvpn-gui/assets/ku.svg -o "icon.iconset/icon_${size}x${size}.png"
-              double=$((size * 2))
-              rsvg-convert -w $double -h $double crates/kuvpn-gui/assets/ku.svg -o "icon.iconset/icon_${size}x${size}@2x.png"
-            done
-            iconutil -c icns icon.iconset -o "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
-            rm -rf icon.iconset
-            ICON_FILE="AppIcon"
-          else
-            cp crates/kuvpn-gui/assets/ku.svg "$APP_BUNDLE/Contents/Resources/"
-            ICON_FILE="ku.svg"
-          fi
+          # Build a full-quality icns from vpn-normal.svg using native macOS iconutil.
+          # rsvg-convert is always available (brew install librsvg above);
+          # iconutil is always available on macOS runners.
+          mkdir -p icon.iconset
+          for size in 16 32 64 128 256 512; do
+            rsvg-convert -w $size -h $size crates/kuvpn-gui/assets/vpn-normal.svg \
+              -o "icon.iconset/icon_${size}x${size}.png"
+            double=$((size * 2))
+            rsvg-convert -w $double -h $double crates/kuvpn-gui/assets/vpn-normal.svg \
+              -o "icon.iconset/icon_${size}x${size}@2x.png"
+          done
+          iconutil -c icns icon.iconset -o "$APP_BUNDLE/Contents/Resources/kuvpn.icns"
+          rm -rf icon.iconset
 
           cat > "$APP_BUNDLE/Contents/Info.plist" <<-PLIST
           <?xml version="1.0" encoding="UTF-8"?>
@@ -230,7 +227,7 @@ jobs:
             <key>CFBundlePackageType</key>
             <string>APPL</string>
             <key>CFBundleIconFile</key>
-            <string>${ICON_FILE}</string>
+            <string>kuvpn</string>
             <key>LSMinimumSystemVersion</key>
             <string>11.0</string>
             <key>NSHighResolutionCapable</key>
@@ -289,21 +286,19 @@ jobs:
           cp "target/${TARGET}/release/kuvpn-gui" "$APP_BUNDLE/Contents/MacOS/"
           cp "target/${TARGET}/release/kuvpn-cli" "$APP_BUNDLE/Contents/MacOS/"
 
-          # Convert SVG icon to icns
-          if command -v rsvg-convert &>/dev/null && command -v iconutil &>/dev/null; then
-            mkdir -p icon.iconset
-            for size in 16 32 64 128 256 512; do
-              rsvg-convert -w $size -h $size crates/kuvpn-gui/assets/ku.svg -o "icon.iconset/icon_${size}x${size}.png"
-              double=$((size * 2))
-              rsvg-convert -w $double -h $double crates/kuvpn-gui/assets/ku.svg -o "icon.iconset/icon_${size}x${size}@2x.png"
-            done
-            iconutil -c icns icon.iconset -o "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
-            rm -rf icon.iconset
-            ICON_FILE="AppIcon"
-          else
-            cp crates/kuvpn-gui/assets/ku.svg "$APP_BUNDLE/Contents/Resources/"
-            ICON_FILE="ku.svg"
-          fi
+          # Build a full-quality icns from vpn-normal.svg using native macOS iconutil.
+          # rsvg-convert is always available (brew install librsvg above);
+          # iconutil is always available on macOS runners.
+          mkdir -p icon.iconset
+          for size in 16 32 64 128 256 512; do
+            rsvg-convert -w $size -h $size crates/kuvpn-gui/assets/vpn-normal.svg \
+              -o "icon.iconset/icon_${size}x${size}.png"
+            double=$((size * 2))
+            rsvg-convert -w $double -h $double crates/kuvpn-gui/assets/vpn-normal.svg \
+              -o "icon.iconset/icon_${size}x${size}@2x.png"
+          done
+          iconutil -c icns icon.iconset -o "$APP_BUNDLE/Contents/Resources/kuvpn.icns"
+          rm -rf icon.iconset
 
           cat > "$APP_BUNDLE/Contents/Info.plist" <<-PLIST
           <?xml version="1.0" encoding="UTF-8"?>
@@ -323,7 +318,7 @@ jobs:
             <key>CFBundlePackageType</key>
             <string>APPL</string>
             <key>CFBundleIconFile</key>
-            <string>${ICON_FILE}</string>
+            <string>kuvpn</string>
             <key>LSMinimumSystemVersion</key>
             <string>11.0</string>
             <key>NSHighResolutionCapable</key>
