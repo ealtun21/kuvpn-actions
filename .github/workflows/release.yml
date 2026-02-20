@@ -166,9 +166,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: brew install librsvg
-
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
@@ -195,19 +192,9 @@ jobs:
           cp "target/${TARGET}/release/kuvpn-gui" "$APP_BUNDLE/Contents/MacOS/"
           cp "target/${TARGET}/release/kuvpn-cli" "$APP_BUNDLE/Contents/MacOS/"
 
-          # Build a full-quality icns from vpn-normal.svg using native macOS iconutil.
-          # rsvg-convert is always available (brew install librsvg above);
-          # iconutil is always available on macOS runners.
-          mkdir -p icon.iconset
-          for size in 16 32 64 128 256 512; do
-            rsvg-convert -w $size -h $size crates/kuvpn-gui/assets/vpn-normal.svg \
-              -o "icon.iconset/icon_${size}x${size}.png"
-            double=$((size * 2))
-            rsvg-convert -w $double -h $double crates/kuvpn-gui/assets/vpn-normal.svg \
-              -o "icon.iconset/icon_${size}x${size}@2x.png"
-          done
-          iconutil -c icns icon.iconset -o "$APP_BUNDLE/Contents/Resources/kuvpn.icns"
-          rm -rf icon.iconset
+          # Use the pre-generated icns from the repo (128/256/512/1024 px, vpn-normal.svg source).
+          # Updating the icon only requires regenerating assets/kuvpn.icns — no CI changes needed.
+          cp crates/kuvpn-gui/assets/kuvpn.icns "$APP_BUNDLE/Contents/Resources/"
 
           cat > "$APP_BUNDLE/Contents/Info.plist" <<-PLIST
           <?xml version="1.0" encoding="UTF-8"?>
@@ -257,9 +244,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: brew install librsvg
-
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
@@ -286,19 +270,9 @@ jobs:
           cp "target/${TARGET}/release/kuvpn-gui" "$APP_BUNDLE/Contents/MacOS/"
           cp "target/${TARGET}/release/kuvpn-cli" "$APP_BUNDLE/Contents/MacOS/"
 
-          # Build a full-quality icns from vpn-normal.svg using native macOS iconutil.
-          # rsvg-convert is always available (brew install librsvg above);
-          # iconutil is always available on macOS runners.
-          mkdir -p icon.iconset
-          for size in 16 32 64 128 256 512; do
-            rsvg-convert -w $size -h $size crates/kuvpn-gui/assets/vpn-normal.svg \
-              -o "icon.iconset/icon_${size}x${size}.png"
-            double=$((size * 2))
-            rsvg-convert -w $double -h $double crates/kuvpn-gui/assets/vpn-normal.svg \
-              -o "icon.iconset/icon_${size}x${size}@2x.png"
-          done
-          iconutil -c icns icon.iconset -o "$APP_BUNDLE/Contents/Resources/kuvpn.icns"
-          rm -rf icon.iconset
+          # Use the pre-generated icns from the repo (128/256/512/1024 px, vpn-normal.svg source).
+          # Updating the icon only requires regenerating assets/kuvpn.icns — no CI changes needed.
+          cp crates/kuvpn-gui/assets/kuvpn.icns "$APP_BUNDLE/Contents/Resources/"
 
           cat > "$APP_BUNDLE/Contents/Info.plist" <<-PLIST
           <?xml version="1.0" encoding="UTF-8"?>

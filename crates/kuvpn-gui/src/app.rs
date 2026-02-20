@@ -17,7 +17,7 @@ use kuvpn::{SessionConfig, VpnSession};
 
 fn load_window_icon() -> Option<iced::window::Icon> {
     iced::window::icon::from_file_data(
-        crate::types::WINDOW_ICON_256,
+        crate::types::WINDOW_ICON,
         Some(image::ImageFormat::Png),
     )
     .ok()
