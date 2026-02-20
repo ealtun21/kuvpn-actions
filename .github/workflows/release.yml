@@ -157,7 +157,6 @@ jobs:
           name: kuvpn-windows-x64
           path: |
             target/release/kuvpn-cli.exe
-            target/release/kuvpn-gui.exe
             packaging/windows/KUVPN-Setup.exe
 
   # ─── macOS (native builds on both architectures) ────────────────────
@@ -341,30 +340,33 @@ jobs:
         run: |
           mkdir -p release
 
-          # Linux CLI
-          cp artifacts/kuvpn-cli-linux-x86_64/kuvpn-cli release/kuvpn-cli-linux-x86_64
-          chmod +x release/kuvpn-cli-linux-x86_64
-          cp artifacts/kuvpn-cli-linux-aarch64/kuvpn-cli release/kuvpn-cli-linux-aarch64
-          chmod +x release/kuvpn-cli-linux-aarch64
+          # Linux CLI  →  kuvpn-linux-<arch>
+          cp artifacts/kuvpn-cli-linux-x86_64/kuvpn-cli release/kuvpn-linux-x86_64
+          chmod +x release/kuvpn-linux-x86_64
+          cp artifacts/kuvpn-cli-linux-aarch64/kuvpn-cli release/kuvpn-linux-aarch64
+          chmod +x release/kuvpn-linux-aarch64
 
-          # Linux AppImage
-          cp artifacts/kuvpn-appimage-x86_64/KUVPN-minimal-x86_64.AppImage release/KUVPN-x86_64.AppImage
-          chmod +x release/KUVPN-x86_64.AppImage
-          cp artifacts/kuvpn-appimage-aarch64/KUVPN-minimal-aarch64.AppImage release/KUVPN-aarch64.AppImage
-          chmod +x release/KUVPN-aarch64.AppImage
+          # Linux AppImage  →  KUVPN-linux-<arch>.AppImage
+          cp artifacts/kuvpn-appimage-x86_64/KUVPN-minimal-x86_64.AppImage release/KUVPN-linux-x86_64.AppImage
+          chmod +x release/KUVPN-linux-x86_64.AppImage
+          cp artifacts/kuvpn-appimage-aarch64/KUVPN-minimal-aarch64.AppImage release/KUVPN-linux-aarch64.AppImage
+          chmod +x release/KUVPN-linux-aarch64.AppImage
 
-          # Windows
-          cp artifacts/kuvpn-windows-x64/target/release/kuvpn-cli.exe release/kuvpn-cli-windows-x86_64.exe
-          cp artifacts/kuvpn-windows-x64/target/release/kuvpn-gui.exe release/kuvpn-gui-windows-x86_64.exe
-          cp artifacts/kuvpn-windows-x64/packaging/windows/KUVPN-Setup.exe release/KUVPN-Setup-x86_64.exe
+          # Windows GUI installer  →  KUVPN-Setup-windows-x86_64.exe  (primary download)
+          # Windows CLI exe bundled into a zip for users who want the standalone binary
+          cp artifacts/kuvpn-windows-x64/packaging/windows/KUVPN-Setup.exe release/KUVPN-Setup-windows-x86_64.exe
+          mkdir -p extras-windows
+          cp artifacts/kuvpn-windows-x64/target/release/kuvpn-cli.exe extras-windows/kuvpn-windows-x86_64.exe
+          cd extras-windows && zip ../release/kuvpn-extras-windows-x86_64.zip kuvpn-windows-x86_64.exe && cd ..
 
-          # macOS
+          # macOS CLI  →  kuvpn-macos-<arch>
+          # macOS GUI  →  KUVPN-macOS-<arch>.dmg
+          cp "artifacts/kuvpn-macos-x86_64/target/x86_64-apple-darwin/release/kuvpn-cli" release/kuvpn-macos-x86_64
+          chmod +x release/kuvpn-macos-x86_64
           cp artifacts/kuvpn-macos-x86_64/KUVPN-x86_64.dmg release/KUVPN-macOS-x86_64.dmg
-          cp "artifacts/kuvpn-macos-x86_64/target/x86_64-apple-darwin/release/kuvpn-cli" release/kuvpn-cli-macos-x86_64
-          chmod +x release/kuvpn-cli-macos-x86_64
+          cp "artifacts/kuvpn-macos-aarch64/target/aarch64-apple-darwin/release/kuvpn-cli" release/kuvpn-macos-aarch64
+          chmod +x release/kuvpn-macos-aarch64
           cp artifacts/kuvpn-macos-aarch64/KUVPN-aarch64.dmg release/KUVPN-macOS-aarch64.dmg
-          cp "artifacts/kuvpn-macos-aarch64/target/aarch64-apple-darwin/release/kuvpn-cli" release/kuvpn-cli-macos-aarch64
-          chmod +x release/kuvpn-cli-macos-aarch64
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -374,23 +376,69 @@ jobs:
           prerelease: false
           files: release/*
           body: |
+            > **KUVPN** is the graphical app (system tray, GUI window).
+            > **kuvpn** is the command-line tool (run `kuvpn` in a terminal).
+            > Both connect to the same VPN — pick whichever fits your workflow.
+
             ## Installation
 
             ### Windows
-            Download `KUVPN-Setup-x86_64.exe` and run the installer.
+            Download and run **`KUVPN-Setup-windows-x86_64.exe`** — the installer bundles OpenConnect and sets everything up.
 
-            ### Linux (GUI - AppImage)
-            Download the `.AppImage` file for your architecture, make it executable (`chmod +x`), and run it.
+            > Need just the raw CLI binary? It's in **`kuvpn-extras-windows-x86_64.zip`**.
 
-            ### Linux (CLI only)
-            Download `kuvpn-cli-linux-x86_64` (or `aarch64`), make it executable, and run it.
+            ### Linux (GUI — `KUVPN`)
+            **Recommended** — one-line installer (also sets up openconnect):
+            ```bash
+            curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash -s -- --gui
+            ```
 
-            ### macOS
-            Download the `.dmg` for your architecture (Intel = x86_64, Apple Silicon = aarch64).
+            <details><summary>Manual install</summary>
 
-            **Important:** Since the app is not notarized, macOS will show a "damaged" warning.
-            To fix this, run in Terminal after mounting the DMG and copying to Applications:
+            Download **`KUVPN-linux-x86_64.AppImage`** (or `aarch64`), make it executable, and run it:
+            ```bash
+            chmod +x KUVPN-linux-x86_64.AppImage && ./KUVPN-linux-x86_64.AppImage
+            ```
+            </details>
+
+            ### Linux (CLI — `kuvpn`)
+            **Recommended** — one-line installer:
+            ```bash
+            curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash -s -- --cli
+            ```
+
+            <details><summary>Manual install</summary>
+
+            Download **`kuvpn-linux-x86_64`** (or `aarch64`), make it executable, and move it onto your PATH:
+            ```bash
+            chmod +x kuvpn-linux-x86_64 && mv kuvpn-linux-x86_64 ~/.local/bin/kuvpn
+            ```
+            </details>
+
+            ### macOS (GUI — `KUVPN`)
+            **Recommended** — one-line installer (mounts the DMG, copies to Applications, and removes the quarantine flag automatically):
+            ```bash
+            curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash -s -- --gui
+            ```
+
+            <details><summary>Manual install</summary>
+
+            Download **`KUVPN-macOS-x86_64.dmg`** (Intel) or **`KUVPN-macOS-aarch64.dmg`** (Apple Silicon), open it, and drag **KUVPN.app** to your Applications folder. Then run this command to allow the app to open (macOS blocks unsigned apps by default):
             ```bash
             sudo xattr -r -d com.apple.quarantine /Applications/KUVPN.app
             ```
-            Then open the app normally.
+            </details>
+
+            ### macOS (CLI — `kuvpn`)
+            **Recommended** — one-line installer:
+            ```bash
+            curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash -s -- --cli
+            ```
+
+            <details><summary>Manual install</summary>
+
+            Download **`kuvpn-macos-x86_64`** (Intel) or **`kuvpn-macos-aarch64`** (Apple Silicon), make it executable, and move it onto your PATH:
+            ```bash
+            chmod +x kuvpn-macos-x86_64 && mv kuvpn-macos-x86_64 ~/.local/bin/kuvpn
+            ```
+            </details>
