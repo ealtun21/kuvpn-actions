@@ -153,23 +153,28 @@ install_openconnect_linux() {
     pkg_mgr=$(detect_package_manager)
     case "$pkg_mgr" in
         apt)
-            log_info "Installing openconnect via apt..."
+            log_warn "Sudo required: installing a system package (openconnect) via apt."
+            log_info "You may be prompted for your password."
             sudo apt-get update -qq && sudo apt-get install -y openconnect
             ;;
         dnf)
-            log_info "Installing openconnect via dnf..."
+            log_warn "Sudo required: installing a system package (openconnect) via dnf."
+            log_info "You may be prompted for your password."
             sudo dnf install -y openconnect
             ;;
         yum)
-            log_info "Installing openconnect via yum..."
+            log_warn "Sudo required: installing a system package (openconnect) via yum."
+            log_info "You may be prompted for your password."
             sudo yum install -y openconnect
             ;;
         pacman)
-            log_info "Installing openconnect via pacman..."
+            log_warn "Sudo required: installing a system package (openconnect) via pacman."
+            log_info "You may be prompted for your password."
             sudo pacman -Sy --noconfirm openconnect
             ;;
         zypper)
-            log_info "Installing openconnect via zypper..."
+            log_warn "Sudo required: installing a system package (openconnect) via zypper."
+            log_info "You may be prompted for your password."
             sudo zypper install -y openconnect
             ;;
         none)
@@ -280,23 +285,49 @@ install_cli_binary() {
 install_gui_binary() {
     if [ "$OS" = "Darwin" ]; then
         local dmg_url="https://github.com/$REPO/releases/download/${TAG}/${GUI_NAME}-${GUI_PLATFORM}.dmg"
-        local dest="$HOME/Downloads/${GUI_NAME}-${TAG}.dmg"
+        local tmp_dir
+        tmp_dir=$(mktemp -d)
+        local dmg_path="$tmp_dir/${GUI_NAME}.dmg"
+
         log_info "Downloading macOS GUI (DMG) from: $dmg_url"
-        curl --proto '=https' --tlsv1.2 -sSfL "$dmg_url" -o "$dest"
-        log_success "GUI DMG downloaded to $dest"
-        echo ""
-        echo "  Next steps:"
-        echo "  1. Open the DMG: open \"$dest\""
-        echo "  2. Drag KUVPN.app to your Applications folder."
-        echo "  3. Run this command to allow the app (macOS security requirement):"
-        echo ""
-        echo "     sudo xattr -r -d com.apple.quarantine /Applications/KUVPN.app"
-        echo ""
-        echo "  4. Open KUVPN from your Applications folder or Launchpad."
-        echo ""
-        if prompt_yn "Open the DMG now?"; then
-            open "$dest"
+        if ! curl --proto '=https' --tlsv1.2 -sSfL "$dmg_url" -o "$dmg_path"; then
+            rm -rf "$tmp_dir"
+            log_fail "Download failed. Check your internet connection and try again."
         fi
+
+        log_info "Mounting DMG..."
+        local mount_point
+        mount_point=$(mktemp -d)
+        hdiutil attach "$dmg_path" -mountpoint "$mount_point" -nobrowse -quiet
+
+        log_info "Copying KUVPN.app to /Applications..."
+        # Remove any existing installation first
+        if [ -d "/Applications/KUVPN.app" ]; then
+            log_warn "Removing existing /Applications/KUVPN.app..."
+            rm -rf "/Applications/KUVPN.app" 2>/dev/null || sudo rm -rf "/Applications/KUVPN.app"
+        fi
+        # Try without sudo first (works for most admin users); fall back if permission denied
+        if ! cp -R "$mount_point/KUVPN.app" "/Applications/KUVPN.app" 2>/dev/null; then
+            log_warn "Sudo required: writing to /Applications needs administrator access."
+            log_info "You may be prompted for your password."
+            sudo cp -R "$mount_point/KUVPN.app" "/Applications/KUVPN.app"
+        fi
+
+        log_info "Unmounting DMG..."
+        hdiutil detach "$mount_point" -quiet
+        rm -rf "$tmp_dir" "$mount_point"
+
+        # macOS blocks apps that weren't installed via the App Store or a notarized installer.
+        # The quarantine attribute is what triggers the "app is damaged" / "unidentified developer"
+        # error. Removing it with xattr allows the app to open normally.
+        echo ""
+        log_warn "Sudo required: removing macOS quarantine attribute from KUVPN.app."
+        log_info "macOS blocks unsigned apps by default. This one command allows KUVPN to run."
+        log_info "You may be prompted for your password."
+        sudo xattr -r -d com.apple.quarantine "/Applications/KUVPN.app"
+
+        log_success "KUVPN.app installed to /Applications."
+        echo "  Open KUVPN from your Applications folder or Launchpad."
     else
         local appimage_url="https://github.com/$REPO/releases/download/${TAG}/${GUI_NAME}-${GUI_PLATFORM}.AppImage"
         local dest="$INSTALL_DIR/${GUI_NAME}.AppImage"
