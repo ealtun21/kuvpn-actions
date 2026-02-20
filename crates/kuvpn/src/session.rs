@@ -216,7 +216,9 @@ impl VpnSession {
                             *s = ConnectionStatus::Error;
 
                             // Try to extract AuthError category
-                            let category = if let Some(auth_err) = e.downcast_ref::<crate::error::AuthError>() {
+                            let category = if let Some(auth_err) =
+                                e.downcast_ref::<crate::error::AuthError>()
+                            {
                                 Some(auth_err.category())
                             } else {
                                 Some(crate::error::ErrorCategory::Authentication)
@@ -249,7 +251,8 @@ impl VpnSession {
                             "Could not locate openconnect at '{}'. Please install openconnect or set the correct path.",
                             config.openconnect_path
                         ));
-                        *error_category.lock().unwrap() = Some(crate::error::ErrorCategory::Connection);
+                        *error_category.lock().unwrap() =
+                            Some(crate::error::ErrorCategory::Connection);
                         log(format!(
                             "Error|Could not locate openconnect at '{}'",
                             config.openconnect_path
@@ -281,8 +284,7 @@ impl VpnSession {
                                     tool_name
                                 ));
                                 if pw.is_empty() && cancel_token.is_cancelled() {
-                                    *status.lock().unwrap() =
-                                        ConnectionStatus::Disconnected;
+                                    *status.lock().unwrap() = ConnectionStatus::Disconnected;
                                     return;
                                 }
                                 Some(pw)
@@ -314,7 +316,8 @@ impl VpnSession {
                     Err(e) => {
                         *status.lock().unwrap() = ConnectionStatus::Error;
                         *last_error.lock().unwrap() = Some(e.to_string());
-                        *error_category.lock().unwrap() = Some(crate::error::ErrorCategory::Connection);
+                        *error_category.lock().unwrap() =
+                            Some(crate::error::ErrorCategory::Connection);
                         log(format!("Error|{}", e));
                         return;
                     }
@@ -395,7 +398,8 @@ impl VpnSession {
                         *last_error.lock().unwrap() = Some(
                             "OpenConnect process exited before tunnel was established".to_string(),
                         );
-                        *error_category.lock().unwrap() = Some(crate::error::ErrorCategory::Connection);
+                        *error_category.lock().unwrap() =
+                            Some(crate::error::ErrorCategory::Connection);
                         log(
                             "Error|OpenConnect process exited before tunnel was established"
                                 .to_string(),

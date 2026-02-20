@@ -20,8 +20,7 @@ fn svg_to_tray_icon(svg_bytes: &[u8]) -> Result<tray_icon::Icon, Box<dyn std::er
     // Render at a reasonable size for tray icons
     let size = 512;
 
-    let mut pixmap = resvg::tiny_skia::Pixmap::new(size, size)
-        .ok_or("Failed to create pixmap")?;
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(size, size).ok_or("Failed to create pixmap")?;
 
     let transform = resvg::tiny_skia::Transform::from_scale(
         size as f32 / tree.size().width(),
@@ -52,19 +51,18 @@ pub fn init_tray() -> TrayComponents {
     .expect("Failed to create tray menu");
 
     // Use the normal/idle icon by default
-    let icon = svg_to_tray_icon(TRAY_ICON_NORMAL)
-        .unwrap_or_else(|e| {
-            log::warn!("Failed to load tray icon from SVG: {}, using fallback", e);
-            // Fallback to a simple colored square
-            let mut rgba = vec![0u8; 32 * 32 * 4];
-            for i in 0..32 * 32 {
-                rgba[i * 4] = 128; // R
-                rgba[i * 4 + 1] = 0; // G
-                rgba[i * 4 + 2] = 32; // B
-                rgba[i * 4 + 3] = 255; // A
-            }
-            tray_icon::Icon::from_rgba(rgba, 32, 32).expect("Failed to create fallback icon")
-        });
+    let icon = svg_to_tray_icon(TRAY_ICON_NORMAL).unwrap_or_else(|e| {
+        log::warn!("Failed to load tray icon from SVG: {}, using fallback", e);
+        // Fallback to a simple colored square
+        let mut rgba = vec![0u8; 32 * 32 * 4];
+        for i in 0..32 * 32 {
+            rgba[i * 4] = 128; // R
+            rgba[i * 4 + 1] = 0; // G
+            rgba[i * 4 + 2] = 32; // B
+            rgba[i * 4 + 3] = 255; // A
+        }
+        tray_icon::Icon::from_rgba(rgba, 32, 32).expect("Failed to create fallback icon")
+    });
 
     let tray = TrayIconBuilder::new()
         .with_menu(Box::new(tray_menu))

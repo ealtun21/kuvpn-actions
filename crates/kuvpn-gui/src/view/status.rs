@@ -1,8 +1,8 @@
 use crate::app::KuVpnGui;
 use crate::types::{
     Message, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_DIM, COLOR_WARNING, ICON_CLOCK_SVG,
-    ICON_INFO_SVG, ICON_PHONE_SVG, ICON_REFRESH_SVG, ICON_SHIELD_CHECK_SVG,
-    ICON_SHIELD_SVG, ICON_SHIELD_X_SVG,
+    ICON_INFO_SVG, ICON_PHONE_SVG, ICON_REFRESH_SVG, ICON_SHIELD_CHECK_SVG, ICON_SHIELD_SVG,
+    ICON_SHIELD_X_SVG,
 };
 use iced::widget::{column, container, row, svg, text};
 use iced::{Alignment, Border, Color, Element, Font, Length, Shadow, Vector};
@@ -27,7 +27,11 @@ impl KuVpnGui {
                     Some(kuvpn::ErrorCategory::System) => "System Error",
                     None => "Error",
                 };
-                (Color::from_rgb(0.8, 0.2, 0.2), ICON_SHIELD_X_SVG, error_type)
+                (
+                    Color::from_rgb(0.8, 0.2, 0.2),
+                    ICON_SHIELD_X_SVG,
+                    error_type,
+                )
             }
         };
 
@@ -157,9 +161,7 @@ impl KuVpnGui {
             .style(pill_style);
 
             #[allow(unused_mut)]
-            let mut details_row = row![duration_pill]
-                .spacing(8)
-                .align_y(Alignment::Center);
+            let mut details_row = row![duration_pill].spacing(8).align_y(Alignment::Center);
 
             #[cfg(unix)]
             if let Some(ref iface_name) = self.active_interface {
@@ -225,9 +227,7 @@ impl KuVpnGui {
                         )
                         .padding([2, 10])
                         .style(|_| container::Style {
-                            background: Some(
-                                Color::from_rgba(0.80, 0.60, 0.30, 0.12).into()
-                            ),
+                            background: Some(Color::from_rgba(0.80, 0.60, 0.30, 0.12).into()),
                             border: Border {
                                 radius: 6.0.into(),
                                 ..Default::default()

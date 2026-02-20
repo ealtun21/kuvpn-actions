@@ -119,7 +119,6 @@ pub fn log_level_from_slider(val: f32) -> log::LevelFilter {
     }
 }
 
-
 pub fn login_mode_flags(val: f32) -> (bool, bool) {
     match val.round() as i32 {
         0 => (true, false),  // Full Automatic
@@ -127,7 +126,6 @@ pub fn login_mode_flags(val: f32) -> (bool, bool) {
         _ => (false, true),  // Manual
     }
 }
-
 
 // --- Container Styles ---
 

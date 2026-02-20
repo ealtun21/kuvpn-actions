@@ -183,4 +183,3 @@ pub fn wipe_user_data_dir() -> Result<(), Box<dyn Error>> {
 pub fn js_escape(s: &str) -> String {
     s.replace("\\", "\\\\").replace("'", "\\'")
 }
-
