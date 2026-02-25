@@ -295,7 +295,7 @@ pub fn find_askpass() -> Option<PathBuf> {
 /// Determines which escalation tool will be used (for checking if password prompt is needed).
 #[cfg(unix)]
 pub fn resolve_escalation_tool(run_command: &Option<String>) -> Option<String> {
-    let mut default_tools = vec!["doas", "sudo", "pkexec"];
+    let mut default_tools = vec!["sudo", "doas", "pkexec"];
 
     if let Some(custom_command) = run_command {
         if which(custom_command).is_ok() {
@@ -320,7 +320,7 @@ pub fn list_available_escalation_tools() -> Vec<&'static str> {
     let candidates: &[&'static str] = if cfg!(target_os = "macos") {
         &["sudo", "doas"]
     } else {
-        &["pkexec", "sudo", "doas"]
+        &["sudo", "doas", "pkexec"]
     };
     candidates
         .iter()
@@ -418,7 +418,7 @@ pub fn execute_openconnect(
 ) -> anyhow::Result<VpnProcess> {
     #[cfg(unix)]
     {
-        let mut default_tools = vec!["doas", "sudo", "pkexec"];
+        let mut default_tools = vec!["sudo", "doas", "pkexec"];
 
         if let Some(custom_command) = _run_command {
             if which(custom_command).is_ok() {
