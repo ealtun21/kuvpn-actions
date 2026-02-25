@@ -30,6 +30,7 @@ pub struct KuVpnGui {
     pub status: ConnectionStatus,
     pub pending_request: Option<InputRequest>,
     pub current_input: String,
+    pub show_password_held: bool,
     pub mfa_info: Option<String>,
     pub status_message: String,
     pub error_message: Option<String>,
@@ -468,7 +469,12 @@ impl KuVpnGui {
                 if let Some(req) = self.pending_request.take() {
                     let _ = req.response_tx.send(self.current_input.clone());
                     self.current_input = String::new();
+                    self.show_password_held = false;
                 }
+                Task::none()
+            }
+            Message::ShowPasswordHeld(held) => {
+                self.show_password_held = held;
                 Task::none()
             }
             Message::ClearSessionPressed => {
@@ -813,6 +819,7 @@ impl Default for KuVpnGui {
             status: ConnectionStatus::Disconnected,
             pending_request: None,
             current_input: String::new(),
+            show_password_held: false,
             mfa_info: None,
             status_message: "Ready to connect".to_string(),
             error_message: None,
