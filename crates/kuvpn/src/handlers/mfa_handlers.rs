@@ -220,6 +220,86 @@ pub fn handle_authenticator_ngc_push(
     Ok(false)
 }
 
+/// Handles OTP/verification code entry page.
+///
+/// Covers SMS codes, email codes, and TOTP codes from the Authenticator app where the
+/// user must manually type a code rather than approve a push notification.
+/// Detects `input[name="otc"]` which Microsoft uses for all one-time code inputs.
+pub fn handle_otp_entry(
+    tab: &Tab,
+    provider: &dyn CredentialsProvider,
+) -> anyhow::Result<bool> {
+    let is_otp_page = tab
+        .evaluate(
+            r#"(function() {
+    var input = document.querySelector('input[name="otc"]');
+    return !!(input && input.offsetParent !== null);
+})()"#,
+            false,
+        )?
+        .value
+        .unwrap()
+        .as_bool()
+        .unwrap_or(false);
+
+    if is_otp_page {
+        // Build a prompt from the page description so the user knows what kind of code to enter
+        let prompt = tab
+            .evaluate(
+                r#"(function() {
+    var desc = document.getElementById('idDiv_SAOTCC_Description')
+        || document.getElementById('idDiv_SAOTCS_Description');
+    if (desc && desc.innerText.trim().length > 0) return desc.innerText.trim();
+    var title = document.getElementById('idDiv_SAOTCC_Title')
+        || document.getElementById('idDiv_SAOTCS_Title');
+    if (title && title.innerText.trim().length > 0) return title.innerText.trim();
+    return 'Enter verification code';
+})()"#,
+                false,
+            )?
+            .value
+            .and_then(|v| v.as_str().map(|s| format!("{}: ", s)))
+            .unwrap_or_else(|| "Enter verification code: ".to_string());
+
+        log::info!("[*] OTP entry page detected, requesting code from user");
+
+        let code = provider.request_text(&prompt);
+        let code_escaped = crate::utils::js_escape(&code);
+
+        tab.evaluate(
+            &format!(
+                r#"(function() {{
+    var el = document.querySelector('input[name="otc"]');
+    if (el) {{
+        el.focus();
+        el.value = '{code}';
+        el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+        el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+    }}
+}})()"#,
+                code = code_escaped
+            ),
+            false,
+        )?;
+        sleep(Duration::from_millis(250));
+
+        // Try the dedicated OTP submit button first, then fall back to the generic Next button
+        tab.evaluate(
+            r#"(function() {
+    var btn = document.querySelector('#idSubmit_SAOTCC_Continue')
+        || document.querySelector('#idSubmit_SAOTCS_Continue')
+        || document.querySelector('#idSIButton9');
+    if (btn) { btn.focus(); btn.click(); }
+})()"#,
+            false,
+        )?;
+
+        return Ok(true);
+    }
+
+    Ok(false)
+}
+
 /// Handles NGC error and switches to password authentication.
 pub fn handle_ngc_error_use_password(
     tab: &Tab,
