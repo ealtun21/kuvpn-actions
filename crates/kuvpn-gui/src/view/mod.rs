@@ -10,7 +10,7 @@ use crate::types::{
     COLOR_SUCCESS, COLOR_SURFACE, COLOR_TEXT, COLOR_TEXT_DIM, COLOR_WARNING, ICON_SETTINGS_SVG,
     ICON_SHIELD_SVG, ICON_TERMINAL_SVG,
 };
-use iced::widget::{button, column, container, mouse_area, row, stack, svg, text, Space};
+use iced::widget::{button, column, container, mouse_area, row, stack, svg, text, Column, Space};
 use iced::{Alignment, Border, Color, Element, Length, Shadow};
 use kuvpn::ConnectionStatus;
 
@@ -102,76 +102,6 @@ impl KuVpnGui {
     pub fn view(&self, _id: iced::window::Id) -> Element<'_, Message> {
         let use_csd = self.settings.use_client_decorations;
 
-        // Escalation tool warning banner (Unix only — on Windows elevation is built-in)
-        #[cfg(not(windows))]
-        let escalation_warning: Element<'_, Message> = if self.available_escalation_tools.is_empty()
-        {
-            container(
-                row![
-                    svg(svg::Handle::from_memory(crate::types::ICON_INFO_SVG))
-                        .width(14)
-                        .height(14)
-                        .style(|_, _| svg::Style {
-                            color: Some(crate::types::COLOR_WARNING)
-                        }),
-                    text("No privilege tool found! Install sudo, doas, or pkexec to use the VPN.")
-                        .size(12)
-                        .color(crate::types::COLOR_WARNING),
-                ]
-                .spacing(8)
-                .align_y(Alignment::Center),
-            )
-            .width(Length::Fill)
-            .padding(10)
-            .style(|_| container::Style {
-                background: Some(crate::types::COLOR_SURFACE.into()),
-                border: Border {
-                    color: crate::types::COLOR_WARNING,
-                    width: 1.0,
-                    radius: 6.0.into(),
-                },
-                ..Default::default()
-            })
-            .into()
-        } else {
-            container(Space::new().height(0)).into()
-        };
-        #[cfg(windows)]
-        let escalation_warning: Element<'_, Message> = container(Space::new().height(0)).into();
-
-        // OpenConnect warning banner
-        let oc_warning: Element<'_, Message> = if self.oc_test_result == Some(false) {
-            container(
-                row![
-                    svg(svg::Handle::from_memory(crate::types::ICON_INFO_SVG))
-                        .width(14)
-                        .height(14)
-                        .style(|_, _| svg::Style {
-                            color: Some(crate::types::COLOR_WARNING)
-                        }),
-                    text("OpenConnect not found! Please install it or set path in Settings.")
-                        .size(12)
-                        .color(crate::types::COLOR_WARNING),
-                ]
-                .spacing(8)
-                .align_y(Alignment::Center),
-            )
-            .width(Length::Fill)
-            .padding(10)
-            .style(|_| container::Style {
-                background: Some(crate::types::COLOR_SURFACE.into()),
-                border: Border {
-                    color: crate::types::COLOR_WARNING,
-                    width: 1.0,
-                    radius: 6.0.into(),
-                },
-                ..Default::default()
-            })
-            .into()
-        } else {
-            container(Space::new().height(0)).into()
-        };
-
         let tab_bar = self.view_tab_bar();
 
         let tab_content = match self.current_tab {
@@ -180,15 +110,31 @@ impl KuVpnGui {
             Tab::Console => self.view_console_tab(),
         };
 
-        let content = container(
-            column![oc_warning, escalation_warning, tab_bar, tab_content]
-                .spacing(12)
-                .width(Length::Fill),
-        )
-        .padding(16)
-        .width(Length::Fill)
-        .max_width(680.0)
-        .center_x(Length::Fill);
+        // Build the column without placeholder spacers so that when no banners are
+        // visible there is no phantom gap between the title bar and the tab bar.
+        let mut col: Column<'_, Message> = Column::new().spacing(12).width(Length::Fill);
+
+        if self.oc_test_result == Some(false) {
+            col = col.push(self.view_warning_banner(
+                "OpenConnect not found! Please install it or set path in Settings.",
+            ));
+        }
+
+        #[cfg(not(windows))]
+        if self.available_escalation_tools.is_empty() {
+            col = col.push(self.view_warning_banner(
+                "No privilege tool found! Install sudo, doas, or pkexec to use the VPN.",
+            ));
+        }
+
+        col = col.push(tab_bar);
+        col = col.push(tab_content);
+
+        let content = container(col)
+            .padding(16)
+            .width(Length::Fill)
+            .max_width(680.0)
+            .center_x(Length::Fill);
 
         let window_content = if use_csd {
             let title_bar = self.view_title_bar();
@@ -225,6 +171,35 @@ impl KuVpnGui {
         } else {
             main_container.into()
         }
+    }
+
+    /// Renders a compact warning banner with an info icon and a single line of text.
+    fn view_warning_banner<'a>(&self, msg: &'a str) -> Element<'a, Message> {
+        container(
+            row![
+                svg(svg::Handle::from_memory(crate::types::ICON_INFO_SVG))
+                    .width(14)
+                    .height(14)
+                    .style(|_, _| svg::Style {
+                        color: Some(crate::types::COLOR_WARNING)
+                    }),
+                text(msg).size(12).color(crate::types::COLOR_WARNING),
+            ]
+            .spacing(8)
+            .align_y(Alignment::Center),
+        )
+        .width(Length::Fill)
+        .padding(10)
+        .style(|_| container::Style {
+            background: Some(crate::types::COLOR_SURFACE.into()),
+            border: Border {
+                color: crate::types::COLOR_WARNING,
+                width: 1.0,
+                radius: 6.0.into(),
+            },
+            ..Default::default()
+        })
+        .into()
     }
 
     fn view_tab_bar(&self) -> Element<'_, Message> {
