@@ -167,6 +167,14 @@ fn try_handle_page(
         return Ok((true, false));
     }
 
+    // Handle OTP/code entry pages (SMS, email, TOTP from authenticator app).
+    // Must run before detect_generic_error, as the code-entry page contains instructional
+    // text in aria-live regions that would otherwise trigger a false-positive error.
+    if !handled.contains("otp_entry") && handle_otp_entry(tab, provider)? {
+        handled.insert("otp_entry");
+        return Ok((true, false));
+    }
+
     // Generic fallback detection for unexpected errors or page states
     // This catches scenarios we haven't explicitly coded for
     if !handled.contains("generic_error") {
