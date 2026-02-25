@@ -68,7 +68,7 @@ Press **Ctrl+C** to disconnect.
 | `--no-auto-login` | | `false` | Disable automation — poll for DSID in a visible browser you control |
 | `--get-dsid` | `-g` | `false` | Print the DSID cookie and exit without starting OpenConnect |
 | `--clean` | `-c` | `false` | Delete saved session data and exit |
-| `--run-command` | `-r` | *(auto-detected)* | Override the privilege escalation tool (`sudo`, `doas`, `pkexec`, or a custom script) |
+| `--run-command` | `-r` | *(auto-detected)* | Override the privilege escalation tool (`sudo`, `pkexec`, or a custom script) |
 | `--openconnect-path` | | `openconnect` | Path or command name for the OpenConnect binary |
 | `--interface-name` | | `kuvpn0` | Name for the TUN interface created by OpenConnect |
 
