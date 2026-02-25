@@ -26,7 +26,7 @@ impl Default for GuiSettings {
             url: "https://vpn.ku.edu.tr".to_string(),
             domain: "vpn.ku.edu.tr".to_string(),
             email: String::new(),
-            escalation_tool: "pkexec".to_string(),
+            escalation_tool: "sudo".to_string(),
             log_level_val: 3.0, // Default: Info level
             openconnect_path: "openconnect".to_string(),
             login_mode_val: 0.0,
