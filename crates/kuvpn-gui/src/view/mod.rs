@@ -123,7 +123,7 @@ impl KuVpnGui {
         #[cfg(not(windows))]
         if self.available_escalation_tools.is_empty() {
             col = col.push(self.view_warning_banner(
-                "No privilege tool found! Install sudo, doas, or pkexec to use the VPN.",
+                "No privilege tool found! Install sudo or pkexec to use the VPN.",
             ));
         }
 

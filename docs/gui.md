@@ -83,7 +83,7 @@ Before connecting, go to **Settings** and verify:
 - **OpenConnect path** — the app auto-detects it on startup and shows a green checkmark if found. If it is red, install OpenConnect or enter the full path manually.
 - **Email** — entering your university email allows the auto-login to skip the email field.
 - **Login mode** — see [Login Modes](#login-modes) below.
-- **Escalation tool** (Linux/macOS) — the tool used to run OpenConnect as root (`pkexec`, `sudo`, or `doas`). The app picks one automatically but you can override it.
+- **Escalation tool** (Linux/macOS) — the tool used to run OpenConnect as root (`sudo` or `pkexec`). The app picks one automatically but you can override it.
 
 ---
 
@@ -149,7 +149,7 @@ KUVPN sends OS notifications for:
 | Email | Pre-fill your university email for faster auto-login |
 | Login mode | Full Auto / Visual Auto / Manual (slider) |
 | OpenConnect path | Path to the `openconnect` binary. Leave blank to auto-detect. |
-| Escalation tool | `pkexec`, `sudo`, or `doas` (Linux/macOS only) |
+| Escalation tool | `sudo` or `pkexec` (Linux/macOS only) |
 | Log level | Controls how much is shown in the Console tab |
 | Close to tray | Minimise to tray instead of quitting when the window is closed |
 | Client-side decorations | Use custom window chrome instead of the OS title bar |
