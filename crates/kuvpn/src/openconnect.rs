@@ -32,31 +32,25 @@ impl VpnProcess {
 
                     let pid = Pid::from_raw(_child.id() as i32);
 
-                    // Step 1: Send SIGTERM to the escalation process (sudo/doas/pkexec).
-                    // sudo and doas forward this to openconnect; pkexec does NOT.
+                    // Step 1: Send SIGTERM to the escalation process (sudo/pkexec).
+                    // sudo forwards this to openconnect; pkexec does NOT.
                     let _ = signal::kill(pid, Signal::SIGTERM);
 
                     // Step 2: Kill openconnect directly using the available privilege tools.
-                    // Since we just ran `sudo/doas openconnect`, credentials are cached so
-                    // `sudo -n` / `doas -n` work without another password prompt. For pkexec
-                    // users (pkexec doesn't forward signals), this is the only reliable path.
+                    // Since we just ran `sudo openconnect`, credentials are cached so
+                    // `sudo -n` works without another password prompt. For pkexec users
+                    // (pkexec doesn't forward signals), this is the only reliable path.
                     if let Some(oc_pid) = get_openconnect_pid() {
                         let oc_pid_str = oc_pid.to_string();
-                        // sudo -n: cached credentials, no dialog
-                        if let Ok(sudo_path) = which("sudo") {
-                            let _ = Command::new(sudo_path)
-                                .args(["-n", "kill", "-15", &oc_pid_str])
-                                .stdout(Stdio::null())
-                                .stderr(Stdio::null())
-                                .status();
-                        }
-                        // doas -n: cached credentials, no dialog
-                        if let Ok(doas_path) = which("doas") {
-                            let _ = Command::new(doas_path)
-                                .args(["-n", "kill", &oc_pid_str])
-                                .stdout(Stdio::null())
-                                .stderr(Stdio::null())
-                                .status();
+                        // sudo / sudo-rs -n: cached credentials, no dialog
+                        for tool in &["sudo", "sudo-rs"] {
+                            if let Ok(tool_path) = which(tool) {
+                                let _ = Command::new(tool_path)
+                                    .args(["-n", "kill", "-15", &oc_pid_str])
+                                    .stdout(Stdio::null())
+                                    .stderr(Stdio::null())
+                                    .status();
+                            }
                         }
                         // pkexec: last resort for pure-pkexec systems (may show auth dialog)
                         if let Ok(pkexec_path) = which("pkexec") {
@@ -149,7 +143,7 @@ impl VpnProcess {
         }
     }
 
-    /// Checks if the spawned process (sudo/doas/pkexec) is still alive.
+    /// Checks if the spawned process (sudo/pkexec) is still alive.
     /// This is different from is_openconnect_running() - it checks the actual
     /// child process we spawned, not searching by process name.
     pub fn is_process_alive(&mut self) -> bool {
@@ -295,7 +289,7 @@ pub fn find_askpass() -> Option<PathBuf> {
 /// Determines which escalation tool will be used (for checking if password prompt is needed).
 #[cfg(unix)]
 pub fn resolve_escalation_tool(run_command: &Option<String>) -> Option<String> {
-    let mut default_tools = vec!["doas", "sudo", "pkexec"];
+    let mut default_tools = vec!["sudo", "sudo-rs", "pkexec"];
 
     if let Some(custom_command) = run_command {
         if which(custom_command).is_ok() {
@@ -311,16 +305,16 @@ pub fn resolve_escalation_tool(run_command: &Option<String>) -> Option<String> {
 /// Returns the ordered list of escalation tools that are actually installed on this system.
 ///
 /// - On macOS: pkexec is never included (it is not available on macOS).
-/// - On other Unix: pkexec, sudo, doas are checked in preference order.
+/// - On other Unix: sudo, sudo-rs, and pkexec are checked in preference order.
 ///
 /// Only tools found via `which` are returned, so callers can use this list to populate
 /// a UI selector showing only the options the user can actually use.
 #[cfg(unix)]
 pub fn list_available_escalation_tools() -> Vec<&'static str> {
     let candidates: &[&'static str] = if cfg!(target_os = "macos") {
-        &["sudo", "doas"]
+        &["sudo", "sudo-rs"]
     } else {
-        &["pkexec", "sudo", "doas"]
+        &["sudo", "sudo-rs", "pkexec"]
     };
     candidates
         .iter()
@@ -330,25 +324,26 @@ pub fn list_available_escalation_tools() -> Vec<&'static str> {
 }
 
 /// Returns true if the given escalation tool needs a password piped via stdin
-/// (i.e., it's sudo or doas, not pkexec which has its own GUI prompt).
+/// (i.e., it's sudo or sudo-rs, not pkexec which has its own GUI prompt).
 #[cfg(unix)]
 pub fn needs_password_prompt(tool: &str) -> bool {
     let base = Path::new(tool)
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or(tool);
-    matches!(base, "sudo" | "doas")
+    matches!(base, "sudo" | "sudo-rs")
 }
 
 /// Checks whether the tool actually requires a password right now by doing a
-/// non-interactive dry-run (`sudo -n true` / `doas -n true`).
+/// non-interactive dry-run (`sudo -n true` / `sudo-rs -n true`).
 ///
 /// Returns `false` (no prompt needed) when:
-/// - The user has NOPASSWD configured in sudoers/doas.conf
+/// - The user has NOPASSWD configured in sudoers
 /// - Credentials are already cached from a recent successful run
 ///
 /// Returns `true` (prompt needed) when the tool exits non-zero, indicating it
 /// would block waiting for a password if run interactively.
+/// pkexec always returns `false` — it uses its own GUI prompt.
 #[cfg(unix)]
 pub fn tool_requires_password(tool: &str) -> bool {
     let base = Path::new(tool)
@@ -357,7 +352,7 @@ pub fn tool_requires_password(tool: &str) -> bool {
         .unwrap_or(tool);
 
     match base {
-        "sudo" => which("sudo")
+        "sudo" | "sudo-rs" => which(base)
             .ok()
             .map(|p| {
                 Command::new(p)
@@ -369,20 +364,51 @@ pub fn tool_requires_password(tool: &str) -> bool {
                     .unwrap_or(true)
             })
             .unwrap_or(false),
-        "doas" => which("doas")
-            .ok()
-            .map(|p| {
-                Command::new(p)
-                    .args(["-n", "true"])
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .status()
-                    .map(|s| !s.success())
-                    .unwrap_or(true)
-            })
-            .unwrap_or(false),
         _ => false, // pkexec uses its own GUI prompt, never needs stdin
     }
+}
+
+/// Verifies a sudo/sudo-rs password with a quick non-interactive test (`sudo -S true`).
+///
+/// Both sudo and sudo-rs support `-S` (read password from stdin once, then exit).
+/// Even when PAM enforces a failure delay (typically 2-5 s) the process will always
+/// exit, so a plain blocking wait is safe and avoids falsely treating a slow
+/// rejection as "unverifiable".
+///
+/// Returns:
+/// - `Some(true)`  — password accepted
+/// - `Some(false)` — password rejected
+/// - `None`        — tool not found, not applicable (pkexec), or could not be spawned
+#[cfg(unix)]
+pub fn verify_escalation_password(tool: &str, password: &str) -> Option<bool> {
+    use std::io::Write;
+
+    let base = Path::new(tool)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(tool);
+
+    if !matches!(base, "sudo" | "sudo-rs") {
+        return None; // pkexec / unknown — not verifiable via stdin
+    }
+
+    let tool_path = which(base).ok()?;
+
+    let mut child = Command::new(&tool_path)
+        .args(["-S", "true"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+
+    // Write the password and close stdin so the tool sees EOF immediately.
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = writeln!(stdin, "{}", password);
+    }
+
+    // Blocking wait — sudo/sudo-rs -S always exits once it has read from stdin.
+    Some(child.wait().map(|s| s.success()).unwrap_or(false))
 }
 
 /// Detects an active VPN utun interface on macOS by parsing `ifconfig` output.
@@ -463,7 +489,7 @@ pub fn execute_openconnect(
 ) -> anyhow::Result<VpnProcess> {
     #[cfg(unix)]
     {
-        let mut default_tools = vec!["doas", "sudo", "pkexec"];
+        let mut default_tools = vec!["sudo", "sudo-rs", "pkexec"];
 
         if let Some(custom_command) = _run_command {
             if which(custom_command).is_ok() {
@@ -475,7 +501,7 @@ pub fn execute_openconnect(
             .iter()
             .find_map(|&tool| which(tool).ok().map(|_| tool))
             .ok_or(anyhow::anyhow!(
-                "No available tool for running openconnect (sudo/doas/pkexec not found)"
+                "No available tool for running openconnect (sudo, sudo-rs, or pkexec not found)"
             ))?;
 
         let tool_base = Path::new(command_to_run)
@@ -495,12 +521,12 @@ pub fn execute_openconnect(
             let askpass_path = askpass.unwrap();
             log::info!("Using askpass program: {:?}", askpass_path);
             cmd.env("SUDO_ASKPASS", &askpass_path);
-            if tool_base == "sudo" {
+            if matches!(tool_base, "sudo" | "sudo-rs") {
                 cmd.arg("-A");
             }
         } else if use_stdin_password {
             log::info!("Piping password via stdin to {}", tool_base);
-            if tool_base == "sudo" {
+            if matches!(tool_base, "sudo" | "sudo-rs") {
                 cmd.arg("-S");
             }
             cmd.stdin(Stdio::piped());
@@ -706,26 +732,18 @@ pub fn kill_process(pid: u32) -> anyhow::Result<()> {
         // openconnect runs as root, so direct signals from a non-root process fail with EPERM.
         // Try each tool in order; stop as soon as one succeeds.
         let elevated_ok =
-            // sudo -n: uses cached credentials, never prompts
-            if let Ok(sudo_path) = which("sudo") {
-                Command::new(sudo_path)
-                    .args(["-n", "kill", "-15", &pid_str])
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .status()
-                    .map(|s| s.success())
-                    .unwrap_or(false)
-            } else { false }
-            // doas -n: uses cached credentials, never prompts
-            || if let Ok(doas_path) = which("doas") {
-                Command::new(doas_path)
-                    .args(["-n", "kill", &pid_str])
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .status()
-                    .map(|s| s.success())
-                    .unwrap_or(false)
-            } else { false }
+            // sudo / sudo-rs -n: uses cached credentials, never prompts
+            ["sudo", "sudo-rs"].iter().any(|&tool| {
+                which(tool).ok().map(|p| {
+                    Command::new(p)
+                        .args(["-n", "kill", "-15", &pid_str])
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
+                        .status()
+                        .map(|s| s.success())
+                        .unwrap_or(false)
+                }).unwrap_or(false)
+            })
             // pkexec: last resort for pure-pkexec systems; may show a brief auth dialog
             || if let Ok(pkexec_path) = which("pkexec") {
                 Command::new(pkexec_path)
