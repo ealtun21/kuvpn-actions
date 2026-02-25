@@ -8,7 +8,6 @@ use tray_icon::{
 };
 
 use crate::config::GuiSettings;
-use crate::platform;
 use crate::provider::{GuiInteraction, GuiProvider};
 use crate::types::{
     log_level_from_slider, login_mode_flags, ConnectionStatus, InputRequest, InputRequestWrapper,
@@ -80,10 +79,6 @@ impl KuVpnGui {
     /// Shows the window if hidden, or brings it to the foreground if already visible.
     /// Call this whenever the app needs the user's attention (MFA prompt, input request, etc.)
     fn show_or_focus_window(&mut self) -> Task<Message> {
-        // Platform-specific activation (osascript on macOS) runs regardless of window state
-        // so the app is in front by the time the window appears or is focused.
-        platform::activate_app();
-
         if !self.is_visible && !self.window_close_pending && !self.window_open_pending {
             self.update(Message::ToggleVisibility {
                 from_close_request: false,
