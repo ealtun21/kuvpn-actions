@@ -57,7 +57,7 @@ pub struct Args {
     #[arg(short, long, default_value_t = false)]
     pub clean: bool,
 
-    /// Command to run openconnect with (e.g., doas, sudo, pkexec, or a custom script)
+    /// Command to run openconnect with (e.g., sudo, pkexec, or a custom script)
     #[arg(short, long)]
     pub run_command: Option<String>,
 

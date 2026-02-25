@@ -261,7 +261,7 @@ impl VpnSession {
                     }
                 };
 
-                // 2.5. Check if we need to prompt for sudo/doas password.
+                // 2.5. Check if we need to prompt for sudo password.
                 // Uses the CredentialsProvider so both CLI (dialoguer) and GUI (modal)
                 // get a proper prompt instead of relying on sudo's native terminal prompt
                 // (which breaks when stdout/stderr are piped).
@@ -269,24 +269,49 @@ impl VpnSession {
                     #[cfg(unix)]
                     {
                         use crate::openconnect::{
-                            find_askpass, needs_password_prompt, resolve_escalation_tool,
+                            find_askpass, resolve_escalation_tool, tool_requires_password,
+                            verify_escalation_password,
                         };
 
                         let tool = resolve_escalation_tool(&config.escalation_tool);
                         if let Some(ref tool_name) = tool {
-                            if needs_password_prompt(tool_name) && find_askpass().is_none() {
-                                log(format!(
-                                    "Info|{} requires a password. Prompting...",
-                                    tool_name
-                                ));
-                                let pw = provider.request_password(&format!(
-                                    "Enter your {} password to start the VPN tunnel",
-                                    tool_name
-                                ));
-                                if pw.is_empty() && cancel_token.is_cancelled() {
-                                    *status.lock().unwrap() = ConnectionStatus::Disconnected;
-                                    return;
-                                }
+                            if tool_requires_password(tool_name) && find_askpass().is_none() {
+                                // Prompt and verify the password directly against the tool.
+                                // Re-prompt as many times as needed — no hardcoded limit.
+                                // The loop exits when:
+                                //   - verification succeeds (Some(true))
+                                //   - verification is indeterminate/timeout (None) — proceed
+                                //     and let the actual sudo/openconnect invocation decide
+                                //   - the user cancels (empty input + cancel token)
+                                let mut wrong_password = false;
+                                let pw = loop {
+                                    let prompt = if wrong_password {
+                                        format!(
+                                            "Wrong password — please try again. \
+                                             Enter your {} password to start the VPN tunnel",
+                                            tool_name
+                                        )
+                                    } else {
+                                        format!(
+                                            "Enter your {} password to start the VPN tunnel",
+                                            tool_name
+                                        )
+                                    };
+                                    log(format!(
+                                        "Info|{} requires a password. Prompting...",
+                                        tool_name
+                                    ));
+                                    let entered = provider.request_password(&prompt);
+                                    if entered.is_empty() && cancel_token.is_cancelled() {
+                                        *status.lock().unwrap() = ConnectionStatus::Disconnected;
+                                        return;
+                                    }
+                                    match verify_escalation_password(tool_name, &entered) {
+                                        Some(true) => break entered,  // verified correct
+                                        Some(false) => wrong_password = true, // re-prompt
+                                        None => break entered, // unverifiable — let sudo decide
+                                    }
+                                };
                                 Some(pw)
                             } else {
                                 None
@@ -385,7 +410,7 @@ impl VpnSession {
                     }
                     return;
                 } else if let Some(ref mut p) = process {
-                    // Check if our spawned process (sudo/doas/pkexec) is still alive.
+                    // Check if our spawned process (sudo/pkexec) is still alive.
                     // This is the key check: if sudo is waiting for a password, the process
                     // is still alive and we should keep waiting. Only fail if the process
                     // has actually exited (e.g. wrong password, permission denied).
