@@ -243,7 +243,7 @@ impl KuVpnGui {
                                             .style(|_, _| svg::Style {
                                                 color: Some(COLOR_WARNING)
                                             }),
-                                        text("No privilege tool found! Install sudo, doas, or pkexec.")
+                                        text("No privilege tool found! Install sudo or pkexec.")
                                             .size(11)
                                             .color(COLOR_WARNING),
                                     ]
@@ -251,7 +251,7 @@ impl KuVpnGui {
                                     .align_y(Alignment::Center),
                                 )
                                 .into(),
-                                "Install sudo, doas, or pkexec so OpenConnect can create the VPN tunnel as root",
+                                "Install sudo or pkexec so OpenConnect can create the VPN tunnel as root",
                             )
                         } else {
                             self.view_unified_control(

@@ -37,7 +37,26 @@ pub fn detect_generic_error(tab: &Tab) -> anyhow::Result<Option<String>> {
                             const text = el.innerText.trim();
                             // Filter out common false positives
                             if (text.length > 5 && text.length < 500) {
-                                return text;
+                                // Skip instructional MFA text — these are prompts, not errors.
+                                // They appear in aria-live regions on code-entry and push pages
+                                // and would otherwise produce false-positive error reports.
+                                const lower = text.toLowerCase();
+                                const isMfaInstruction = (
+                                    lower.includes('enter the code') ||
+                                    lower.includes('enter code') ||
+                                    lower.includes('verification code') ||
+                                    lower.includes('we sent') ||
+                                    lower.includes('we texted') ||
+                                    lower.includes('we emailed') ||
+                                    lower.includes('approve sign') ||
+                                    lower.includes('approve the sign') ||
+                                    lower.includes('open your authenticator') ||
+                                    lower.includes('check your authenticator') ||
+                                    lower.includes('notification was sent')
+                                );
+                                if (!isMfaInstruction) {
+                                    return text;
+                                }
                             }
                         }
                     }
