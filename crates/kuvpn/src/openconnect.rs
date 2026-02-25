@@ -340,6 +340,51 @@ pub fn needs_password_prompt(tool: &str) -> bool {
     matches!(base, "sudo" | "doas")
 }
 
+/// Checks whether the tool actually requires a password right now by doing a
+/// non-interactive dry-run (`sudo -n true` / `doas -n true`).
+///
+/// Returns `false` (no prompt needed) when:
+/// - The user has NOPASSWD configured in sudoers/doas.conf
+/// - Credentials are already cached from a recent successful run
+///
+/// Returns `true` (prompt needed) when the tool exits non-zero, indicating it
+/// would block waiting for a password if run interactively.
+#[cfg(unix)]
+pub fn tool_requires_password(tool: &str) -> bool {
+    let base = Path::new(tool)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(tool);
+
+    match base {
+        "sudo" => which("sudo")
+            .ok()
+            .map(|p| {
+                Command::new(p)
+                    .args(["-n", "true"])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                    .map(|s| !s.success()) // non-zero → password required
+                    .unwrap_or(true)
+            })
+            .unwrap_or(false),
+        "doas" => which("doas")
+            .ok()
+            .map(|p| {
+                Command::new(p)
+                    .args(["-n", "true"])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                    .map(|s| !s.success())
+                    .unwrap_or(true)
+            })
+            .unwrap_or(false),
+        _ => false, // pkexec uses its own GUI prompt, never needs stdin
+    }
+}
+
 /// Detects an active VPN utun interface on macOS by parsing `ifconfig` output.
 /// Returns the name of a utun interface that has an IPv4 `inet` address, which indicates
 /// an active point-to-point VPN tunnel (as opposed to system-managed utun interfaces that

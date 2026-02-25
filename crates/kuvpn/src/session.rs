@@ -269,12 +269,12 @@ impl VpnSession {
                     #[cfg(unix)]
                     {
                         use crate::openconnect::{
-                            find_askpass, needs_password_prompt, resolve_escalation_tool,
+                            find_askpass, tool_requires_password, resolve_escalation_tool,
                         };
 
                         let tool = resolve_escalation_tool(&config.escalation_tool);
                         if let Some(ref tool_name) = tool {
-                            if needs_password_prompt(tool_name) && find_askpass().is_none() {
+                            if tool_requires_password(tool_name) && find_askpass().is_none() {
                                 log(format!(
                                     "Info|{} requires a password. Prompting...",
                                     tool_name
