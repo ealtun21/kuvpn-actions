@@ -1,10 +1,10 @@
 use crate::app::KuVpnGui;
 use crate::types::{
     btn_primary, InputRequest, Message, COLOR_ACCENT, COLOR_SURFACE, COLOR_TEXT, COLOR_TEXT_DIM,
-    ICON_EYE_SVG, ICON_LOCK_SVG,
+    ICON_EYE_OFF_SVG, ICON_EYE_SVG, ICON_LOCK_SVG,
 };
-use iced::widget::{button, column, container, mouse_area, row, svg, text, text_input};
-use iced::{Alignment, Border, Color, Element, Length};
+use iced::widget::{button, column, container, stack, svg, text, text_input};
+use iced::{Alignment, Border, Color, Element, Length, Padding, Shadow};
 
 impl KuVpnGui {
     pub fn view_modal<'a>(&self, req: &'a InputRequest) -> Element<'a, Message> {
@@ -19,47 +19,47 @@ impl KuVpnGui {
             "KU Authentication"
         };
 
-        let show_held = self.show_password_held;
+        let show = self.show_password_held;
 
         let input_field: Element<'_, Message> = if req.is_password {
-            row![
+            let icon_bytes = if show { ICON_EYE_SVG } else { ICON_EYE_OFF_SVG };
+
+            let eye_btn = button(
+                svg(svg::Handle::from_memory(icon_bytes))
+                    .width(18)
+                    .height(18)
+                    .style(move |_, _| svg::Style {
+                        color: Some(if show { COLOR_TEXT } else { COLOR_TEXT_DIM }),
+                    }),
+            )
+            .padding(Padding { top: 0.0, right: 12.0, bottom: 0.0, left: 0.0 })
+            .on_press(Message::ShowPasswordHeld(!show))
+            .style(|_, _| button::Style {
+                background: Some(Color::TRANSPARENT.into()),
+                border: Border::default(),
+                shadow: Shadow::default(),
+                ..Default::default()
+            });
+
+            stack![
                 text_input("Password", &self.current_input)
                     .on_input(Message::InputChanged)
-                    .secure(!show_held)
+                    .secure(!show)
                     .on_submit(Message::SubmitInput)
-                    .padding(12)
+                    .padding(Padding {
+                        top: 12.0,
+                        right: 44.0,
+                        bottom: 12.0,
+                        left: 12.0,
+                    })
                     .width(Length::Fill),
-                mouse_area(
-                    container(
-                        svg(svg::Handle::from_memory(ICON_EYE_SVG))
-                            .width(18)
-                            .height(18)
-                            .style(move |_, _| svg::Style {
-                                color: Some(if show_held { COLOR_TEXT } else { COLOR_TEXT_DIM }),
-                            }),
-                    )
-                    .padding([12, 12])
-                    .style(move |_| container::Style {
-                        background: Some(
-                            if show_held {
-                                Color::from_rgba(1.0, 1.0, 1.0, 0.08)
-                            } else {
-                                Color::TRANSPARENT
-                            }
-                            .into(),
-                        ),
-                        border: Border {
-                            radius: 6.0.into(),
-                            ..Default::default()
-                        },
-                        ..Default::default()
-                    }),
-                )
-                .on_press(Message::ShowPasswordHeld(true))
-                .on_release(Message::ShowPasswordHeld(false)),
+                container(eye_btn)
+                    .align_x(Alignment::End)
+                    .align_y(Alignment::Center)
+                    .width(Length::Fill)
+                    .height(Length::Fill),
             ]
-            .spacing(8)
-            .align_y(Alignment::Center)
+            .width(Length::Fill)
             .into()
         } else {
             text_input("Response Required", &self.current_input)
@@ -71,7 +71,7 @@ impl KuVpnGui {
 
         let modal_content = container(
             column![
-                row![
+                iced::widget::row![
                     svg(svg::Handle::from_memory(ICON_LOCK_SVG))
                         .width(26)
                         .height(26)
