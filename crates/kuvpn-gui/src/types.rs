@@ -97,6 +97,8 @@ pub enum Message {
     MinimizeWindow,
     QuitRequested,
     QuitAfterCleanup,
+    AutoHideAfterPromptToggled(bool),
+    AutoHideWindow,
     ShowPasswordHeld(bool),
 }
 

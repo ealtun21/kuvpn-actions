@@ -12,6 +12,12 @@ pub struct GuiSettings {
     pub login_mode_val: f32,
     pub close_to_tray: bool,
     pub use_client_decorations: bool,
+    #[serde(default = "default_auto_hide")]
+    pub auto_hide_after_prompt: bool,
+}
+
+fn default_auto_hide() -> bool {
+    true
 }
 
 impl Default for GuiSettings {
@@ -26,6 +32,7 @@ impl Default for GuiSettings {
             login_mode_val: 0.0,
             close_to_tray: true,
             use_client_decorations: true,
+            auto_hide_after_prompt: true,
         }
     }
 }
