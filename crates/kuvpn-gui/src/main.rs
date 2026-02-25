@@ -3,7 +3,7 @@
 mod app;
 mod config;
 mod logger;
-mod notifications;
+mod platform;
 mod provider;
 mod tray;
 mod types;
