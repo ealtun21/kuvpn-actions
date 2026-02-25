@@ -289,6 +289,21 @@ impl KuVpnGui {
                     "Yes: window X button minimizes to tray | No: X button quits app (disconnects VPN)"
                 ),
                 self.view_unified_control(
+                    "Auto-hide:",
+                    self.view_segmented_control(
+                        &["Yes", "No"],
+                        &[1.0, 0.0],
+                        if self.settings.auto_hide_after_prompt {
+                            1.0
+                        } else {
+                            0.0
+                        },
+                        false,
+                        |val| Message::AutoHideAfterPromptToggled(val > 0.5)
+                    ),
+                    "Yes: window hides again after a prompt resolves when it was auto-shown from tray"
+                ),
+                self.view_unified_control(
                     "Window Style:",
                     self.view_segmented_control(
                         &["System", "Custom"],

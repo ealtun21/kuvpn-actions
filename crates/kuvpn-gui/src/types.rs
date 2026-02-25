@@ -95,6 +95,8 @@ pub enum Message {
     MinimizeWindow,
     QuitRequested,
     QuitAfterCleanup,
+    AutoHideAfterPromptToggled(bool),
+    AutoHideWindow,
 }
 
 #[derive(Debug)]

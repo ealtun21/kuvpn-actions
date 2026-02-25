@@ -64,6 +64,9 @@ pub struct KuVpnGui {
     /// Privilege escalation tools found on this system (e.g. ["pkexec", "sudo"]).
     /// Empty on Windows. Empty on Unix means no tool is installed — VPN cannot start.
     pub available_escalation_tools: Vec<&'static str>,
+    /// True when the window was auto-shown from a hidden state for a prompt.
+    /// Used to auto-hide the window again after the prompt resolves.
+    pub was_shown_for_prompt: bool,
 }
 
 impl KuVpnGui {
@@ -136,6 +139,19 @@ impl KuVpnGui {
             Message::CloseToTrayToggled(v) => {
                 self.settings.close_to_tray = v;
                 self.save_settings();
+                Task::none()
+            }
+            Message::AutoHideAfterPromptToggled(v) => {
+                self.settings.auto_hide_after_prompt = v;
+                self.save_settings();
+                Task::none()
+            }
+            Message::AutoHideWindow => {
+                if self.is_visible {
+                    return self.update(Message::ToggleVisibility {
+                        from_close_request: false,
+                    });
+                }
                 Task::none()
             }
             Message::ClientDecorationsToggled(v) => {
@@ -428,6 +444,7 @@ impl KuVpnGui {
                 );
                 if !self.is_visible && !self.window_close_pending && !self.window_open_pending {
                     log::info!("MFA received - showing window");
+                    self.was_shown_for_prompt = true;
                     return self.update(Message::ToggleVisibility {
                         from_close_request: false,
                     });
@@ -440,6 +457,15 @@ impl KuVpnGui {
             }
             Message::MfaCompleteReceived => {
                 self.mfa_info = None;
+                if self.was_shown_for_prompt && self.settings.auto_hide_after_prompt {
+                    self.was_shown_for_prompt = false;
+                    return Task::perform(
+                        async {
+                            tokio::time::sleep(std::time::Duration::from_millis(400)).await
+                        },
+                        |_| Message::AutoHideWindow,
+                    );
+                }
                 Task::none()
             }
             Message::RequestInput(wrapper) => {
@@ -456,6 +482,7 @@ impl KuVpnGui {
                             && !self.window_open_pending
                         {
                             log::info!("Input requested - showing window");
+                            self.was_shown_for_prompt = true;
                             return self.update(Message::ToggleVisibility {
                                 from_close_request: false,
                             });
@@ -476,6 +503,15 @@ impl KuVpnGui {
                 if let Some(req) = self.pending_request.take() {
                     let _ = req.response_tx.send(self.current_input.clone());
                     self.current_input = String::new();
+                }
+                if self.was_shown_for_prompt && self.settings.auto_hide_after_prompt {
+                    self.was_shown_for_prompt = false;
+                    return Task::perform(
+                        async {
+                            tokio::time::sleep(std::time::Duration::from_millis(300)).await
+                        },
+                        |_| Message::AutoHideWindow,
+                    );
                 }
                 Task::none()
             }
@@ -845,6 +881,7 @@ impl Default for KuVpnGui {
             connection_start: None,
             active_interface: None,
             available_escalation_tools,
+            was_shown_for_prompt: false,
         }
     }
 }
