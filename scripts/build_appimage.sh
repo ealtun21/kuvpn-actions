@@ -77,21 +77,8 @@ Comment=Connect to Koç University Network
 Terminal=false
 EOF
 
-# Create icon from SVG if possible, else placeholder
-if [ -f "crates/kuvpn-gui/assets/ku.svg" ] && command -v rsvg-convert >/dev/null 2>&1; then
-    rsvg-convert -w 256 -h 256 "crates/kuvpn-gui/assets/ku.svg" -o packaging/appimage/kuvpn.png
-elif [ ! -f "packaging/appimage/kuvpn.png" ] || [ ! -s "packaging/appimage/kuvpn.png" ]; then
-    if command -v convert >/dev/null 2>&1; then
-        # Create a burgundy placeholder
-        convert -size 256x256 xc:"#800020" packaging/appimage/kuvpn.png
-    else
-        # Last resort: if we are in the container, we might have librsvg2-dev but maybe not rsvg-convert binary?
-        # Actually ubuntu focal has rsvg-convert in librsvg2-bin
-        # Let's just touch it if all else fails, but linuxdeploy needs a real PNG.
-        # We'll use a small base64 encoded 1x1 red dot png as absolute fallback
-        echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==" | base64 -d > packaging/appimage/kuvpn.png
-    fi
-fi
+# Use the pre-rendered icon from the GUI assets
+cp "crates/kuvpn-gui/assets/icon-256.png" packaging/appimage/kuvpn.png
 
 # Download linuxdeploy if needed
 if [ ! -f "packaging/appimage/linuxdeploy" ]; then

@@ -339,6 +339,18 @@ install_gui_binary() {
         chmod +x "$dest"
         log_success "GUI installed at $dest"
 
+        # Install icon to XDG icon directory
+        local icon_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
+        local icon_file="$icon_dir/kuvpn.png"
+        mkdir -p "$icon_dir"
+        if curl --proto '=https' --tlsv1.2 -sSfL \
+            "https://raw.githubusercontent.com/$REPO/main/crates/kuvpn-gui/assets/icon-256.png" \
+            -o "$icon_file"; then
+            log_success "Installed icon at $icon_file"
+        else
+            log_warn "Could not download KUVPN icon; desktop entry will use a fallback icon."
+        fi
+
         # Create desktop entry
         local desktop_file="$HOME/.local/share/applications/kuvpn.desktop"
         mkdir -p "$(dirname "$desktop_file")"
@@ -346,7 +358,7 @@ install_gui_binary() {
 [Desktop Entry]
 Name=KUVPN
 Exec=$dest
-Icon=network-vpn
+Icon=kuvpn
 Type=Application
 Categories=Network;
 Comment=Connect to Koç University VPN
