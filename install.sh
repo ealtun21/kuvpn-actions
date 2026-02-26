@@ -45,7 +45,7 @@ prompt_yn() {
     fi
     while true; do
         printf "${COLOR_PRIMARY}?${COLOR_RESET} %s %s: " "$question" "$prompt_str"
-        read -r answer
+        read -r answer </dev/tty
         answer="${answer:-$default}"
         case "$answer" in
             [Yy]*) return 0 ;;
@@ -406,7 +406,7 @@ interactive_select() {
     echo ""
     while true; do
         printf "${COLOR_PRIMARY}?${COLOR_RESET} Enter choice [1/2/3]: "
-        read -r choice
+        read -r choice </dev/tty
         case "$choice" in
             1) INSTALL_CLI=1; INSTALL_GUI=0; break ;;
             2) INSTALL_CLI=0; INSTALL_GUI=1; break ;;
