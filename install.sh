@@ -370,16 +370,43 @@ update_shell_config() {
     local marker="# Added by kuvpn installer"
     local updated=0
 
-    local files=("$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.zshrc" "$HOME/.profile")
-    for config_file in "${files[@]}"; do
-        if [ -f "$config_file" ]; then
-            if ! grep -qF "$marker" "$config_file" && ! grep -qF 'export PATH="$HOME/.local/bin:$PATH"' "$config_file"; then
-                { echo ""; echo "$marker"; echo "$sh_cmd"; } >> "$config_file"
-                log_success "Added to PATH in $config_file"
-                updated=1
+    if [ "$OS" = "Darwin" ]; then
+        # macOS Terminal.app opens login shells, so ~/.zprofile is the right target.
+        # We update any existing config files and always ensure ~/.zprofile is written
+        # (creating it if needed) so the PATH is set on a fresh install with no prior configs.
+        local wrote_to_any=0
+        local macos_files=("$HOME/.zprofile" "$HOME/.zshrc" "$HOME/.bash_profile" "$HOME/.bashrc" "$HOME/.profile")
+        for config_file in "${macos_files[@]}"; do
+            if [ -f "$config_file" ]; then
+                if ! grep -qF "$marker" "$config_file" && ! grep -qF ".local/bin" "$config_file"; then
+                    { echo ""; echo "$marker"; echo "$sh_cmd"; } >> "$config_file"
+                    log_success "Added to PATH in $config_file"
+                    updated=1
+                    wrote_to_any=1
+                elif grep -qF ".local/bin" "$config_file"; then
+                    wrote_to_any=1
+                fi
             fi
+        done
+        # If no existing config had .local/bin and ~/.zprofile wasn't already processed,
+        # create ~/.zprofile — this covers fresh macOS installs with no shell configs.
+        if [ "$wrote_to_any" -eq 0 ]; then
+            { echo "$marker"; echo "$sh_cmd"; } >> "$HOME/.zprofile"
+            log_success "Created $HOME/.zprofile and added ~/.local/bin to PATH"
+            updated=1
         fi
-    done
+    else
+        local files=("$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.zshrc" "$HOME/.profile")
+        for config_file in "${files[@]}"; do
+            if [ -f "$config_file" ]; then
+                if ! grep -qF "$marker" "$config_file" && ! grep -qF 'export PATH="$HOME/.local/bin:$PATH"' "$config_file"; then
+                    { echo ""; echo "$marker"; echo "$sh_cmd"; } >> "$config_file"
+                    log_success "Added to PATH in $config_file"
+                    updated=1
+                fi
+            fi
+        done
+    fi
 
     local fish_config="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"
     if [ -d "$(dirname "$fish_config")" ]; then
