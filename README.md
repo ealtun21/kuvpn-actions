@@ -14,7 +14,7 @@ KUVPN is a VPN client for Koç University that automates the Microsoft Azure AD 
 <tr>
 <td align="center" width="33%">
 
-### [Install](https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn#installation)
+### [Install](https://github.com/ealtun21/kuvpn-actions#installation)
 Get up and running on any platform
 
 </td>
@@ -40,24 +40,24 @@ Command-line tool — kuvpn
 **Linux / macOS:**
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash
+curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.sh | bash
 ```
 
 The script will ask what to install (GUI, CLI, or both), set up your PATH, and check for OpenConnect.
 
-**Windows:** Download and run [`KUVPN-Setup-windows-x86_64.exe`](https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/releases/latest) from the Releases page.
+**Windows:** Download and run [`KUVPN-Setup-windows-x86_64.exe`](https://github.com/ealtun21/kuvpn-actions/releases/latest) from the Releases page.
 
 <details><summary>Non-interactive flags (for scripting / automation)</summary>
 
 ```bash
 # Install both
-curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash -s -- --all
+curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.sh | bash -s -- --all
 
 # GUI only
-curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash -s -- --gui
+curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.sh | bash -s -- --gui
 
 # CLI only
-curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash -s -- --cli
+curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.sh | bash -s -- --cli
 ```
 
 </details>
