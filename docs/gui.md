@@ -13,7 +13,7 @@
 **Recommended:**
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash
+curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.sh | bash
 ```
 
 The script will ask what to install — choose GUI. It also checks for OpenConnect and offers to install it.
@@ -21,14 +21,14 @@ The script will ask what to install — choose GUI. It also checks for OpenConne
 <details><summary>Non-interactive (for scripting / automation)</summary>
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash -s -- --gui
+curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.sh | bash -s -- --gui
 ```
 
 </details>
 
 <details><summary>Manual install</summary>
 
-Download **`KUVPN-linux-x86_64.AppImage`** (or `aarch64`) from the [Releases](https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/releases/latest) page, make it executable, and run it:
+Download **`KUVPN-linux-x86_64.AppImage`** (or `aarch64`) from the [Releases](https://github.com/ealtun21/kuvpn-actions/releases/latest) page, make it executable, and run it:
 
 ```bash
 chmod +x KUVPN-linux-x86_64.AppImage && ./KUVPN-linux-x86_64.AppImage
@@ -41,7 +41,7 @@ chmod +x KUVPN-linux-x86_64.AppImage && ./KUVPN-linux-x86_64.AppImage
 **Recommended:**
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash
+curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.sh | bash
 ```
 
 The script will ask what to install — choose GUI. It mounts the DMG, copies to Applications, and removes the quarantine flag automatically.
@@ -49,14 +49,14 @@ The script will ask what to install — choose GUI. It mounts the DMG, copies to
 <details><summary>Non-interactive (for scripting / automation)</summary>
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash -s -- --gui
+curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.sh | bash -s -- --gui
 ```
 
 </details>
 
 <details><summary>Manual install</summary>
 
-Download **`KUVPN-macOS-x86_64.dmg`** (Intel) or **`KUVPN-macOS-aarch64.dmg`** (Apple Silicon) from the [Releases](https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/releases/latest) page.
+Download **`KUVPN-macOS-x86_64.dmg`** (Intel) or **`KUVPN-macOS-aarch64.dmg`** (Apple Silicon) from the [Releases](https://github.com/ealtun21/kuvpn-actions/releases/latest) page.
 
 Open the DMG and drag **KUVPN.app** to your Applications folder, then run:
 
@@ -70,7 +70,7 @@ This removes the macOS quarantine flag that would otherwise block the app from o
 
 ### Windows
 
-Download and run **`KUVPN-Setup-windows-x86_64.exe`** from the [Releases](https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/releases/latest) page. The installer bundles OpenConnect and Wintun — no extra setup required.
+Download and run **`KUVPN-Setup-windows-x86_64.exe`** from the [Releases](https://github.com/ealtun21/kuvpn-actions/releases/latest) page. The installer bundles OpenConnect and Wintun — no extra setup required.
 
 ---
 
