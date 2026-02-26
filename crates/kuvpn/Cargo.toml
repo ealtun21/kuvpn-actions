@@ -3,7 +3,7 @@ name = "kuvpn"
 version.workspace = true
 edition = "2021"
 description = "Core library for connecting to Koç University's VPN"
-repository = "https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn"
+repository = "https://github.com/ealtun21/kuvpn-actions"
 license = "MIT"
 
 [dependencies]

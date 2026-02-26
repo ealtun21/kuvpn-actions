@@ -390,7 +390,7 @@ jobs:
             ### Linux (GUI — `KUVPN`)
             **Recommended** — one-line installer (also sets up openconnect):
             ```bash
-            curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash -s -- --gui
+            curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.sh | bash -s -- --gui
             ```
 
             <details><summary>Manual install</summary>
@@ -404,7 +404,7 @@ jobs:
             ### Linux (CLI — `kuvpn`)
             **Recommended** — one-line installer:
             ```bash
-            curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash -s -- --cli
+            curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.sh | bash -s -- --cli
             ```
 
             <details><summary>Manual install</summary>
@@ -418,7 +418,7 @@ jobs:
             ### macOS (GUI — `KUVPN`)
             **Recommended** — one-line installer (mounts the DMG, copies to Applications, and removes the quarantine flag automatically):
             ```bash
-            curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash -s -- --gui
+            curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.sh | bash -s -- --gui
             ```
 
             <details><summary>Manual install</summary>
@@ -432,7 +432,7 @@ jobs:
             ### macOS (CLI — `kuvpn`)
             **Recommended** — one-line installer:
             ```bash
-            curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash -s -- --cli
+            curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.sh | bash -s -- --cli
             ```
 
             <details><summary>Manual install</summary>

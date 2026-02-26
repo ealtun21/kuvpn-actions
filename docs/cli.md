@@ -11,7 +11,7 @@
 **Recommended:**
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash
+curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.sh | bash
 ```
 
 The script will ask what to install — choose CLI. It downloads the right static binary for your platform, places it at `~/.local/bin/kuvpn`, adds it to your PATH if needed, and optionally installs OpenConnect.
@@ -19,14 +19,14 @@ The script will ask what to install — choose CLI. It downloads the right stati
 <details><summary>Non-interactive (for scripting / automation)</summary>
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/main/install.sh | bash -s -- --cli
+curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.sh | bash -s -- --cli
 ```
 
 </details>
 
 **Manual install:**
 
-Download the binary for your platform from the [Releases](https://github.com/KUACC-VALAR-HPC-KOC-UNIVERSITY/kuvpn/releases/latest) page, make it executable, and move it onto your PATH:
+Download the binary for your platform from the [Releases](https://github.com/ealtun21/kuvpn-actions/releases/latest) page, make it executable, and move it onto your PATH:
 
 ```bash
 # Linux x86_64
