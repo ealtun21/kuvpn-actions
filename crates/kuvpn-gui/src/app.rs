@@ -64,6 +64,7 @@ pub struct KuVpnGui {
     pub active_interface: Option<String>,
     /// Privilege escalation tools found on this system (e.g. ["pkexec", "sudo"]).
     /// Empty on Windows. Empty on Unix means no tool is installed — VPN cannot start.
+    #[cfg_attr(windows, allow(dead_code))]
     pub available_escalation_tools: Vec<&'static str>,
     /// True when the window was auto-shown from a hidden state for a prompt.
     /// Used to auto-hide the window again after the prompt resolves.
@@ -230,12 +231,10 @@ impl KuVpnGui {
                 self.window_close_pending = false;
                 Task::none()
             }
+            #[cfg(target_os = "linux")]
             Message::GtkTick => {
-                #[cfg(target_os = "linux")]
-                {
-                    while gtk::events_pending() {
-                        gtk::main_iteration();
-                    }
+                while gtk::events_pending() {
+                    gtk::main_iteration();
                 }
                 Task::none()
             }
@@ -350,6 +349,7 @@ impl KuVpnGui {
                 self.save_settings();
                 Task::none()
             }
+            #[cfg(not(windows))]
             Message::EscalationToolChanged(tool) => {
                 self.settings.escalation_tool = tool;
                 self.save_settings();
@@ -824,6 +824,7 @@ impl KuVpnGui {
 
 impl Default for KuVpnGui {
     fn default() -> Self {
+        #[allow(unused_mut)]
         let mut settings = GuiSettings::load();
 
         if let Ok(mut guard) = crate::logger::GUI_LOGGER.user_level.lock() {

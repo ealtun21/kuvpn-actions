@@ -246,7 +246,7 @@ impl SessionThread {
     fn start_openconnect(
         &self,
         dsid: String,
-        provider: &Arc<dyn CredentialsProvider>,
+        #[cfg_attr(not(unix), allow(unused_variables))] provider: &Arc<dyn CredentialsProvider>,
     ) -> Result<VpnProcess, ()> {
         let runner = OpenConnectRunner::locate(
             &self.config.openconnect_path,
