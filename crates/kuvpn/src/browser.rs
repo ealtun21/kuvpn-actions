@@ -61,6 +61,7 @@ pub fn create_browser(
                 no_first_run.as_os_str(),
                 no_default_browser_check.as_os_str(),
                 disable_session_crashed_bubble.as_os_str(),
+                std::ffi::OsStr::new("--lang=en-US"),
             ])
             .user_data_dir(Some(user_data_dir));
 

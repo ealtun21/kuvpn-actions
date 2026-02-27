@@ -221,8 +221,8 @@ pub fn run_login_and_get_dsid(
     cancel_token: Option<CancellationToken>,
     browser_pid_out: Option<Arc<Mutex<Option<u32>>>>,
 ) -> anyhow::Result<String> {
-    const MAX_RETRIES: usize = 10;
-    const STUCK_THRESHOLD: usize = 15; // ~6 seconds without progress before considering stuck
+    const MAX_RETRIES: usize = 20;
+    const STUCK_THRESHOLD: usize = 8; // ~3.2 seconds without progress before considering stuck
     const MAX_RESETS: usize = 2; // maximum page resets allowed
 
     let browser = match create_browser(user_agent, headless, no_auto_login) {
@@ -312,6 +312,7 @@ pub fn run_login_and_get_dsid(
             log::info!("[*] Page: {}", current_url);
             last_url = current_url;
             retries = 0;
+            handled.clear(); // Allow re-authentication if Microsoft loops back
         }
 
         if !no_auto_login {
