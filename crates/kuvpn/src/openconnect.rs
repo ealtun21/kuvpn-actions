@@ -511,7 +511,7 @@ pub fn execute_openconnect(
     openconnect_path: &Path,
     _stdout: Stdio,
     _stderr: Stdio,
-    interface_name: &str,
+    _interface_name: &str,
     _sudo_password: Option<String>,
 ) -> anyhow::Result<VpnProcess> {
     #[cfg(unix)]
@@ -555,7 +555,7 @@ pub fn execute_openconnect(
         // macOS does not support custom TUN interface names; OpenConnect auto-assigns a
         // utun%d interface. Only pass --interface on Linux and other non-macOS Unix.
         #[cfg(not(target_os = "macos"))]
-        cmd.arg("--interface").arg(interface_name);
+        cmd.arg("--interface").arg(_interface_name);
 
         cmd.arg("-C")
             .arg(format!("DSID={}", cookie_value))
@@ -584,7 +584,7 @@ pub fn execute_openconnect(
     {
         log::info!("Requesting Admin elevation for OpenConnect...");
 
-        let interface_name_owned = interface_name.to_string();
+        let interface_name_owned = _interface_name.to_string();
         let oc_path_str = openconnect_path
             .to_str()
             .ok_or_else(|| anyhow::anyhow!("openconnect path is not valid UTF-8"))?;

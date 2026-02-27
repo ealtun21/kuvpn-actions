@@ -1,8 +1,10 @@
 use crate::app::KuVpnGui;
+#[cfg_attr(windows, allow(unused_imports))]
+use crate::types::COLOR_WARNING;
 use crate::types::{
     btn_secondary, btn_segment_selected, btn_segment_unselected, card, custom_scrollbar, Message,
-    SegmentPosition, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_DIM, COLOR_WARNING, ICON_INFO_SVG,
-    ICON_REFRESH_SVG, ICON_TRASH_SVG,
+    SegmentPosition, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_DIM, ICON_INFO_SVG, ICON_REFRESH_SVG,
+    ICON_TRASH_SVG,
 };
 use iced::widget::{button, column, container, row, scrollable, svg, text, text_input};
 use iced::{Alignment, Border, Color, Element, Length, Padding};
@@ -499,6 +501,7 @@ impl KuVpnGui {
         row(buttons).spacing(-1.0).into()
     }
 
+    #[cfg(not(windows))]
     fn view_segmented_control_str<'a>(
         &self,
         options: &'a [&'static str],
