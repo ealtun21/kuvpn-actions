@@ -363,6 +363,7 @@ impl KuVpnGui {
                             let provider = Arc::new(GuiProvider {
                                 interaction_tx,
                                 cancel_token: kuvpn::utils::CancellationToken::new(),
+                                page_guard: std::sync::Mutex::new(None),
                             });
 
                             let session_c = Arc::clone(&session);
@@ -401,6 +402,9 @@ impl KuVpnGui {
                                     }
                                     Ok(GuiInteraction::MfaComplete) => {
                                         let _ = output.send(Message::MfaCompleteReceived).await;
+                                    }
+                                    Ok(GuiInteraction::DismissPrompt) => {
+                                        let _ = output.send(Message::DismissPrompt).await;
                                     }
                                     Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
                                         break
@@ -502,6 +506,22 @@ impl KuVpnGui {
                     self.current_input = String::new();
                     self.show_password_held = false;
                 }
+                if self.was_shown_for_prompt && self.settings.auto_hide_after_prompt {
+                    self.was_shown_for_prompt = false;
+                    return Task::perform(
+                        async {
+                            tokio::time::sleep(std::time::Duration::from_millis(300)).await
+                        },
+                        |_| Message::AutoHideWindow,
+                    );
+                }
+                Task::none()
+            }
+            Message::DismissPrompt => {
+                // Page changed while a prompt was visible — retract it
+                self.pending_request = None;
+                self.current_input = String::new();
+                self.show_password_held = false;
                 if self.was_shown_for_prompt && self.settings.auto_hide_after_prompt {
                     self.was_shown_for_prompt = false;
                     return Task::perform(

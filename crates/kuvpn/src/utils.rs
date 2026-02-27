@@ -24,35 +24,49 @@ impl CancellationToken {
 }
 
 /// Trait for providing credentials and user input.
+///
+/// `request_text` / `request_password` return `None` when the prompt was
+/// dismissed externally (e.g. the page changed while the user was typing).
 pub trait CredentialsProvider: Send + Sync {
-    fn request_text(&self, msg: &str) -> String;
-    fn request_password(&self, msg: &str) -> String;
+    fn request_text(&self, msg: &str) -> Option<String>;
+    fn request_password(&self, msg: &str) -> Option<String>;
     fn on_mfa_push(&self, _code: &str) {}
     fn on_mfa_complete(&self) {}
+
+    /// Install a guard that is polled while a prompt is visible.
+    /// Return `false` → page changed → prompt is dismissed and `request_*` returns `None`.
+    fn set_page_guard(&self, _guard: Box<dyn Fn() -> bool + Send + Sync>) {}
+
+    /// Remove any active page guard.
+    fn clear_page_guard(&self) {}
 }
 
 /// A implementation of `CredentialsProvider` for terminal input.
 pub struct TerminalCredentialsProvider;
 
 impl CredentialsProvider for TerminalCredentialsProvider {
-    fn request_text(&self, msg: &str) -> String {
+    fn request_text(&self, msg: &str) -> Option<String> {
         // Clear the current line in case a spinner is active on another thread
         let term = Term::stderr();
         let _ = term.clear_line();
-        Input::new()
-            .with_prompt(msg.trim_end_matches(": ").trim_end_matches(':'))
-            .interact_text()
-            .unwrap_or_default()
+        Some(
+            Input::new()
+                .with_prompt(msg.trim_end_matches(": ").trim_end_matches(':'))
+                .interact_text()
+                .unwrap_or_default(),
+        )
     }
 
-    fn request_password(&self, msg: &str) -> String {
+    fn request_password(&self, msg: &str) -> Option<String> {
         // Clear the current line in case a spinner is active on another thread
         let term = Term::stderr();
         let _ = term.clear_line();
-        Password::new()
-            .with_prompt(msg.trim_end_matches(": ").trim_end_matches(':'))
-            .interact()
-            .unwrap_or_default()
+        Some(
+            Password::new()
+                .with_prompt(msg.trim_end_matches(": ").trim_end_matches(':'))
+                .interact()
+                .unwrap_or_default(),
+        )
     }
 
     fn on_mfa_push(&self, code: &str) {

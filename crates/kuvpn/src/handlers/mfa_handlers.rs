@@ -263,7 +263,10 @@ pub fn handle_otp_entry(
 
         log::info!("[*] OTP entry page detected, requesting code from user");
 
-        let code = provider.request_text(&prompt);
+        let code = match provider.request_text(&prompt) {
+            Some(c) => c,
+            None => return Ok(false), // prompt dismissed (page changed)
+        };
         let code_escaped = crate::utils::js_escape(&code);
 
         tab.evaluate(
