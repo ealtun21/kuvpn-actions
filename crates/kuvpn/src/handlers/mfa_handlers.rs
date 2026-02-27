@@ -10,13 +10,16 @@ pub fn handle_authenticator_push_approval(
     provider: &dyn CredentialsProvider,
     cancel_token: Option<&CancellationToken>,
 ) -> anyhow::Result<bool> {
+    // Structural detection: number display element visible with a short number,
+    // plus the title element present. Text content is NOT checked — Microsoft
+    // changes the wording across locales and updates.
     let is_push_page = tab.evaluate(
         r#"(function() {
-    return !!(
-        document.getElementById('idDiv_SAOTCAS_Title') &&
-        document.getElementById('idDiv_SAOTCAS_Title').innerText.trim().toLowerCase().includes('approve sign in request') &&
-        document.getElementById('idRichContext_DisplaySign')
-    );
+    var numberEl = document.getElementById('idRichContext_DisplaySign');
+    var title = document.getElementById('idDiv_SAOTCAS_Title');
+    var hasNumber = numberEl && numberEl.offsetParent !== null
+        && /^\d{1,3}$/.test(numberEl.innerText.trim());
+    return !!(hasNumber && title && title.offsetParent !== null);
 })()"#,
         false,
     )?.value.unwrap().as_bool().unwrap();
@@ -154,13 +157,17 @@ pub fn handle_authenticator_ngc_push(
     provider: &dyn CredentialsProvider,
     cancel_token: Option<&CancellationToken>,
 ) -> anyhow::Result<bool> {
+    // Structural detection: number display element visible with a short number,
+    // plus the polling description element present (indicates active push).
+    // Text content is NOT checked — wording varies.
     let is_ngc_push = tab.evaluate(
         r#"(function() {
-    var header = document.getElementById('loginHeader') &&
-        document.getElementById('loginHeader').innerText.toLowerCase().includes('approve sign in');
-    var desc = document.getElementById('idDiv_RemoteNGC_PollingDescription') &&
-        document.getElementById('idDiv_RemoteNGC_PollingDescription').innerText.toLowerCase().includes('authenticator app');
-    return !!(header && desc);
+    var numberEl = document.getElementById('idRemoteNGC_DisplaySign');
+    var hasNumber = numberEl && numberEl.offsetParent !== null
+        && /^\d{1,3}$/.test(numberEl.innerText.trim());
+    var polling = document.getElementById('idDiv_RemoteNGC_PollingDescription');
+    var pollingActive = polling && polling.offsetParent !== null;
+    return !!(hasNumber && pollingActive);
 })()"#,
         false,
     )?.value.unwrap().as_bool().unwrap();

@@ -6,63 +6,89 @@ use headless_chrome::Tab;
 pub fn detect_generic_error(tab: &Tab) -> anyhow::Result<Option<String>> {
     let js = r#"
         (function() {
-            // Check common error patterns
-            const errorPatterns = [
-                // Elements with error-related attributes
-                '[role="alert"]',
-                '[aria-live="assertive"]',
-                '[aria-live="polite"]',
-                // Common error class patterns
+            // --- High-confidence selectors (class/ID already implies an error) ---
+            const errorSelectors = [
                 '.error-message',
                 '.error-text',
                 '.alert-error',
                 '.alert-danger',
                 '.validation-error',
                 '.field-validation-error',
-                // Microsoft-specific patterns
                 '.ext-error',
                 '.error.ext-error',
-                // Generic divs with 'error' in ID
                 'div[id*="error" i][id*="message" i]',
                 'div[id*="error" i]:not([style*="display: none"])',
                 'span[id*="error" i]:not([style*="display: none"])',
             ];
 
-            for (const selector of errorPatterns) {
+            // --- Low-confidence selectors (accessibility attrs used for ALL
+            //     dynamic content, not just errors).  We require the text to
+            //     contain at least one error-indicative keyword. ---
+            const ariaSelectors = [
+                '[role="alert"]',
+                '[aria-live="assertive"]',
+                '[aria-live="polite"]',
+            ];
+
+            const errorKeywords = [
+                'error', 'failed', 'failure', 'invalid', 'incorrect',
+                'denied', 'blocked', 'expired', 'unable', 'problem',
+                'went wrong', 'try again', 'couldn\'t', 'could not',
+                'not recognized', 'too many', 'locked', 'suspended',
+            ];
+
+            // MFA / status text that should never be treated as an error
+            const mfaSafe = [
+                'enter the code', 'enter code', 'enter the number',
+                'enter number', 'verification code', 'verify your',
+                'we sent', 'we texted', 'we emailed',
+                'approve sign', 'approve the sign', 'approve a sign',
+                'open your authenticator', 'check your authenticator',
+                'open your microsoft', 'check your microsoft',
+                'notification was sent', 'notification to',
+                'authenticator app', 'sign in request',
+                'waiting for', 'checking', 'contacting',
+            ];
+
+            function isVisible(el) {
+                return el && el.offsetParent !== null
+                    && el.innerText && el.innerText.trim().length > 5
+                    && el.innerText.trim().length < 500;
+            }
+
+            function isMfaText(lower) {
+                return mfaSafe.some(function(p) { return lower.includes(p); });
+            }
+
+            // High-confidence: any visible text (after MFA filter) is an error
+            for (var s = 0; s < errorSelectors.length; s++) {
                 try {
-                    const elements = document.querySelectorAll(selector);
-                    for (const el of elements) {
-                        // Check if element is visible
-                        if (el.offsetParent !== null && el.innerText && el.innerText.trim().length > 0) {
-                            const text = el.innerText.trim();
-                            // Filter out common false positives
-                            if (text.length > 5 && text.length < 500) {
-                                // Skip instructional MFA text — these are prompts, not errors.
-                                // They appear in aria-live regions on code-entry and push pages
-                                // and would otherwise produce false-positive error reports.
-                                const lower = text.toLowerCase();
-                                const isMfaInstruction = (
-                                    lower.includes('enter the code') ||
-                                    lower.includes('enter code') ||
-                                    lower.includes('verification code') ||
-                                    lower.includes('we sent') ||
-                                    lower.includes('we texted') ||
-                                    lower.includes('we emailed') ||
-                                    lower.includes('approve sign') ||
-                                    lower.includes('approve the sign') ||
-                                    lower.includes('open your authenticator') ||
-                                    lower.includes('check your authenticator') ||
-                                    lower.includes('notification was sent')
-                                );
-                                if (!isMfaInstruction) {
-                                    return text;
-                                }
-                            }
+                    var els = document.querySelectorAll(errorSelectors[s]);
+                    for (var i = 0; i < els.length; i++) {
+                        if (isVisible(els[i])) {
+                            var text = els[i].innerText.trim();
+                            if (!isMfaText(text.toLowerCase())) return text;
                         }
                     }
-                } catch (e) {
-                    // Ignore selector errors, continue with next pattern
-                }
+                } catch (e) {}
+            }
+
+            // Low-confidence: must also contain an error keyword
+            for (var s = 0; s < ariaSelectors.length; s++) {
+                try {
+                    var els = document.querySelectorAll(ariaSelectors[s]);
+                    for (var i = 0; i < els.length; i++) {
+                        if (isVisible(els[i])) {
+                            var text = els[i].innerText.trim();
+                            var lower = text.toLowerCase();
+                            if (isMfaText(lower)) continue;
+                            var hasError = errorKeywords.some(function(k) {
+                                return lower.includes(k);
+                            });
+                            if (hasError) return text;
+                        }
+                    }
+                } catch (e) {}
             }
 
             return null;
