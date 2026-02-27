@@ -13,7 +13,8 @@ use crate::types::{
     log_level_from_slider, login_mode_flags, ConnectionStatus, InputRequest, InputRequestWrapper,
     Message, Tab,
 };
-use kuvpn::{SessionConfig, VpnSession};
+use kuvpn::{ErrorCategory, SessionConfig, VpnSession};
+use std::time::Duration;
 
 fn load_window_icon() -> Option<iced::window::Icon> {
     iced::window::icon::from_file_data(crate::types::WINDOW_ICON, Some(image::ImageFormat::Png))
@@ -34,7 +35,7 @@ pub struct KuVpnGui {
     pub mfa_info: Option<String>,
     pub status_message: String,
     pub error_message: Option<String>,
-    pub error_category: Option<kuvpn::ErrorCategory>,
+    pub error_category: Option<ErrorCategory>,
     pub rotation: f32,
     pub oc_test_result: Option<bool>,
     pub automation_warning: Option<String>,
@@ -95,6 +96,107 @@ impl KuVpnGui {
         } else {
             Task::none()
         }
+    }
+
+    fn maybe_auto_hide_task(&mut self) -> Task<Message> {
+        if self.was_shown_for_prompt && self.settings.auto_hide_after_prompt {
+            self.was_shown_for_prompt = false;
+            return Task::perform(
+                async { tokio::time::sleep(Duration::from_millis(400)).await },
+                |_| Message::AutoHideWindow,
+            );
+        }
+        Task::none()
+    }
+
+    fn restart_window_task(&mut self, delay_ms: u64) -> Task<Message> {
+        if let Some(id) = self.window_id {
+            self.is_visible = false;
+            self.window_close_pending = true;
+            return Task::batch(vec![
+                iced::window::close(id),
+                Task::perform(
+                    async move { tokio::time::sleep(Duration::from_millis(delay_ms)).await },
+                    |_| Message::ToggleVisibility {
+                        from_close_request: false,
+                    },
+                ),
+            ]);
+        }
+        Task::none()
+    }
+
+    fn build_connection_stream(
+        &self,
+        session: Arc<VpnSession>,
+        log_rx: crossbeam_channel::Receiver<String>,
+        mut gui_rx: tokio::sync::mpsc::Receiver<String>,
+    ) -> Task<Message> {
+        Task::stream(iced::stream::channel(
+            100,
+            move |mut output: iced::futures::channel::mpsc::Sender<Message>| async move {
+                let (interaction_tx, mut interaction_rx) = tokio::sync::mpsc::channel(10);
+
+                let provider = Arc::new(GuiProvider {
+                    interaction_tx,
+                    cancel_token: kuvpn::utils::CancellationToken::new(),
+                    page_guard: std::sync::Mutex::new(None),
+                });
+
+                let session_c = Arc::clone(&session);
+                let _join_handle = session.connect(provider);
+
+                loop {
+                    // Poll logs from session
+                    while let Ok(log_msg) = log_rx.try_recv() {
+                        let _ = output.send(Message::LogAppended(log_msg)).await;
+                    }
+
+                    // Poll logs from global logger
+                    while let Ok(log_msg) = gui_rx.try_recv() {
+                        let _ = output.send(Message::LogAppended(log_msg)).await;
+                    }
+
+                    // Poll status
+                    let current_status = session_c.status();
+                    let _ = output.send(Message::StatusChanged(current_status)).await;
+
+                    if session_c.is_finished() {
+                        break;
+                    }
+
+                    // Poll interactions
+                    match interaction_rx.try_recv() {
+                        Ok(GuiInteraction::Request(req)) => {
+                            let _ = output
+                                .send(Message::RequestInput(Arc::new(InputRequestWrapper(
+                                    Mutex::new(Some(req)),
+                                ))))
+                                .await;
+                        }
+                        Ok(GuiInteraction::MfaPush(code)) => {
+                            let _ = output.send(Message::MfaPushReceived(code)).await;
+                        }
+                        Ok(GuiInteraction::MfaComplete) => {
+                            let _ = output.send(Message::MfaCompleteReceived).await;
+                        }
+                        Ok(GuiInteraction::DismissPrompt) => {
+                            let _ = output.send(Message::DismissPrompt).await;
+                        }
+                        Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => break,
+                        Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {}
+                    }
+
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                }
+                let _ = output
+                    .send(Message::ConnectionFinished(
+                        session_c.last_error(),
+                        session_c.error_category(),
+                    ))
+                    .await;
+            },
+        ))
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
@@ -179,22 +281,7 @@ impl KuVpnGui {
                 self.settings.use_client_decorations = v;
                 self.save_settings();
                 // Apply decoration change by closing and reopening window
-                if let Some(id) = self.window_id {
-                    self.is_visible = false;
-                    self.window_close_pending = true;
-                    return Task::batch(vec![
-                        iced::window::close(id),
-                        Task::perform(
-                            async {
-                                tokio::time::sleep(std::time::Duration::from_millis(100)).await
-                            },
-                            |_| Message::ToggleVisibility {
-                                from_close_request: false,
-                            },
-                        ),
-                    ]);
-                }
-                Task::none()
+                self.restart_window_task(100)
             }
             Message::ToggleVisibility { from_close_request } => {
                 log::info!(
@@ -348,80 +435,12 @@ impl KuVpnGui {
                     });
 
                     // Bridge global logger to our log stream
-                    let (gui_tx, mut gui_rx) = tokio::sync::mpsc::channel(100);
+                    let (gui_tx, gui_rx) = tokio::sync::mpsc::channel(100);
                     if let Ok(mut guard) = crate::logger::GUI_LOGGER.tx.lock() {
                         *guard = Some(gui_tx);
                     }
 
-                    return Task::stream(iced::stream::channel(
-                        100,
-                        move |mut output: iced::futures::channel::mpsc::Sender<Message>| async move {
-                            use futures::SinkExt;
-                            let (interaction_tx, mut interaction_rx) =
-                                tokio::sync::mpsc::channel(10);
-
-                            let provider = Arc::new(GuiProvider {
-                                interaction_tx,
-                                cancel_token: kuvpn::utils::CancellationToken::new(),
-                                page_guard: std::sync::Mutex::new(None),
-                            });
-
-                            let session_c = Arc::clone(&session);
-                            let _join_handle = session.connect(provider);
-
-                            loop {
-                                // Poll logs from session
-                                while let Ok(log_msg) = log_rx.try_recv() {
-                                    let _ = output.send(Message::LogAppended(log_msg)).await;
-                                }
-
-                                // Poll logs from global logger
-                                while let Ok(log_msg) = gui_rx.try_recv() {
-                                    let _ = output.send(Message::LogAppended(log_msg)).await;
-                                }
-
-                                // Poll status
-                                let current_status = session_c.status();
-                                let _ = output.send(Message::StatusChanged(current_status)).await;
-
-                                if session_c.is_finished() {
-                                    break;
-                                }
-
-                                // Poll interactions
-                                match interaction_rx.try_recv() {
-                                    Ok(GuiInteraction::Request(req)) => {
-                                        let _ = output
-                                            .send(Message::RequestInput(Arc::new(
-                                                InputRequestWrapper(Mutex::new(Some(req))),
-                                            )))
-                                            .await;
-                                    }
-                                    Ok(GuiInteraction::MfaPush(code)) => {
-                                        let _ = output.send(Message::MfaPushReceived(code)).await;
-                                    }
-                                    Ok(GuiInteraction::MfaComplete) => {
-                                        let _ = output.send(Message::MfaCompleteReceived).await;
-                                    }
-                                    Ok(GuiInteraction::DismissPrompt) => {
-                                        let _ = output.send(Message::DismissPrompt).await;
-                                    }
-                                    Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
-                                        break
-                                    }
-                                    Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {}
-                                }
-
-                                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-                            }
-                            let _ = output
-                                .send(Message::ConnectionFinished(
-                                    session_c.last_error(),
-                                    session_c.error_category(),
-                                ))
-                                .await;
-                        },
-                    ));
+                    return self.build_connection_stream(session, log_rx, gui_rx);
                 }
                 Task::none()
             }
@@ -471,14 +490,7 @@ impl KuVpnGui {
             }
             Message::MfaCompleteReceived => {
                 self.mfa_info = None;
-                if self.was_shown_for_prompt && self.settings.auto_hide_after_prompt {
-                    self.was_shown_for_prompt = false;
-                    return Task::perform(
-                        async { tokio::time::sleep(std::time::Duration::from_millis(400)).await },
-                        |_| Message::AutoHideWindow,
-                    );
-                }
-                Task::none()
+                self.maybe_auto_hide_task()
             }
             Message::RequestInput(wrapper) => {
                 if let Ok(mut guard) = wrapper.0.lock() {
@@ -507,28 +519,14 @@ impl KuVpnGui {
                     self.current_input = String::new();
                     self.show_password_held = false;
                 }
-                if self.was_shown_for_prompt && self.settings.auto_hide_after_prompt {
-                    self.was_shown_for_prompt = false;
-                    return Task::perform(
-                        async { tokio::time::sleep(std::time::Duration::from_millis(300)).await },
-                        |_| Message::AutoHideWindow,
-                    );
-                }
-                Task::none()
+                self.maybe_auto_hide_task()
             }
             Message::DismissPrompt => {
                 // Page changed while a prompt was visible — retract it
                 self.pending_request = None;
                 self.current_input = String::new();
                 self.show_password_held = false;
-                if self.was_shown_for_prompt && self.settings.auto_hide_after_prompt {
-                    self.was_shown_for_prompt = false;
-                    return Task::perform(
-                        async { tokio::time::sleep(std::time::Duration::from_millis(300)).await },
-                        |_| Message::AutoHideWindow,
-                    );
-                }
-                Task::none()
+                self.maybe_auto_hide_task()
             }
             Message::ShowPasswordHeld(held) => {
                 self.show_password_held = held;
@@ -644,21 +642,7 @@ impl KuVpnGui {
 
                 // If window decoration setting changed, refresh window
                 if old_use_csd != self.settings.use_client_decorations {
-                    if let Some(id) = self.window_id {
-                        self.is_visible = false;
-                        self.window_close_pending = true;
-                        return Task::batch(vec![
-                            iced::window::close(id),
-                            Task::perform(
-                                async {
-                                    tokio::time::sleep(std::time::Duration::from_millis(100)).await
-                                },
-                                |_| Message::ToggleVisibility {
-                                    from_close_request: false,
-                                },
-                            ),
-                        ]);
-                    }
+                    return self.restart_window_task(100);
                 }
                 Task::none()
             }
