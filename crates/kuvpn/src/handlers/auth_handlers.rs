@@ -17,13 +17,41 @@ pub fn fill_on_screen_and_click(
     if is_input_visible(tab, input_selector)? {
         let value = if let Some(v) = value {
             v.to_owned()
-        } else if is_password {
-            match provider.request_password(msg) {
-                Some(v) => v,
-                None => return Ok(()), // prompt dismissed (page changed)
-            }
         } else {
-            match provider.request_text(msg) {
+            // Inject a watcher that flags when THIS input disappears.
+            // The page guard (set in dsid.rs) reads window.__kuvpn_input_gone
+            // and dismisses the prompt if it becomes true.
+            let sel_escaped = js_escape(input_selector);
+            let watch_js = format!(
+                r#"(function(){{
+    window.__kuvpn_input_gone = false;
+    if (window.__kuvpn_watch_iv) clearInterval(window.__kuvpn_watch_iv);
+    window.__kuvpn_watch_iv = setInterval(function() {{
+        var el = document.querySelector('{sel}');
+        if (!el || el.offsetParent === null) {{
+            window.__kuvpn_input_gone = true;
+            clearInterval(window.__kuvpn_watch_iv);
+        }}
+    }}, 50);
+}})()"#,
+                sel = sel_escaped
+            );
+            tab.evaluate(&watch_js, false).ok();
+
+            let result = if is_password {
+                provider.request_password(msg)
+            } else {
+                provider.request_text(msg)
+            };
+
+            // Clean up the watcher regardless of outcome
+            tab.evaluate(
+                "if(window.__kuvpn_watch_iv){clearInterval(window.__kuvpn_watch_iv);}",
+                false,
+            )
+            .ok();
+
+            match result {
                 Some(v) => v,
                 None => return Ok(()), // prompt dismissed (page changed)
             }
