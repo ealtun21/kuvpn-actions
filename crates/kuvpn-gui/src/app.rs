@@ -474,9 +474,7 @@ impl KuVpnGui {
                 if self.was_shown_for_prompt && self.settings.auto_hide_after_prompt {
                     self.was_shown_for_prompt = false;
                     return Task::perform(
-                        async {
-                            tokio::time::sleep(std::time::Duration::from_millis(400)).await
-                        },
+                        async { tokio::time::sleep(std::time::Duration::from_millis(400)).await },
                         |_| Message::AutoHideWindow,
                     );
                 }
@@ -488,7 +486,10 @@ impl KuVpnGui {
                         self.pending_request = Some(req);
                         self.current_input = String::new();
                         log::info!("Input requested - bringing window to front");
-                        if !self.is_visible && !self.window_close_pending && !self.window_open_pending {
+                        if !self.is_visible
+                            && !self.window_close_pending
+                            && !self.window_open_pending
+                        {
                             self.was_shown_for_prompt = true;
                         }
                         return self.show_or_focus_window();
@@ -509,9 +510,7 @@ impl KuVpnGui {
                 if self.was_shown_for_prompt && self.settings.auto_hide_after_prompt {
                     self.was_shown_for_prompt = false;
                     return Task::perform(
-                        async {
-                            tokio::time::sleep(std::time::Duration::from_millis(300)).await
-                        },
+                        async { tokio::time::sleep(std::time::Duration::from_millis(300)).await },
                         |_| Message::AutoHideWindow,
                     );
                 }
@@ -525,9 +524,7 @@ impl KuVpnGui {
                 if self.was_shown_for_prompt && self.settings.auto_hide_after_prompt {
                     self.was_shown_for_prompt = false;
                     return Task::perform(
-                        async {
-                            tokio::time::sleep(std::time::Duration::from_millis(300)).await
-                        },
+                        async { tokio::time::sleep(std::time::Duration::from_millis(300)).await },
                         |_| Message::AutoHideWindow,
                     );
                 }

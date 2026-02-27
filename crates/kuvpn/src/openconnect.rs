@@ -475,6 +475,51 @@ pub fn get_vpn_interface_name(configured_name: &str) -> Option<String> {
     }
 }
 
+/// Encapsulates the static OpenConnect configuration (binary path, interface name,
+/// escalation tool). Call [`execute`](OpenConnectRunner::execute) to start the tunnel.
+pub struct OpenConnectRunner {
+    pub path: PathBuf,
+    pub interface_name: String,
+    pub escalation_tool: Option<String>,
+}
+
+impl OpenConnectRunner {
+    /// Locates the `openconnect` binary and returns a configured runner,
+    /// or `None` if the binary cannot be found.
+    pub fn locate(
+        openconnect_path: &str,
+        interface_name: String,
+        escalation_tool: Option<String>,
+    ) -> Option<Self> {
+        locate_openconnect(openconnect_path).map(|path| Self {
+            path,
+            interface_name,
+            escalation_tool,
+        })
+    }
+
+    /// Starts an OpenConnect tunnel, returning the spawned [`VpnProcess`].
+    pub fn execute(
+        &self,
+        cookie_value: String,
+        url: String,
+        stdout: Stdio,
+        stderr: Stdio,
+        sudo_password: Option<String>,
+    ) -> anyhow::Result<VpnProcess> {
+        execute_openconnect(
+            cookie_value,
+            url,
+            &self.escalation_tool,
+            &self.path,
+            stdout,
+            stderr,
+            &self.interface_name,
+            sudo_password,
+        )
+    }
+}
+
 /// Executes the `openconnect` command.
 #[allow(clippy::too_many_arguments)]
 pub fn execute_openconnect(
@@ -489,32 +534,23 @@ pub fn execute_openconnect(
 ) -> anyhow::Result<VpnProcess> {
     #[cfg(unix)]
     {
-        let mut default_tools = vec!["sudo", "sudo-rs", "pkexec"];
-
-        if let Some(custom_command) = _run_command {
-            if which(custom_command).is_ok() {
-                default_tools.insert(0, custom_command.as_str());
-            }
-        }
-
-        let command_to_run = default_tools
-            .iter()
-            .find_map(|&tool| which(tool).ok().map(|_| tool))
-            .ok_or(anyhow::anyhow!(
+        let command_to_run = resolve_escalation_tool(_run_command).ok_or_else(|| {
+            anyhow::anyhow!(
                 "No available tool for running openconnect (sudo, sudo-rs, or pkexec not found)"
-            ))?;
+            )
+        })?;
 
-        let tool_base = Path::new(command_to_run)
+        let tool_base = Path::new(&command_to_run)
             .file_name()
             .and_then(|n| n.to_str())
-            .unwrap_or(command_to_run);
+            .unwrap_or(&command_to_run);
 
         let askpass = find_askpass();
         let use_askpass = askpass.is_some() && needs_password_prompt(tool_base);
         let use_stdin_password =
             !use_askpass && _sudo_password.is_some() && needs_password_prompt(tool_base);
 
-        let mut cmd = Command::new(command_to_run);
+        let mut cmd = Command::new(&command_to_run);
 
         // Configure password feeding method
         if use_askpass {

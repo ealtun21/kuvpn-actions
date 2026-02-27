@@ -32,7 +32,12 @@ impl KuVpnGui {
                         color: Some(if show { COLOR_TEXT } else { COLOR_TEXT_DIM }),
                     }),
             )
-            .padding(Padding { top: 0.0, right: 12.0, bottom: 0.0, left: 0.0 })
+            .padding(Padding {
+                top: 0.0,
+                right: 12.0,
+                bottom: 0.0,
+                left: 0.0,
+            })
             .on_press(Message::ShowPasswordHeld(!show))
             .style(|_, _| button::Style {
                 background: Some(Color::TRANSPARENT.into()),

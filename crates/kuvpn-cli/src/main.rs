@@ -3,117 +3,21 @@
 //! A clean terminal interface for connecting to Koc University's VPN.
 
 mod args;
+mod credentials;
 
 use args::Args;
 use clap::Parser;
-use console::{Key, Style, Term};
-use dialoguer::Input;
+use console::Style;
+use credentials::{format_duration, CliCredentialsProvider};
 use indicatif::{ProgressBar, ProgressStyle};
-use kuvpn::utils::CredentialsProvider;
 use kuvpn::{
-    init_logger, run_login_and_get_dsid, ConnectionStatus, ParsedLog, SessionConfig, VpnSession,
+    init_logger, run_login_and_get_dsid, ConnectionStatus, LoginConfig, ParsedLog, SessionConfig,
+    VpnSession,
 };
 use log::info;
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Instant;
-
-/// Format a duration into a human-readable string like "1h 23m 45s".
-fn format_duration(duration: std::time::Duration) -> String {
-    let total_secs = duration.as_secs();
-    let hours = total_secs / 3600;
-    let minutes = (total_secs % 3600) / 60;
-    let seconds = total_secs % 60;
-
-    if hours > 0 {
-        format!("{}h {}m {}s", hours, minutes, seconds)
-    } else if minutes > 0 {
-        format!("{}m {}s", minutes, seconds)
-    } else {
-        format!("{}s", seconds)
-    }
-}
-
-/// Reads a password from stdin with masked output (asterisks).
-fn read_masked_password(prompt: &str) -> String {
-    let term = Term::stderr();
-    let _ = term.write_str(prompt);
-    let _ = term.write_str(": ");
-    let _ = term.flush();
-
-    let mut password = String::new();
-
-    while let Ok(key) = term.read_key() {
-        match key {
-            Key::Enter => {
-                break;
-            }
-            Key::Backspace => {
-                if !password.is_empty() {
-                    password.pop();
-                    let _ = term.clear_chars(1);
-                    let _ = term.flush();
-                }
-            }
-            Key::Char(c) => {
-                if c == '\x03' {
-                    // Ctrl+C
-                    std::process::exit(130);
-                }
-                password.push(c);
-                let _ = term.write_str("*");
-                let _ = term.flush();
-            }
-            _ => {}
-        }
-    }
-    password
-}
-
-/// CLI credentials provider that can suspend the spinner before prompting.
-struct CliCredentialsProvider {
-    spinner: Arc<ProgressBar>,
-}
-
-impl CredentialsProvider for CliCredentialsProvider {
-    fn request_text(&self, msg: &str) -> Option<String> {
-        self.spinner.finish_and_clear();
-        let result = Input::new()
-            .with_prompt(msg.trim_end_matches(": ").trim_end_matches(':'))
-            .interact_text()
-            .unwrap_or_default();
-        // Clean up the prompt line after input
-        let term = Term::stderr();
-        let _ = term.clear_last_lines(1);
-        Some(result)
-    }
-
-    fn request_password(&self, msg: &str) -> Option<String> {
-        self.spinner.finish_and_clear();
-        let result = read_masked_password(msg.trim_end_matches(": ").trim_end_matches(':'));
-        // Clean up the prompt line after input
-        let term = Term::stderr();
-        let _ = term.clear_line();
-        let _ = term.write_str("\r");
-        Some(result)
-    }
-
-    fn on_mfa_push(&self, code: &str) {
-        self.spinner.finish_and_clear();
-        let bold = Style::new().bold();
-        let cyan = Style::new().cyan().bold();
-        eprintln!(
-            "{} Enter {} in Authenticator",
-            bold.apply_to(">>"),
-            cyan.apply_to(code),
-        );
-    }
-
-    fn on_mfa_complete(&self) {
-        let term = Term::stderr();
-        let _ = term.clear_last_lines(1);
-    }
-}
 
 /// The main entry point of the application.
 fn main() -> ExitCode {
@@ -163,13 +67,16 @@ fn main() -> ExitCode {
         spinner.set_message("Retrieving DSID...");
         spinner.enable_steady_tick(std::time::Duration::from_millis(80));
 
+        let login_config = LoginConfig {
+            headless: !args.disable_headless,
+            url: args.url,
+            domain: args.domain,
+            user_agent: "Mozilla/5.0".to_string(),
+            no_auto_login: args.no_auto_login,
+            email: args.email,
+        };
         match run_login_and_get_dsid(
-            !args.disable_headless,
-            &args.url,
-            &args.domain,
-            "Mozilla/5.0",
-            args.no_auto_login,
-            args.email,
+            &login_config,
             &kuvpn::utils::TerminalCredentialsProvider,
             None,
             None,
