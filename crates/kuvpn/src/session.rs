@@ -1,7 +1,7 @@
-use crate::dsid::run_login_and_get_dsid;
+use crate::dsid::{run_login_and_get_dsid, LoginConfig};
 use crate::openconnect::{
-    execute_openconnect, get_openconnect_pid, is_openconnect_running, is_vpn_interface_up,
-    kill_process, locate_openconnect, VpnProcess,
+    get_openconnect_pid, is_openconnect_running, is_vpn_interface_up, kill_process,
+    OpenConnectRunner, VpnProcess,
 };
 use crate::utils::{CancellationToken, CredentialsProvider};
 use std::io::{BufRead, BufReader};
@@ -67,6 +67,59 @@ pub struct SessionConfig {
     pub openconnect_path: String,
     pub escalation_tool: Option<String>,
     pub interface_name: String,
+}
+
+/// Prompts for the sudo/pkexec password if the chosen escalation tool requires
+/// one and no `SUDO_ASKPASS` helper is available.
+///
+/// Returns `Ok(Some(pw))` on success, `Ok(None)` if no password is needed,
+/// or `Err(())` if the user cancelled.
+#[cfg(unix)]
+fn resolve_sudo_password(
+    escalation_tool: &Option<String>,
+    provider: &dyn CredentialsProvider,
+    cancel_token: &CancellationToken,
+    log: &dyn Fn(String),
+) -> Result<Option<String>, ()> {
+    use crate::openconnect::{
+        find_askpass, resolve_escalation_tool, tool_requires_password, verify_escalation_password,
+    };
+
+    let tool = resolve_escalation_tool(escalation_tool);
+    if let Some(ref tool_name) = tool {
+        if tool_requires_password(tool_name) && find_askpass().is_none() {
+            let mut wrong_password = false;
+            let pw = loop {
+                let prompt = if wrong_password {
+                    format!(
+                        "Wrong password — please try again. \
+                         Enter your {} password to start the VPN tunnel",
+                        tool_name
+                    )
+                } else {
+                    format!("Enter your {} password to start the VPN tunnel", tool_name)
+                };
+                log(format!(
+                    "Info|{} requires a password. Prompting...",
+                    tool_name
+                ));
+                let entered = match provider.request_password(&prompt) {
+                    Some(v) => v,
+                    None => return Err(()), // prompt dismissed or cancelled
+                };
+                if entered.is_empty() && cancel_token.is_cancelled() {
+                    return Err(());
+                }
+                match verify_escalation_password(tool_name, &entered) {
+                    Some(true) => break entered,          // verified correct
+                    Some(false) => wrong_password = true, // re-prompt
+                    None => break entered,                // unverifiable — let sudo decide
+                }
+            };
+            return Ok(Some(pw));
+        }
+    }
+    Ok(None)
 }
 
 pub struct VpnSession {
@@ -173,6 +226,15 @@ impl VpnSession {
                 }
             };
 
+            // Helper: set the session into the Error state with a Connection
+            // category, record the message, and emit an error log line.
+            let set_conn_error = |msg: &str| {
+                *status.lock().unwrap() = ConnectionStatus::Error;
+                *last_error.lock().unwrap() = Some(msg.to_string());
+                *error_category.lock().unwrap() = Some(crate::error::ErrorCategory::Connection);
+                log(format!("Error|{}", msg));
+            };
+
             let interface_name = &config.interface_name;
 
             // Check if VPN is already connected.
@@ -193,13 +255,16 @@ impl VpnSession {
                 log("Info|Accessing campus gateway...".to_string());
 
                 // 1. Get DSID
+                let login_config = LoginConfig {
+                    headless: config.headless,
+                    url: config.url.clone(),
+                    domain: config.domain.clone(),
+                    user_agent: config.user_agent.clone(),
+                    no_auto_login: config.no_auto_login,
+                    email: config.email.clone(),
+                };
                 let dsid = match run_login_and_get_dsid(
-                    config.headless,
-                    &config.url,
-                    &config.domain,
-                    &config.user_agent,
-                    config.no_auto_login,
-                    config.email.clone(),
+                    &login_config,
                     provider.as_ref(),
                     Some(cancel_token.clone()),
                     Some(Arc::clone(&browser_pid)),
@@ -243,8 +308,12 @@ impl VpnSession {
                 thread::sleep(Duration::from_millis(100));
 
                 // 2. Locate OpenConnect
-                let oc_path = match locate_openconnect(&config.openconnect_path) {
-                    Some(p) => p,
+                let runner = match OpenConnectRunner::locate(
+                    &config.openconnect_path,
+                    interface_name.to_string(),
+                    config.escalation_tool.clone(),
+                ) {
+                    Some(r) => r,
                     None => {
                         *status.lock().unwrap() = ConnectionStatus::Error;
                         *last_error.lock().unwrap() = Some(format!(
@@ -268,63 +337,17 @@ impl VpnSession {
                 let sudo_password: Option<String> = {
                     #[cfg(unix)]
                     {
-                        use crate::openconnect::{
-                            find_askpass, resolve_escalation_tool, tool_requires_password,
-                            verify_escalation_password,
-                        };
-
-                        let tool = resolve_escalation_tool(&config.escalation_tool);
-                        if let Some(ref tool_name) = tool {
-                            if tool_requires_password(tool_name) && find_askpass().is_none() {
-                                // Prompt and verify the password directly against the tool.
-                                // Re-prompt as many times as needed — no hardcoded limit.
-                                // The loop exits when:
-                                //   - verification succeeds (Some(true))
-                                //   - verification is indeterminate/timeout (None) — proceed
-                                //     and let the actual sudo/openconnect invocation decide
-                                //   - the user cancels (empty input + cancel token)
-                                let mut wrong_password = false;
-                                let pw = loop {
-                                    let prompt = if wrong_password {
-                                        format!(
-                                            "Wrong password — please try again. \
-                                             Enter your {} password to start the VPN tunnel",
-                                            tool_name
-                                        )
-                                    } else {
-                                        format!(
-                                            "Enter your {} password to start the VPN tunnel",
-                                            tool_name
-                                        )
-                                    };
-                                    log(format!(
-                                        "Info|{} requires a password. Prompting...",
-                                        tool_name
-                                    ));
-                                    let entered = match provider.request_password(&prompt) {
-                                        Some(v) => v,
-                                        None => {
-                                            // prompt dismissed or cancelled
-                                            *status.lock().unwrap() = ConnectionStatus::Disconnected;
-                                            return;
-                                        }
-                                    };
-                                    if entered.is_empty() && cancel_token.is_cancelled() {
-                                        *status.lock().unwrap() = ConnectionStatus::Disconnected;
-                                        return;
-                                    }
-                                    match verify_escalation_password(tool_name, &entered) {
-                                        Some(true) => break entered,  // verified correct
-                                        Some(false) => wrong_password = true, // re-prompt
-                                        None => break entered, // unverifiable — let sudo decide
-                                    }
-                                };
-                                Some(pw)
-                            } else {
-                                None
+                        match resolve_sudo_password(
+                            &config.escalation_tool,
+                            provider.as_ref(),
+                            &cancel_token,
+                            &log,
+                        ) {
+                            Ok(pw) => pw,
+                            Err(()) => {
+                                *status.lock().unwrap() = ConnectionStatus::Disconnected;
+                                return;
                             }
-                        } else {
-                            None
                         }
                     }
                     #[cfg(not(unix))]
@@ -334,23 +357,16 @@ impl VpnSession {
                 };
 
                 // 3. Execute OpenConnect
-                let mut proc = match execute_openconnect(
+                let mut proc = match runner.execute(
                     dsid,
                     config.url.clone(),
-                    &config.escalation_tool,
-                    &oc_path,
                     Stdio::piped(),
                     Stdio::piped(),
-                    interface_name,
                     sudo_password,
                 ) {
                     Ok(p) => p,
                     Err(e) => {
-                        *status.lock().unwrap() = ConnectionStatus::Error;
-                        *last_error.lock().unwrap() = Some(e.to_string());
-                        *error_category.lock().unwrap() =
-                            Some(crate::error::ErrorCategory::Connection);
-                        log(format!("Error|{}", e));
+                        set_conn_error(&e.to_string());
                         return;
                     }
                 };
@@ -407,11 +423,7 @@ impl VpnSession {
                     // Interface went down - disconnected
                     break;
                 } else if start_time.elapsed() > timeout {
-                    *status.lock().unwrap() = ConnectionStatus::Error;
-                    *last_error.lock().unwrap() =
-                        Some("VPN tunnel failed to establish within timeout".to_string());
-                    *error_category.lock().unwrap() = Some(crate::error::ErrorCategory::Connection);
-                    log("Error|VPN tunnel failed to establish within timeout".to_string());
+                    set_conn_error("VPN tunnel failed to establish within timeout");
                     if let Some(ref mut p) = process {
                         let _ = p.kill();
                     }
@@ -422,16 +434,7 @@ impl VpnSession {
                     // is still alive and we should keep waiting. Only fail if the process
                     // has actually exited (e.g. wrong password, permission denied).
                     if !p.is_process_alive() {
-                        *status.lock().unwrap() = ConnectionStatus::Error;
-                        *last_error.lock().unwrap() = Some(
-                            "OpenConnect process exited before tunnel was established".to_string(),
-                        );
-                        *error_category.lock().unwrap() =
-                            Some(crate::error::ErrorCategory::Connection);
-                        log(
-                            "Error|OpenConnect process exited before tunnel was established"
-                                .to_string(),
-                        );
+                        set_conn_error("OpenConnect process exited before tunnel was established");
                         return;
                     }
                 }
