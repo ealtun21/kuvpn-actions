@@ -313,10 +313,22 @@ pub fn handle_ngc_error_use_password(
             r#"(function() {
     var header = document.getElementById('loginHeader');
     var errorBlock = document.getElementById('idDiv_RemoteNGC_PageDescription');
-    return !!(
+    var pollingIndicator = document.getElementById('idDiv_RemoteNGC_PollingDescription');
+    var pollingActive = pollingIndicator && pollingIndicator.offsetParent !== null;
+
+    // Text-based detection (English)
+    var textMatch = (
         (header && header.innerText.toLowerCase().includes("request wasn't sent")) ||
         (errorBlock && errorBlock.innerText.toLowerCase().includes("couldn't send"))
     );
+
+    // Structural fallback: NGC error div is visible but polling is NOT active
+    // (i.e. the push failed rather than being in progress)
+    var structuralMatch = (
+        errorBlock && errorBlock.offsetParent !== null && !pollingActive
+    );
+
+    return !!(textMatch || structuralMatch);
 })()"#,
             false,
         )?
@@ -326,25 +338,37 @@ pub fn handle_ngc_error_use_password(
         .unwrap();
 
     if is_ngc_error {
-        let is_visible = tab
+        // Try multiple fallback buttons in priority order
+        let clicked = tab
             .evaluate(
                 r#"(function() {
-    var el = document.getElementById('idA_PWD_SwitchToPassword');
-    return !!(el && el.offsetParent !== null);
+    var selectors = [
+        '#idA_PWD_SwitchToPassword',
+        '#signInAnotherWay',
+        '#idA_PWD_SwitchToCredPicker'
+    ];
+    for (var i = 0; i < selectors.length; i++) {
+        var el = document.querySelector(selectors[i]);
+        if (el && el.offsetParent !== null) {
+            el.click();
+            return selectors[i];
+        }
+    }
+    return '';
 })()"#,
                 false,
             )?
             .value
             .unwrap()
-            .as_bool()
-            .unwrap();
+            .as_str()
+            .unwrap_or("")
+            .to_string();
 
-        if is_visible {
-            tab.evaluate(
-                r#"var el=document.getElementById('idA_PWD_SwitchToPassword'); if(el){el.click();}"#,
-                false,
-            )?;
-            log::info!("[*] NGC error page, switching to password");
+        if !clicked.is_empty() {
+            log::info!(
+                "[*] NGC error page, switching to password via {}",
+                clicked
+            );
             handled.insert("use_app_instead");
             sleep(Duration::from_millis(400));
             return Ok(true);
