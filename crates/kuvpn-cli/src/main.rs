@@ -76,7 +76,7 @@ struct CliCredentialsProvider {
 }
 
 impl CredentialsProvider for CliCredentialsProvider {
-    fn request_text(&self, msg: &str) -> String {
+    fn request_text(&self, msg: &str) -> Option<String> {
         self.spinner.finish_and_clear();
         let result = Input::new()
             .with_prompt(msg.trim_end_matches(": ").trim_end_matches(':'))
@@ -85,17 +85,17 @@ impl CredentialsProvider for CliCredentialsProvider {
         // Clean up the prompt line after input
         let term = Term::stderr();
         let _ = term.clear_last_lines(1);
-        result
+        Some(result)
     }
 
-    fn request_password(&self, msg: &str) -> String {
+    fn request_password(&self, msg: &str) -> Option<String> {
         self.spinner.finish_and_clear();
         let result = read_masked_password(msg.trim_end_matches(": ").trim_end_matches(':'));
         // Clean up the prompt line after input
         let term = Term::stderr();
         let _ = term.clear_line();
         let _ = term.write_str("\r");
-        result
+        Some(result)
     }
 
     fn on_mfa_push(&self, code: &str) {

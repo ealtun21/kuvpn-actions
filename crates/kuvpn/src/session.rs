@@ -301,7 +301,14 @@ impl VpnSession {
                                         "Info|{} requires a password. Prompting...",
                                         tool_name
                                     ));
-                                    let entered = provider.request_password(&prompt);
+                                    let entered = match provider.request_password(&prompt) {
+                                        Some(v) => v,
+                                        None => {
+                                            // prompt dismissed or cancelled
+                                            *status.lock().unwrap() = ConnectionStatus::Disconnected;
+                                            return;
+                                        }
+                                    };
                                     if entered.is_empty() && cancel_token.is_cancelled() {
                                         *status.lock().unwrap() = ConnectionStatus::Disconnected;
                                         return;

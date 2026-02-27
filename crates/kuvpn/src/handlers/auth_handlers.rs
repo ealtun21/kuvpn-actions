@@ -18,9 +18,15 @@ pub fn fill_on_screen_and_click(
         let value = if let Some(v) = value {
             v.to_owned()
         } else if is_password {
-            provider.request_password(msg)
+            match provider.request_password(msg) {
+                Some(v) => v,
+                None => return Ok(()), // prompt dismissed (page changed)
+            }
         } else {
-            provider.request_text(msg)
+            match provider.request_text(msg) {
+                Some(v) => v,
+                None => return Ok(()), // prompt dismissed (page changed)
+            }
         };
 
         let value_escaped = js_escape(&value);

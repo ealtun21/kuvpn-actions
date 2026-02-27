@@ -74,6 +74,7 @@ pub enum Message {
     RequestInput(Arc<InputRequestWrapper>),
     InputChanged(String),
     SubmitInput,
+    DismissPrompt,
     MfaPushReceived(String),
     MfaCompleteReceived,
     ClearSessionPressed,
