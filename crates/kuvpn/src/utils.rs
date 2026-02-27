@@ -87,11 +87,12 @@ impl CredentialsProvider for TerminalCredentialsProvider {
     }
 }
 
+use fd_lock::RwLock;
 use once_cell::sync::Lazy;
 use std::fs::File;
 use std::sync::Mutex;
 
-static INSTANCE_LOCK: Lazy<Mutex<Option<File>>> = Lazy::new(|| Mutex::new(None));
+static INSTANCE_LOCK: Lazy<Mutex<Option<RwLock<File>>>> = Lazy::new(|| Mutex::new(None));
 
 /// Ensures that only one instance of the application is running.
 /// Returns an error if another instance is already active.
@@ -102,45 +103,14 @@ pub fn ensure_single_instance() -> Result<(), Box<dyn Error>> {
     lock_path.push("kuvpn.lock");
 
     let file = File::create(&lock_path)?;
+    let mut lock = RwLock::new(file);
 
-    #[cfg(unix)]
-    {
-        use std::os::unix::io::AsRawFd;
-        let fd = file.as_raw_fd();
-        let res = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
-        if res != 0 {
-            return Err("Another instance of KUVPN is already running.".into());
-        }
-    }
-
-    #[cfg(windows)]
-    {
-        use std::os::windows::io::AsRawHandle;
-        use windows::Win32::Foundation::HANDLE;
-        use windows::Win32::Storage::FileSystem::{
-            LockFileEx, LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY,
-        };
-        use windows::Win32::System::IO::OVERLAPPED;
-
-        let handle = file.as_raw_handle();
-        let mut overlapped = OVERLAPPED::default();
-        let res = unsafe {
-            LockFileEx(
-                HANDLE(handle as _),
-                LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
-                0,
-                1,
-                0,
-                &mut overlapped,
-            )
-        };
-        if res.is_err() {
-            return Err("Another instance of KUVPN is already running.".into());
-        }
+    if lock.try_write().is_err() {
+        return Err("Another instance of KUVPN is already running.".into());
     }
 
     let mut guard = INSTANCE_LOCK.lock().unwrap();
-    *guard = Some(file);
+    *guard = Some(lock);
 
     Ok(())
 }
