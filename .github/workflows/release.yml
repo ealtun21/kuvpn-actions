@@ -425,7 +425,7 @@ jobs:
 
             Download **`KUVPN-macOS-x86_64.dmg`** (Intel) or **`KUVPN-macOS-aarch64.dmg`** (Apple Silicon), open it, and drag **KUVPN.app** to your Applications folder. Then run this command to allow the app to open (macOS blocks unsigned apps by default):
             ```bash
-            sudo xattr -r -d com.apple.quarantine /Applications/KUVPN.app
+            sudo xattr -d com.apple.quarantine /Applications/KUVPN.app
             ```
             </details>
 

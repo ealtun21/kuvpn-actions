@@ -324,7 +324,7 @@ install_gui_binary() {
         log_warn "Sudo required: removing macOS quarantine attribute from KUVPN.app."
         log_info "macOS blocks unsigned apps by default. This one command allows KUVPN to run."
         log_info "You may be prompted for your password."
-        sudo xattr -r -d com.apple.quarantine "/Applications/KUVPN.app"
+        sudo xattr -d com.apple.quarantine "/Applications/KUVPN.app"
 
         log_success "KUVPN.app installed to /Applications."
         echo "  Open KUVPN from your Applications folder or Launchpad."
