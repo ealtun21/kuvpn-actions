@@ -61,7 +61,7 @@ Download **`KUVPN-macOS-x86_64.dmg`** (Intel) or **`KUVPN-macOS-aarch64.dmg`** (
 Open the DMG and drag **KUVPN.app** to your Applications folder, then run:
 
 ```bash
-sudo xattr -r -d com.apple.quarantine /Applications/KUVPN.app
+sudo xattr -d com.apple.quarantine /Applications/KUVPN.app
 ```
 
 This removes the macOS quarantine flag that would otherwise block the app from opening (since it is not notarized through the App Store).
@@ -183,7 +183,7 @@ Or enter the full path to your `openconnect` binary in the OpenConnect path fiel
 Run this command in Terminal:
 
 ```bash
-sudo xattr -r -d com.apple.quarantine /Applications/KUVPN.app
+sudo xattr -d com.apple.quarantine /Applications/KUVPN.app
 ```
 
 This is a one-time step required because the app is not notarized through the Apple App Store.
