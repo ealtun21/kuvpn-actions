@@ -122,6 +122,258 @@ fn resolve_sudo_password(
     Ok(None)
 }
 
+struct SessionThread {
+    config: SessionConfig,
+    status: Arc<Mutex<ConnectionStatus>>,
+    cancel_token: CancellationToken,
+    last_error: Arc<Mutex<Option<String>>>,
+    error_category: Arc<Mutex<Option<crate::error::ErrorCategory>>>,
+    logs_tx: Arc<Mutex<Option<crossbeam_channel::Sender<String>>>>,
+    browser_pid: Arc<Mutex<Option<u32>>>,
+}
+
+impl SessionThread {
+    fn from_session(s: &VpnSession) -> Self {
+        Self {
+            config: s.config.clone(),
+            status: Arc::clone(&s.status),
+            cancel_token: s.cancel_token.clone(),
+            last_error: Arc::clone(&s.last_error),
+            error_category: Arc::clone(&s.error_category),
+            logs_tx: Arc::clone(&s.logs_tx),
+            browser_pid: Arc::clone(&s.browser_pid),
+        }
+    }
+
+    fn send_log(&self, msg: impl Into<String>) {
+        if let Some(tx) = self.logs_tx.lock().unwrap().as_ref() {
+            let _ = tx.send(msg.into());
+        }
+    }
+
+    fn set_status(&self, s: ConnectionStatus) {
+        *self.status.lock().unwrap() = s;
+    }
+
+    fn set_conn_error(&self, msg: &str) {
+        *self.status.lock().unwrap() = ConnectionStatus::Error;
+        *self.last_error.lock().unwrap() = Some(msg.to_string());
+        *self.error_category.lock().unwrap() = Some(crate::error::ErrorCategory::Connection);
+        self.send_log(format!("Error|{}", msg));
+    }
+
+    fn run(self, provider: Arc<dyn CredentialsProvider>) {
+        if self.is_vpn_connected() {
+            self.send_log("Info|VPN interface already active, monitoring...");
+            self.set_status(ConnectionStatus::Connected);
+            self.run_watchdog(None);
+        } else {
+            match self.launch_vpn(&provider) {
+                Ok(Some(proc)) => self.run_watchdog(Some(proc)),
+                Ok(None) => {} // cancelled
+                Err(_) => return,
+            }
+        }
+        self.cleanup();
+    }
+
+    fn is_vpn_connected(&self) -> bool {
+        is_vpn_interface_up(&self.config.interface_name) || is_openconnect_running()
+    }
+
+    fn launch_vpn(
+        &self,
+        provider: &Arc<dyn CredentialsProvider>,
+    ) -> Result<Option<VpnProcess>, ()> {
+        self.send_log("Info|Accessing campus gateway...");
+        let dsid = self.acquire_dsid(provider)?;
+
+        if self.cancel_token.is_cancelled() {
+            self.set_status(ConnectionStatus::Disconnected);
+            return Ok(None);
+        }
+
+        self.send_log("Info|Initializing tunnel...");
+        thread::sleep(Duration::from_millis(100));
+
+        let mut proc = self.start_openconnect(dsid, provider)?;
+        self.spawn_log_readers(&mut proc);
+        Ok(Some(proc))
+    }
+
+    fn acquire_dsid(&self, provider: &Arc<dyn CredentialsProvider>) -> Result<String, ()> {
+        let login_config = LoginConfig {
+            headless: self.config.headless,
+            url: self.config.url.clone(),
+            domain: self.config.domain.clone(),
+            user_agent: self.config.user_agent.clone(),
+            no_auto_login: self.config.no_auto_login,
+            email: self.config.email.clone(),
+        };
+
+        match run_login_and_get_dsid(
+            &login_config,
+            provider.as_ref(),
+            Some(self.cancel_token.clone()),
+            Some(Arc::clone(&self.browser_pid)),
+        ) {
+            Ok(d) => {
+                *self.browser_pid.lock().unwrap() = None;
+                Ok(d)
+            }
+            Err(e) => {
+                *self.browser_pid.lock().unwrap() = None;
+                let mut s = self.status.lock().unwrap();
+                if *s != ConnectionStatus::Disconnecting {
+                    *s = ConnectionStatus::Error;
+                    let category =
+                        if let Some(auth_err) = e.downcast_ref::<crate::error::AuthError>() {
+                            auth_err.category()
+                        } else {
+                            crate::error::ErrorCategory::Authentication
+                        };
+                    *self.last_error.lock().unwrap() = Some(e.to_string());
+                    *self.error_category.lock().unwrap() = Some(category);
+                    self.send_log(format!("Error|{}", e));
+                } else {
+                    *s = ConnectionStatus::Disconnected;
+                }
+                Err(())
+            }
+        }
+    }
+
+    fn start_openconnect(
+        &self,
+        dsid: String,
+        provider: &Arc<dyn CredentialsProvider>,
+    ) -> Result<VpnProcess, ()> {
+        let runner = OpenConnectRunner::locate(
+            &self.config.openconnect_path,
+            self.config.interface_name.to_string(),
+            self.config.escalation_tool.clone(),
+        )
+        .ok_or_else(|| {
+            self.set_conn_error(&format!(
+                "Could not locate openconnect at '{}'. Please install openconnect or set the correct path.",
+                self.config.openconnect_path
+            ));
+        })?;
+
+        let sudo_password = {
+            #[cfg(unix)]
+            {
+                let log_fn = |m| self.send_log(m);
+                resolve_sudo_password(
+                    &self.config.escalation_tool,
+                    provider.as_ref(),
+                    &self.cancel_token,
+                    &log_fn,
+                )
+                .map_err(|_| self.set_status(ConnectionStatus::Disconnected))?
+            }
+            #[cfg(not(unix))]
+            {
+                None
+            }
+        };
+
+        runner
+            .execute(
+                dsid,
+                self.config.url.clone(),
+                Stdio::piped(),
+                Stdio::piped(),
+                sudo_password,
+            )
+            .map_err(|e| self.set_conn_error(&e.to_string()))
+    }
+
+    fn spawn_log_readers(&self, proc: &mut VpnProcess) {
+        if let VpnProcess::Unix(ref mut child) = proc {
+            if let Some(stdout) = child.stdout.take() {
+                let logs_tx = Arc::clone(&self.logs_tx);
+                thread::spawn(move || {
+                    let reader = BufReader::new(stdout);
+                    for l in reader.lines().map_while(Result::ok) {
+                        if let Some(tx) = logs_tx.lock().unwrap().as_ref() {
+                            let _ = tx.send(format!("Info|{}", l));
+                        }
+                    }
+                });
+            }
+            if let Some(stderr) = child.stderr.take() {
+                let logs_tx = Arc::clone(&self.logs_tx);
+                thread::spawn(move || {
+                    let reader = BufReader::new(stderr);
+                    for l in reader.lines().map_while(Result::ok) {
+                        if let Some(tx) = logs_tx.lock().unwrap().as_ref() {
+                            let _ = tx.send(format!("Warn|{}", l));
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    fn run_watchdog(&self, mut process: Option<VpnProcess>) {
+        let start_time = Instant::now();
+        let mut connected_detected = process.is_none();
+        let timeout = Duration::from_secs(30);
+
+        loop {
+            if self.cancel_token.is_cancelled() {
+                break;
+            }
+
+            if self.is_vpn_connected() {
+                if !connected_detected {
+                    connected_detected = true;
+                    self.set_status(ConnectionStatus::Connected);
+                    self.send_log("Info|Connected.");
+                }
+            } else if connected_detected {
+                break;
+            } else if start_time.elapsed() > timeout {
+                self.set_conn_error("VPN tunnel failed to establish within timeout");
+                if let Some(ref mut p) = process {
+                    let _ = p.kill();
+                }
+                return;
+            } else if let Some(ref mut p) = process {
+                if !p.is_process_alive() {
+                    self.set_conn_error("OpenConnect process exited before tunnel was established");
+                    return;
+                }
+            }
+            thread::sleep(Duration::from_millis(1000));
+        }
+
+        if let Some(ref mut p) = process {
+            self.send_log("Info|Disconnecting...".to_string());
+            let _ = p.kill();
+            let _ = p.wait();
+        }
+    }
+
+    fn cleanup(&self) {
+        if let Some(pid) = get_openconnect_pid() {
+            let _ = kill_process(pid);
+            thread::sleep(Duration::from_millis(500));
+        }
+
+        if is_openconnect_running() {
+            self.set_status(ConnectionStatus::Error);
+            *self.last_error.lock().unwrap() =
+                Some("Failed to stop OpenConnect. Please close it manually.".to_string());
+            self.send_log("Error|Failed to stop OpenConnect.");
+        } else {
+            self.set_status(ConnectionStatus::Disconnected);
+            self.send_log("Info|Disconnected.");
+        }
+    }
+}
+
 pub struct VpnSession {
     config: SessionConfig,
     status: Arc<Mutex<ConnectionStatus>>,
@@ -211,260 +463,7 @@ impl VpnSession {
             *self.error_category.lock().unwrap() = None;
         }
 
-        let status = Arc::clone(&self.status);
-        let config = self.config.clone();
-        let cancel_token = self.cancel_token.clone();
-        let last_error = Arc::clone(&self.last_error);
-        let error_category = Arc::clone(&self.error_category);
-        let logs_tx = Arc::clone(&self.logs_tx);
-        let browser_pid = Arc::clone(&self.browser_pid);
-
-        thread::spawn(move || {
-            let log = |msg: String| {
-                if let Some(tx) = logs_tx.lock().unwrap().as_ref() {
-                    let _ = tx.send(msg);
-                }
-            };
-
-            // Helper: set the session into the Error state with a Connection
-            // category, record the message, and emit an error log line.
-            let set_conn_error = |msg: &str| {
-                *status.lock().unwrap() = ConnectionStatus::Error;
-                *last_error.lock().unwrap() = Some(msg.to_string());
-                *error_category.lock().unwrap() = Some(crate::error::ErrorCategory::Connection);
-                log(format!("Error|{}", msg));
-            };
-
-            let interface_name = &config.interface_name;
-
-            // Check if VPN is already connected.
-            // On Unix, we use the named TUN interface (precise).
-            // On Windows, we fall back to process-name detection since
-            // --interface is not passed on Windows.
-            let is_vpn_connected =
-                || -> bool { is_vpn_interface_up(interface_name) || is_openconnect_running() };
-
-            // Check if already connected
-            let already_connected = is_vpn_connected();
-            let mut process: Option<VpnProcess> = None;
-
-            if already_connected {
-                log("Info|VPN interface already active, monitoring...".to_string());
-                *status.lock().unwrap() = ConnectionStatus::Connected;
-            } else {
-                log("Info|Accessing campus gateway...".to_string());
-
-                // 1. Get DSID
-                let login_config = LoginConfig {
-                    headless: config.headless,
-                    url: config.url.clone(),
-                    domain: config.domain.clone(),
-                    user_agent: config.user_agent.clone(),
-                    no_auto_login: config.no_auto_login,
-                    email: config.email.clone(),
-                };
-                let dsid = match run_login_and_get_dsid(
-                    &login_config,
-                    provider.as_ref(),
-                    Some(cancel_token.clone()),
-                    Some(Arc::clone(&browser_pid)),
-                ) {
-                    Ok(d) => {
-                        // Browser is done, clear PID so cancel() won't kill a dead process
-                        *browser_pid.lock().unwrap() = None;
-                        d
-                    }
-                    Err(e) => {
-                        *browser_pid.lock().unwrap() = None;
-                        let mut s = status.lock().unwrap();
-                        if *s != ConnectionStatus::Disconnecting {
-                            *s = ConnectionStatus::Error;
-
-                            // Try to extract AuthError category
-                            let category = if let Some(auth_err) =
-                                e.downcast_ref::<crate::error::AuthError>()
-                            {
-                                Some(auth_err.category())
-                            } else {
-                                Some(crate::error::ErrorCategory::Authentication)
-                            };
-
-                            *last_error.lock().unwrap() = Some(e.to_string());
-                            *error_category.lock().unwrap() = category;
-                            log(format!("Error|{}", e));
-                        } else {
-                            *s = ConnectionStatus::Disconnected;
-                        }
-                        return;
-                    }
-                };
-
-                if cancel_token.is_cancelled() {
-                    *status.lock().unwrap() = ConnectionStatus::Disconnected;
-                    return;
-                }
-
-                log("Info|Initializing tunnel...".to_string());
-                thread::sleep(Duration::from_millis(100));
-
-                // 2. Locate OpenConnect
-                let runner = match OpenConnectRunner::locate(
-                    &config.openconnect_path,
-                    interface_name.to_string(),
-                    config.escalation_tool.clone(),
-                ) {
-                    Some(r) => r,
-                    None => {
-                        *status.lock().unwrap() = ConnectionStatus::Error;
-                        *last_error.lock().unwrap() = Some(format!(
-                            "Could not locate openconnect at '{}'. Please install openconnect or set the correct path.",
-                            config.openconnect_path
-                        ));
-                        *error_category.lock().unwrap() =
-                            Some(crate::error::ErrorCategory::Connection);
-                        log(format!(
-                            "Error|Could not locate openconnect at '{}'",
-                            config.openconnect_path
-                        ));
-                        return;
-                    }
-                };
-
-                // 2.5. Check if we need to prompt for sudo password.
-                // Uses the CredentialsProvider so both CLI (dialoguer) and GUI (modal)
-                // get a proper prompt instead of relying on sudo's native terminal prompt
-                // (which breaks when stdout/stderr are piped).
-                let sudo_password: Option<String> = {
-                    #[cfg(unix)]
-                    {
-                        match resolve_sudo_password(
-                            &config.escalation_tool,
-                            provider.as_ref(),
-                            &cancel_token,
-                            &log,
-                        ) {
-                            Ok(pw) => pw,
-                            Err(()) => {
-                                *status.lock().unwrap() = ConnectionStatus::Disconnected;
-                                return;
-                            }
-                        }
-                    }
-                    #[cfg(not(unix))]
-                    {
-                        None
-                    }
-                };
-
-                // 3. Execute OpenConnect
-                let mut proc = match runner.execute(
-                    dsid,
-                    config.url.clone(),
-                    Stdio::piped(),
-                    Stdio::piped(),
-                    sudo_password,
-                ) {
-                    Ok(p) => p,
-                    Err(e) => {
-                        set_conn_error(&e.to_string());
-                        return;
-                    }
-                };
-
-                // Capture logs if possible (Unix)
-                if let VpnProcess::Unix(ref mut child) = proc {
-                    if let Some(stdout) = child.stdout.take() {
-                        let logs_tx_stdout = Arc::clone(&logs_tx);
-                        thread::spawn(move || {
-                            let reader = BufReader::new(stdout);
-                            for l in reader.lines().map_while(Result::ok) {
-                                if let Some(tx) = logs_tx_stdout.lock().unwrap().as_ref() {
-                                    let _ = tx.send(format!("Info|{}", l));
-                                }
-                            }
-                        });
-                    }
-
-                    if let Some(stderr) = child.stderr.take() {
-                        let logs_tx_stderr = Arc::clone(&logs_tx);
-                        thread::spawn(move || {
-                            let reader = BufReader::new(stderr);
-                            for l in reader.lines().map_while(Result::ok) {
-                                if let Some(tx) = logs_tx_stderr.lock().unwrap().as_ref() {
-                                    let _ = tx.send(format!("Warn|{}", l));
-                                }
-                            }
-                        });
-                    }
-                }
-
-                process = Some(proc);
-            }
-
-            // 4. Watchdog loop - uses TUN interface detection as primary signal
-            let start_time = Instant::now();
-            let mut connected_detected = already_connected;
-            let timeout = Duration::from_secs(30);
-
-            loop {
-                if cancel_token.is_cancelled() {
-                    break;
-                }
-
-                let interface_up = is_vpn_connected();
-
-                if interface_up {
-                    if !connected_detected {
-                        connected_detected = true;
-                        *status.lock().unwrap() = ConnectionStatus::Connected;
-                        log("Info|Connected.".to_string());
-                    }
-                } else if connected_detected {
-                    // Interface went down - disconnected
-                    break;
-                } else if start_time.elapsed() > timeout {
-                    set_conn_error("VPN tunnel failed to establish within timeout");
-                    if let Some(ref mut p) = process {
-                        let _ = p.kill();
-                    }
-                    return;
-                } else if let Some(ref mut p) = process {
-                    // Check if our spawned process (sudo/pkexec) is still alive.
-                    // This is the key check: if sudo is waiting for a password, the process
-                    // is still alive and we should keep waiting. Only fail if the process
-                    // has actually exited (e.g. wrong password, permission denied).
-                    if !p.is_process_alive() {
-                        set_conn_error("OpenConnect process exited before tunnel was established");
-                        return;
-                    }
-                }
-
-                thread::sleep(Duration::from_millis(1000));
-            }
-
-            // Cleanup
-            log("Info|Disconnecting...".to_string());
-            if let Some(ref mut p) = process {
-                let _ = p.kill();
-                let _ = p.wait();
-            }
-
-            // Fallback/Verify: Check if openconnect is still running and try to kill it again
-            if let Some(pid) = get_openconnect_pid() {
-                let _ = kill_process(pid);
-                thread::sleep(Duration::from_millis(500));
-            }
-
-            if is_openconnect_running() {
-                let mut s = status.lock().unwrap();
-                *s = ConnectionStatus::Error;
-                *last_error.lock().unwrap() =
-                    Some("Failed to stop OpenConnect. Please close it manually.".to_string());
-                log("Error|Failed to stop OpenConnect.".to_string());
-            } else {
-                *status.lock().unwrap() = ConnectionStatus::Disconnected;
-                log("Info|Disconnected.".to_string());
-            }
-        })
+        let thread = SessionThread::from_session(self);
+        thread::spawn(move || thread.run(provider))
     }
 }

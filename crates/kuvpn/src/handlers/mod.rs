@@ -31,13 +31,11 @@ impl AuthTab {
 
     /// Evaluates JS and returns the string result, or `None` if null/undefined.
     pub(crate) fn eval_string(&self, js: &str) -> anyhow::Result<Option<String>> {
-        let result = self.0.evaluate(js, false)?;
-        if let Some(value) = result.value {
-            if value.is_string() {
-                return Ok(Some(value.as_str().unwrap().to_string()));
-            }
-        }
-        Ok(None)
+        Ok(self
+            .0
+            .evaluate(js, false)?
+            .value
+            .and_then(|v| v.as_str().map(|s| s.to_string())))
     }
 
     /// Evaluates JS and returns the string result, or `fallback` if null/undefined.
