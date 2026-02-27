@@ -10,16 +10,13 @@ pub fn handle_authenticator_push_approval(
     provider: &dyn CredentialsProvider,
     cancel_token: Option<&CancellationToken>,
 ) -> anyhow::Result<bool> {
-    // Structural detection: number display element visible with a short number,
-    // plus the title element present. Text content is NOT checked — Microsoft
-    // changes the wording across locales and updates.
+    // Structural detection: the SAOTCAS title element is unique to this
+    // push-approval flow.  The number display is optional — some push
+    // variants just ask the user to tap "Approve" without a number.
     let is_push_page = tab.evaluate(
         r#"(function() {
-    var numberEl = document.getElementById('idRichContext_DisplaySign');
     var title = document.getElementById('idDiv_SAOTCAS_Title');
-    var hasNumber = numberEl && numberEl.offsetParent !== null
-        && /^\d{1,3}$/.test(numberEl.innerText.trim());
-    return !!(hasNumber && title && title.offsetParent !== null);
+    return !!(title && title.offsetParent !== null);
 })()"#,
         false,
     )?.value.unwrap().as_bool().unwrap();
@@ -157,17 +154,13 @@ pub fn handle_authenticator_ngc_push(
     provider: &dyn CredentialsProvider,
     cancel_token: Option<&CancellationToken>,
 ) -> anyhow::Result<bool> {
-    // Structural detection: number display element visible with a short number,
-    // plus the polling description element present (indicates active push).
-    // Text content is NOT checked — wording varies.
+    // Structural detection: the polling description element indicates an
+    // active NGC push.  The number display is optional — some push
+    // variants just ask the user to tap "Approve" without a number.
     let is_ngc_push = tab.evaluate(
         r#"(function() {
-    var numberEl = document.getElementById('idRemoteNGC_DisplaySign');
-    var hasNumber = numberEl && numberEl.offsetParent !== null
-        && /^\d{1,3}$/.test(numberEl.innerText.trim());
     var polling = document.getElementById('idDiv_RemoteNGC_PollingDescription');
-    var pollingActive = polling && polling.offsetParent !== null;
-    return !!(hasNumber && pollingActive);
+    return !!(polling && polling.offsetParent !== null);
 })()"#,
         false,
     )?.value.unwrap().as_bool().unwrap();
@@ -203,8 +196,11 @@ pub fn handle_authenticator_ngc_push(
             let still_showing = tab
                 .evaluate(
                     r#"(function() {
-    var el=document.getElementById('idRemoteNGC_DisplaySign');
-    return !!(el && el.offsetParent !== null);
+    var num = document.getElementById('idRemoteNGC_DisplaySign');
+    var poll = document.getElementById('idDiv_RemoteNGC_PollingDescription');
+    var numVisible = num && num.offsetParent !== null;
+    var pollVisible = poll && poll.offsetParent !== null;
+    return !!(numVisible || pollVisible);
 })()"#,
                     false,
                 )?
@@ -214,7 +210,7 @@ pub fn handle_authenticator_ngc_push(
                 .unwrap_or(false);
 
             let new_url = tab.get_url();
-            if (!still_showing && !number.is_empty()) || new_url != prev_url {
+            if !still_showing || new_url != prev_url {
                 provider.on_mfa_complete();
                 log::info!("[*] Push page finished, moving on...");
                 break;
