@@ -1,44 +1,27 @@
+use super::AuthTab;
 use crate::utils::{CancellationToken, CredentialsProvider};
-use headless_chrome::Tab;
 use std::collections::HashSet;
 use std::thread::sleep;
 use std::time::Duration;
 
-/// Handles authenticator push approval.
-pub fn handle_authenticator_push_approval(
-    tab: &Tab,
-    provider: &dyn CredentialsProvider,
-    cancel_token: Option<&CancellationToken>,
-) -> anyhow::Result<bool> {
-    // Structural detection: the SAOTCAS title element is unique to this
-    // push-approval flow.  The number display is optional — some push
-    // variants just ask the user to tap "Approve" without a number.
-    let is_push_page = tab.evaluate(
-        r#"(function() {
-    var title = document.getElementById('idDiv_SAOTCAS_Title');
-    return !!(title && title.offsetParent !== null);
-})()"#,
-        false,
-    )?.value.unwrap().as_bool().unwrap();
-
-    if is_push_page {
-        let number = tab
-            .evaluate(
-                r#"(function() {
-    var el = document.getElementById('idRichContext_DisplaySign');
-    return el ? el.innerText.trim() : '';
-})()"#,
-                false,
-            )?
-            .value
-            .unwrap()
-            .as_str()
-            .unwrap()
-            .to_string();
-
+impl AuthTab {
+    /// Shared polling loop for both push-approval variants.
+    ///
+    /// Reads the display number via `number_js`, notifies the provider, then polls
+    /// `still_showing_js` every `poll_interval` until the push page is gone
+    /// (element hidden or URL changes) or the operation is cancelled.
+    fn poll_mfa_push(
+        &self,
+        provider: &dyn CredentialsProvider,
+        cancel_token: Option<&CancellationToken>,
+        number_js: &str,
+        still_showing_js: &str,
+        poll_interval: Duration,
+    ) -> anyhow::Result<()> {
+        let number = self.eval_string_or(number_js, "")?;
         provider.on_mfa_push(&number);
 
-        let prev_url = tab.get_url();
+        let prev_url = self.get_url();
         loop {
             if let Some(token) = cancel_token {
                 if token.is_cancelled() {
@@ -47,59 +30,68 @@ pub fn handle_authenticator_push_approval(
                 }
             }
 
-            sleep(Duration::from_secs(1));
+            sleep(poll_interval);
 
-            let still_showing = tab
-                .evaluate(
-                    r#"(function() {
-    var el = document.getElementById('idRichContext_DisplaySign');
-    return !!(el && el.offsetParent !== null);
-})()"#,
-                    false,
-                )?
-                .value
-                .unwrap()
-                .as_bool()
-                .unwrap_or(false);
-
-            if !still_showing {
+            let still_showing = self.eval_bool(still_showing_js)?;
+            let new_url = self.get_url();
+            if !still_showing || new_url != prev_url {
                 provider.on_mfa_complete();
-                log::info!("[*] Number prompt gone, continuing...");
-                break;
-            }
-
-            let new_url = tab.get_url();
-            if new_url != prev_url {
-                provider.on_mfa_complete();
-                log::info!("[*] URL changed, continuing...");
+                log::info!("[*] Push page finished, moving on...");
                 break;
             }
         }
 
-        return Ok(true);
+        Ok(())
     }
 
-    Ok(false)
-}
+    /// Handles authenticator push approval (SAOTCAS flow).
+    pub(crate) fn handle_authenticator_push_approval(
+        &self,
+        provider: &dyn CredentialsProvider,
+        cancel_token: Option<&CancellationToken>,
+    ) -> anyhow::Result<bool> {
+        // Structural detection: the SAOTCAS title element is unique to this
+        // push-approval flow.  The number display is optional — some push
+        // variants just ask the user to tap "Approve" without a number.
+        let is_push_page = self.eval_bool(
+            r#"(function() {
+    var title = document.getElementById('idDiv_SAOTCAS_Title');
+    return !!(title && title.offsetParent !== null);
+})()"#,
+        )?;
 
-/// Handles verification code choice page.
-pub fn handle_verification_code_choice(tab: &Tab) -> anyhow::Result<bool> {
-    let is_proof_choice_page = tab
-        .evaluate(
+        if is_push_page {
+            self.poll_mfa_push(
+                provider,
+                cancel_token,
+                r#"(function() {
+    var el = document.getElementById('idRichContext_DisplaySign');
+    return el ? el.innerText.trim() : '';
+})()"#,
+                r#"(function() {
+    var el = document.getElementById('idRichContext_DisplaySign');
+    return !!(el && el.offsetParent !== null);
+})()"#,
+                Duration::from_secs(1),
+            )?;
+            return Ok(true);
+        }
+
+        Ok(false)
+    }
+
+    /// Handles the verification-code choice page ("Verify your identity").
+    pub(crate) fn handle_verification_code_choice(&self) -> anyhow::Result<bool> {
+        let is_proof_choice_page = self.eval_bool(
             r#"(function() {
     var title = document.getElementById('idDiv_SAOTCS_Title');
     return !!(title && title.innerText.trim().toLowerCase().includes('verify your identity'));
 })()"#,
-            false,
-        )?
-        .value
-        .unwrap()
-        .as_bool()
-        .unwrap();
+        )?;
 
-    if is_proof_choice_page {
-        let _clicked = tab.evaluate(
-            r#"(function() {
+        if is_proof_choice_page {
+            self.eval(
+                r#"(function() {
     var els = document.querySelectorAll('div[role="button"], .table[role="button"], button, input[type="button"]');
     for(var i=0; i<els.length; i++) {
         var text = els[i].innerText.toLowerCase();
@@ -110,271 +102,166 @@ pub fn handle_verification_code_choice(tab: &Tab) -> anyhow::Result<bool> {
     }
     return false;
 })()"#,
-            false,
-        )?;
+            )?;
+            sleep(Duration::from_millis(500));
+            return Ok(true);
+        }
 
-        sleep(Duration::from_millis(500));
-        return Ok(true);
+        Ok(false)
     }
 
-    Ok(false)
-}
-
-/// Handles "Use an app instead" link.
-pub fn handle_use_app_instead(tab: &Tab) -> anyhow::Result<bool> {
-    let is_visible = tab
-        .evaluate(
+    /// Handles the "Use an app instead" link.
+    pub(crate) fn handle_use_app_instead(&self) -> anyhow::Result<bool> {
+        let is_visible = self.eval_bool(
             r#"(function() {
     var el = document.getElementById('idA_PWD_SwitchToRemoteNGC');
     return !!(el && el.offsetParent !== null);
 })()"#,
-            false,
-        )?
-        .value
-        .unwrap()
-        .as_bool()
-        .unwrap();
-
-    if is_visible {
-        tab.evaluate(
-            r#"var el=document.getElementById('idA_PWD_SwitchToRemoteNGC'); if(el){el.click();}"#,
-            false,
         )?;
-        log::info!("[*] Clicked 'Use an app instead'");
-        sleep(Duration::from_millis(400));
-        return Ok(true);
+
+        if is_visible {
+            self.eval(
+                r#"var el=document.getElementById('idA_PWD_SwitchToRemoteNGC'); if(el){el.click();}"#,
+            )?;
+            log::info!("[*] Clicked 'Use an app instead'");
+            sleep(Duration::from_millis(400));
+            return Ok(true);
+        }
+
+        Ok(false)
     }
 
-    Ok(false)
-}
-
-/// Handles authenticator NGC push notifications.
-pub fn handle_authenticator_ngc_push(
-    tab: &Tab,
-    provider: &dyn CredentialsProvider,
-    cancel_token: Option<&CancellationToken>,
-) -> anyhow::Result<bool> {
-    // Structural detection: the polling description element indicates an
-    // active NGC push.  The number display is optional — some push
-    // variants just ask the user to tap "Approve" without a number.
-    let is_ngc_push = tab.evaluate(
-        r#"(function() {
+    /// Handles authenticator NGC push notifications.
+    pub(crate) fn handle_authenticator_ngc_push(
+        &self,
+        provider: &dyn CredentialsProvider,
+        cancel_token: Option<&CancellationToken>,
+    ) -> anyhow::Result<bool> {
+        // Structural detection: the polling description element indicates an
+        // active NGC push.  The number display is optional — some push
+        // variants just ask the user to tap "Approve" without a number.
+        let is_ngc_push = self.eval_bool(
+            r#"(function() {
     var polling = document.getElementById('idDiv_RemoteNGC_PollingDescription');
     return !!(polling && polling.offsetParent !== null);
 })()"#,
-        false,
-    )?.value.unwrap().as_bool().unwrap();
+        )?;
 
-    if is_ngc_push {
-        let number = tab
-            .evaluate(
+        if is_ngc_push {
+            self.poll_mfa_push(
+                provider,
+                cancel_token,
                 r#"(function() {
     var el=document.getElementById('idRemoteNGC_DisplaySign');
     return (el && el.offsetParent !== null) ? el.innerText.trim() : '';
 })()"#,
-                false,
-            )?
-            .value
-            .unwrap()
-            .as_str()
-            .unwrap()
-            .to_string();
-
-        provider.on_mfa_push(&number);
-
-        let prev_url = tab.get_url();
-        loop {
-            if let Some(token) = cancel_token {
-                if token.is_cancelled() {
-                    provider.on_mfa_complete();
-                    return Err(anyhow::anyhow!("Operation cancelled by user"));
-                }
-            }
-
-            sleep(Duration::from_millis(400));
-
-            let still_showing = tab
-                .evaluate(
-                    r#"(function() {
+                r#"(function() {
     var num = document.getElementById('idRemoteNGC_DisplaySign');
     var poll = document.getElementById('idDiv_RemoteNGC_PollingDescription');
     var numVisible = num && num.offsetParent !== null;
     var pollVisible = poll && poll.offsetParent !== null;
     return !!(numVisible || pollVisible);
 })()"#,
-                    false,
-                )?
-                .value
-                .unwrap()
-                .as_bool()
-                .unwrap_or(false);
-
-            let new_url = tab.get_url();
-            if !still_showing || new_url != prev_url {
-                provider.on_mfa_complete();
-                log::info!("[*] Push page finished, moving on...");
-                break;
-            }
+                Duration::from_millis(400),
+            )?;
+            return Ok(true);
         }
 
-        return Ok(true);
+        Ok(false)
     }
 
-    Ok(false)
-}
-
-/// Handles OTP/verification code entry page.
-///
-/// Covers SMS codes, email codes, and TOTP codes from the Authenticator app where the
-/// user must manually type a code rather than approve a push notification.
-/// Detects `input[name="otc"]` which Microsoft uses for all one-time code inputs.
-pub fn handle_otp_entry(
-    tab: &Tab,
-    provider: &dyn CredentialsProvider,
-) -> anyhow::Result<bool> {
-    let is_otp_page = tab
-        .evaluate(
+    /// Handles OTP/verification code entry (SMS, email, TOTP).
+    ///
+    /// Detects `input[name="otc"]` which Microsoft uses for all one-time code inputs.
+    pub(crate) fn handle_otp_entry(
+        &self,
+        provider: &dyn CredentialsProvider,
+    ) -> anyhow::Result<bool> {
+        let is_otp_page = self.eval_bool(
             r#"(function() {
     var input = document.querySelector('input[name="otc"]');
     return !!(input && input.offsetParent !== null);
 })()"#,
-            false,
-        )?
-        .value
-        .unwrap()
-        .as_bool()
-        .unwrap_or(false);
+        )?;
 
-    if is_otp_page {
-        // Build a prompt from the page description so the user knows what kind of code to enter
-        let prompt = tab
-            .evaluate(
-                r#"(function() {
+        if is_otp_page {
+            let prompt = self
+                .eval_string(
+                    r#"(function() {
     var desc = document.getElementById('idDiv_SAOTCC_Description')
         || document.getElementById('idDiv_SAOTCS_Description');
     if (desc && desc.innerText.trim().length > 0) return desc.innerText.trim();
     var title = document.getElementById('idDiv_SAOTCC_Title')
         || document.getElementById('idDiv_SAOTCS_Title');
     if (title && title.innerText.trim().length > 0) return title.innerText.trim();
-    return 'Enter verification code';
+    return null;
 })()"#,
-                false,
-            )?
-            .value
-            .and_then(|v| v.as_str().map(|s| format!("{}: ", s)))
-            .unwrap_or_else(|| "Enter verification code: ".to_string());
+                )?
+                .map(|s| format!("{}: ", s))
+                .unwrap_or_else(|| "Enter verification code: ".to_string());
 
-        log::info!("[*] OTP entry page detected, requesting code from user");
+            log::info!("[*] OTP entry page detected, requesting code from user");
 
-        // Inject a watcher that flags when the OTP input disappears
-        tab.evaluate(
-            r#"(function(){
-    window.__kuvpn_input_gone = false;
-    if (window.__kuvpn_watch_iv) clearInterval(window.__kuvpn_watch_iv);
-    window.__kuvpn_watch_iv = setInterval(function() {
-        var el = document.querySelector('input[name="otc"]');
-        if (!el || el.offsetParent === null) {
-            window.__kuvpn_input_gone = true;
-            clearInterval(window.__kuvpn_watch_iv);
-        }
-    }, 50);
-})()"#,
-            false,
-        )
-        .ok();
+            // Inject a watcher that flags when the OTP input disappears
+            self.inject_input_watcher(r#"input[name="otc"]"#);
 
-        let code = match provider.request_text(&prompt) {
-            Some(c) => c,
-            None => {
-                tab.evaluate(
-                    "if(window.__kuvpn_watch_iv){clearInterval(window.__kuvpn_watch_iv);}",
-                    false,
-                )
-                .ok();
-                return Ok(false); // prompt dismissed (page changed)
-            }
-        };
+            let code = match provider.request_text(&prompt) {
+                Some(c) => c,
+                None => {
+                    self.clear_input_watcher();
+                    return Ok(false); // prompt dismissed (page changed)
+                }
+            };
 
-        tab.evaluate(
-            "if(window.__kuvpn_watch_iv){clearInterval(window.__kuvpn_watch_iv);}",
-            false,
-        )
-        .ok();
-        let code_escaped = crate::utils::js_escape(&code);
+            self.clear_input_watcher();
+            self.fill_input_value(r#"input[name="otc"]"#, &code)?;
+            sleep(Duration::from_millis(250));
 
-        tab.evaluate(
-            &format!(
-                r#"(function() {{
-    var el = document.querySelector('input[name="otc"]');
-    if (el) {{
-        el.focus();
-        el.value = '{code}';
-        el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-        el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-    }}
-}})()"#,
-                code = code_escaped
-            ),
-            false,
-        )?;
-        sleep(Duration::from_millis(250));
-
-        // Try the dedicated OTP submit button first, then fall back to the generic Next button
-        tab.evaluate(
-            r#"(function() {
+            // Try the dedicated OTP submit button first, then fall back to Next
+            self.eval(
+                r#"(function() {
     var btn = document.querySelector('#idSubmit_SAOTCC_Continue')
         || document.querySelector('#idSubmit_SAOTCS_Continue')
         || document.querySelector('#idSIButton9');
     if (btn) { btn.focus(); btn.click(); }
 })()"#,
-            false,
-        )?;
+            )?;
 
-        return Ok(true);
+            return Ok(true);
+        }
+
+        Ok(false)
     }
 
-    Ok(false)
-}
-
-/// Handles NGC error and switches to password authentication.
-pub fn handle_ngc_error_use_password(
-    tab: &Tab,
-    handled: &mut HashSet<&'static str>,
-) -> anyhow::Result<bool> {
-    let is_ngc_error = tab
-        .evaluate(
+    /// Handles NGC error and switches to password authentication.
+    pub(crate) fn handle_ngc_error_use_password(
+        &self,
+        handled: &mut HashSet<&'static str>,
+    ) -> anyhow::Result<bool> {
+        let is_ngc_error = self.eval_bool(
             r#"(function() {
     var header = document.getElementById('loginHeader');
     var errorBlock = document.getElementById('idDiv_RemoteNGC_PageDescription');
     var pollingIndicator = document.getElementById('idDiv_RemoteNGC_PollingDescription');
     var pollingActive = pollingIndicator && pollingIndicator.offsetParent !== null;
 
-    // Text-based detection (English)
     var textMatch = (
         (header && header.innerText.toLowerCase().includes("request wasn't sent")) ||
         (errorBlock && errorBlock.innerText.toLowerCase().includes("couldn't send"))
     );
 
-    // Structural fallback: NGC error div is visible but polling is NOT active
-    // (i.e. the push failed rather than being in progress)
     var structuralMatch = (
         errorBlock && errorBlock.offsetParent !== null && !pollingActive
     );
 
     return !!(textMatch || structuralMatch);
 })()"#,
-            false,
-        )?
-        .value
-        .unwrap()
-        .as_bool()
-        .unwrap();
+        )?;
 
-    if is_ngc_error {
-        // Try multiple fallback buttons in priority order
-        let clicked = tab
-            .evaluate(
-                r#"(function() {
+        if is_ngc_error {
+            let clicked = self
+                .eval_string(
+                    r#"(function() {
     var selectors = [
         '#idA_PWD_SwitchToPassword',
         '#signInAnotherWay',
@@ -387,26 +274,19 @@ pub fn handle_ngc_error_use_password(
             return selectors[i];
         }
     }
-    return '';
+    return null;
 })()"#,
-                false,
-            )?
-            .value
-            .unwrap()
-            .as_str()
-            .unwrap_or("")
-            .to_string();
+                )?
+                .unwrap_or_default();
 
-        if !clicked.is_empty() {
-            log::info!(
-                "[*] NGC error page, switching to password via {}",
-                clicked
-            );
-            handled.insert("use_app_instead");
-            sleep(Duration::from_millis(400));
-            return Ok(true);
+            if !clicked.is_empty() {
+                log::info!("[*] NGC error page, switching to password via {}", clicked);
+                handled.insert("use_app_instead");
+                sleep(Duration::from_millis(400));
+                return Ok(true);
+            }
         }
-    }
 
-    Ok(false)
+        Ok(false)
+    }
 }
