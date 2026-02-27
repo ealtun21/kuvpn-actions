@@ -324,7 +324,7 @@ install_gui_binary() {
         log_warn "Sudo required: removing macOS quarantine attribute from KUVPN.app."
         log_info "macOS blocks unsigned apps by default. This one command allows KUVPN to run."
         log_info "You may be prompted for your password."
-        sudo xattr -d com.apple.quarantine "/Applications/KUVPN.app"
+        sudo xattr -r -d com.apple.quarantine "/Applications/KUVPN.app"
 
         log_success "KUVPN.app installed to /Applications."
         echo "  Open KUVPN from your Applications folder or Launchpad."
@@ -455,6 +455,61 @@ interactive_select() {
     done
 }
 
+# --- Cleanup Logic ---
+cleanup_old_installation() {
+    log_info "Cleaning up old KUVPN installations and session data..."
+
+    # 1. Remove session data (Wipe)
+    local session_paths=(
+        "$HOME/.kuvpn"
+        "$HOME/.local/share/kuvpn"
+        "$HOME/Library/Application Support/kuvpn"
+    )
+
+    for p in "${session_paths[@]}"; do
+        if [ -d "$p" ]; then
+            log_warn "Removing old session data directory: $p"
+            rm -rf "$p"
+        elif [ -f "$p" ]; then
+            log_warn "Removing old session data file: $p"
+            rm -f "$p"
+        fi
+    done
+
+    # 2. Remove old binaries from system-wide and local paths
+    local old_binaries=(
+        "/usr/local/bin/kuvpn"
+        "/usr/bin/kuvpn"
+        "/bin/kuvpn"
+        "/usr/local/bin/KUVPN.AppImage"
+        "/usr/bin/KUVPN.AppImage"
+        "$INSTALL_DIR/$BINARY_NAME"
+        "$INSTALL_DIR/${GUI_NAME}.AppImage"
+    )
+
+    for b in "${old_binaries[@]}"; do
+        if [ -e "$b" ]; then
+            log_warn "Removing old installation: $b"
+            if [ -w "$b" ] || [ -w "$(dirname "$b")" ]; then
+                rm -rf "$b"
+            else
+                log_info "Sudo required to remove $b"
+                sudo rm -rf "$b" 2>/dev/null || rm -rf "$b"
+            fi
+        fi
+    done
+
+    # macOS specific: ensure /Applications/KUVPN.app is gone if we're doing a fresh start
+    if [ "$OS" = "Darwin" ]; then
+        if [ -d "/Applications/KUVPN.app" ]; then
+            log_warn "Removing old /Applications/KUVPN.app"
+            sudo rm -rf "/Applications/KUVPN.app" 2>/dev/null || rm -rf "/Applications/KUVPN.app"
+        fi
+    fi
+
+    log_success "Cleanup completed."
+}
+
 # --- Main Execution ---
 
 echo ""
@@ -482,6 +537,9 @@ fi
 
 detect_platform
 resolve_version
+
+# Clean up before installing
+cleanup_old_installation
 
 if [ "$INSTALL_CLI" -eq 1 ]; then
     install_cli_binary
