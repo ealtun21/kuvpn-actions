@@ -2,7 +2,7 @@ use crate::browser::create_browser;
 use crate::error::AuthError;
 use crate::handlers::AuthTab;
 use crate::utils::{CancellationToken, CredentialsProvider};
-use headless_chrome::Browser;
+use headless_chrome::{Browser, Tab};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
@@ -20,6 +20,18 @@ pub struct LoginConfig {
 
 // ── Private implementation ────────────────────────────────────────────────────
 
+fn get_initial_tab(browser: &Browser) -> anyhow::Result<Arc<Tab>> {
+    for _ in 0..10 {
+        if let Ok(tabs) = browser.get_tabs().lock() {
+            if let Some(t) = tabs.first() {
+                return Ok(Arc::clone(t));
+            }
+        }
+        sleep(Duration::from_millis(200));
+    }
+    browser.new_tab()
+}
+
 struct BrowserSession {
     browser: Browser,
     tab: AuthTab,
@@ -30,22 +42,7 @@ impl BrowserSession {
         let browser = create_browser(&config.user_agent, config.headless, config.no_auto_login)
             .map_err(|e| anyhow::anyhow!("{}", e))?;
 
-        let raw_tab = {
-            let mut initial_tab = None;
-            for _ in 0..10 {
-                if let Ok(tabs) = browser.get_tabs().lock() {
-                    if let Some(t) = tabs.first() {
-                        initial_tab = Some(std::sync::Arc::clone(t));
-                        break;
-                    }
-                }
-                sleep(Duration::from_millis(200));
-            }
-            match initial_tab {
-                Some(t) => t,
-                None => browser.new_tab()?,
-            }
-        };
+        let raw_tab = get_initial_tab(&browser)?;
 
         raw_tab.set_default_timeout(Duration::from_secs(30));
         Ok(Self {
@@ -62,6 +59,28 @@ impl BrowserSession {
             }
         }
         sleep(Duration::from_millis(200));
+    }
+
+    fn setup_page_guard(&self, provider: &dyn CredentialsProvider) {
+        self.tab
+            .0
+            .evaluate("window.__kuvpn_input_gone = false;", false)
+            .ok();
+
+        let tab_for_guard = std::sync::Arc::clone(&self.tab.0);
+        let guard_url = self.tab.get_url();
+        provider.set_page_guard(Box::new(move || {
+            if tab_for_guard.get_url() != guard_url {
+                return false;
+            }
+            let gone = tab_for_guard
+                .evaluate("window.__kuvpn_input_gone === true", false)
+                .ok()
+                .and_then(|r| r.value)
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true); // eval failure → assume page changed
+            !gone
+        }));
     }
 
     fn try_handle_page(
@@ -298,25 +317,7 @@ impl BrowserSession {
                 // right before they block on a prompt. They set
                 // window.__kuvpn_input_gone = true when their input disappears.
                 // Here we just reset the flag and wire up the guard to read it.
-                self.tab
-                    .0
-                    .evaluate("window.__kuvpn_input_gone = false;", false)
-                    .ok();
-
-                let tab_for_guard = std::sync::Arc::clone(&self.tab.0);
-                let guard_url = self.tab.get_url();
-                provider.set_page_guard(Box::new(move || {
-                    if tab_for_guard.get_url() != guard_url {
-                        return false;
-                    }
-                    let gone = tab_for_guard
-                        .evaluate("window.__kuvpn_input_gone === true", false)
-                        .ok()
-                        .and_then(|r| r.value)
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(true); // eval failure → assume page changed
-                    !gone
-                }));
+                self.setup_page_guard(provider);
 
                 match self.try_handle_page(
                     &mut handled,

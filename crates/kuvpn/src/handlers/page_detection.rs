@@ -3,11 +3,10 @@ use super::AuthTab;
 impl AuthTab {
     /// Checks if an input element matching `selector` is currently visible.
     pub(crate) fn is_input_visible(&self, selector: &str) -> anyhow::Result<bool> {
-        let js = format!(
-            "!!(document.querySelector('{}') && document.querySelector('{}').offsetParent !== null)",
-            selector, selector
-        );
-        self.eval_bool(&js)
+        let sel = crate::utils::js_escape(selector);
+        self.eval_bool(&format!(
+            "(function(){{ var el=document.querySelector('{sel}'); return !!(el && el.offsetParent!==null); }})()"
+        ))
     }
 
     /// Checks if any invalid-username error message is visible.

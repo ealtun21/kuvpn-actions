@@ -41,25 +41,7 @@ impl VpnProcess {
                     // `sudo -n` works without another password prompt. For pkexec users
                     // (pkexec doesn't forward signals), this is the only reliable path.
                     if let Some(oc_pid) = get_openconnect_pid() {
-                        let oc_pid_str = oc_pid.to_string();
-                        // sudo / sudo-rs -n: cached credentials, no dialog
-                        for tool in &["sudo", "sudo-rs"] {
-                            if let Ok(tool_path) = which(tool) {
-                                let _ = Command::new(tool_path)
-                                    .args(["-n", "kill", "-15", &oc_pid_str])
-                                    .stdout(Stdio::null())
-                                    .stderr(Stdio::null())
-                                    .status();
-                            }
-                        }
-                        // pkexec: last resort for pure-pkexec systems (may show auth dialog)
-                        if let Ok(pkexec_path) = which("pkexec") {
-                            let _ = Command::new(pkexec_path)
-                                .args(["kill", &oc_pid_str])
-                                .stdout(Stdio::null())
-                                .stderr(Stdio::null())
-                                .status();
-                        }
+                        let _ = try_kill_elevated(oc_pid);
                     }
 
                     // Step 3: Wait with a timeout instead of blocking indefinitely.
@@ -603,7 +585,10 @@ pub fn execute_openconnect(
         log::info!("Requesting Admin elevation for OpenConnect...");
 
         let interface_name_owned = interface_name.to_string();
-        let mut cmd = AdminCommand::new(openconnect_path.to_str().unwrap());
+        let oc_path_str = openconnect_path
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("openconnect path is not valid UTF-8"))?;
+        let mut cmd = AdminCommand::new(oc_path_str);
         cmd.show(false);
         cmd.arg("--protocol")
             .arg("nc")
@@ -637,6 +622,32 @@ pub fn execute_openconnect(
             thread_finished,
         })
     }
+}
+
+#[cfg(unix)]
+fn try_kill_elevated(pid: u32) -> bool {
+    let pid_str = pid.to_string();
+    let via_sudo = ["sudo", "sudo-rs"].iter().any(|&tool| {
+        which(tool).ok().map_or(false, |p| {
+            Command::new(p)
+                .args(["-n", "kill", "-15", &pid_str])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false)
+        })
+    });
+    via_sudo
+        || which("pkexec").ok().map_or(false, |p| {
+            Command::new(p)
+                .args(["kill", &pid_str])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false)
+        })
 }
 
 /// Checks if an openconnect process is currently running
@@ -762,34 +773,10 @@ pub fn kill_process(pid: u32) -> anyhow::Result<()> {
         use nix::sys::signal::{self, Signal};
         use nix::unistd::Pid;
 
-        let pid_str = pid.to_string();
-
         // Prefer killing via privilege tools with cached credentials (no password prompt).
         // openconnect runs as root, so direct signals from a non-root process fail with EPERM.
         // Try each tool in order; stop as soon as one succeeds.
-        let elevated_ok =
-            // sudo / sudo-rs -n: uses cached credentials, never prompts
-            ["sudo", "sudo-rs"].iter().any(|&tool| {
-                which(tool).ok().map(|p| {
-                    Command::new(p)
-                        .args(["-n", "kill", "-15", &pid_str])
-                        .stdout(Stdio::null())
-                        .stderr(Stdio::null())
-                        .status()
-                        .map(|s| s.success())
-                        .unwrap_or(false)
-                }).unwrap_or(false)
-            })
-            // pkexec: last resort for pure-pkexec systems; may show a brief auth dialog
-            || if let Ok(pkexec_path) = which("pkexec") {
-                Command::new(pkexec_path)
-                    .args(["kill", &pid_str])
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .status()
-                    .map(|s| s.success())
-                    .unwrap_or(false)
-            } else { false };
+        let elevated_ok = try_kill_elevated(pid);
 
         if !elevated_ok {
             // Fallback: direct signal. May fail with EPERM for root processes,
