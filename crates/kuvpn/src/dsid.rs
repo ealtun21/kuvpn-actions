@@ -315,6 +315,13 @@ pub fn run_login_and_get_dsid(
         }
 
         if !no_auto_login {
+            // Set page guard so prompts are dismissed if the URL changes
+            let tab_for_guard = std::sync::Arc::clone(&tab);
+            let guard_url = tab.get_url();
+            provider.set_page_guard(Box::new(move || {
+                tab_for_guard.get_url() == guard_url
+            }));
+
             // try_handle_page can also fail if browser is closed
             match try_handle_page(
                 &tab,
@@ -338,6 +345,8 @@ pub fn run_login_and_get_dsid(
                     return Err(e);
                 }
             }
+
+            provider.clear_page_guard();
 
             // Page reset logic for stuck automation (only in Full Auto mode)
             if retries > STUCK_THRESHOLD && !is_in_mfa_wait {
