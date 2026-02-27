@@ -316,11 +316,27 @@ pub fn run_login_and_get_dsid(
         }
 
         if !no_auto_login {
-            // Set page guard so prompts are dismissed if the URL changes
+            // Page guard: dismiss prompts when the page changes underneath.
+            // Microsoft login is an SPA (URL constant), so the actual input
+            // watcher is injected by fill_on_screen_and_click / handle_otp_entry
+            // right before they block on a prompt. They set
+            // window.__kuvpn_input_gone = true when their input disappears.
+            // Here we just reset the flag and wire up the guard to read it.
+            tab.evaluate("window.__kuvpn_input_gone = false;", false).ok();
+
             let tab_for_guard = std::sync::Arc::clone(&tab);
             let guard_url = tab.get_url();
             provider.set_page_guard(Box::new(move || {
-                tab_for_guard.get_url() == guard_url
+                if tab_for_guard.get_url() != guard_url {
+                    return false;
+                }
+                let gone = tab_for_guard
+                    .evaluate("window.__kuvpn_input_gone === true", false)
+                    .ok()
+                    .and_then(|r| r.value)
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true); // eval failure → assume page changed
+                !gone
             }));
 
             // try_handle_page can also fail if browser is closed

@@ -263,10 +263,40 @@ pub fn handle_otp_entry(
 
         log::info!("[*] OTP entry page detected, requesting code from user");
 
+        // Inject a watcher that flags when the OTP input disappears
+        tab.evaluate(
+            r#"(function(){
+    window.__kuvpn_input_gone = false;
+    if (window.__kuvpn_watch_iv) clearInterval(window.__kuvpn_watch_iv);
+    window.__kuvpn_watch_iv = setInterval(function() {
+        var el = document.querySelector('input[name="otc"]');
+        if (!el || el.offsetParent === null) {
+            window.__kuvpn_input_gone = true;
+            clearInterval(window.__kuvpn_watch_iv);
+        }
+    }, 50);
+})()"#,
+            false,
+        )
+        .ok();
+
         let code = match provider.request_text(&prompt) {
             Some(c) => c,
-            None => return Ok(false), // prompt dismissed (page changed)
+            None => {
+                tab.evaluate(
+                    "if(window.__kuvpn_watch_iv){clearInterval(window.__kuvpn_watch_iv);}",
+                    false,
+                )
+                .ok();
+                return Ok(false); // prompt dismissed (page changed)
+            }
         };
+
+        tab.evaluate(
+            "if(window.__kuvpn_watch_iv){clearInterval(window.__kuvpn_watch_iv);}",
+            false,
+        )
+        .ok();
         let code_escaped = crate::utils::js_escape(&code);
 
         tab.evaluate(
