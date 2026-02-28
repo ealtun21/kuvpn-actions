@@ -48,7 +48,7 @@ impl CredentialsProvider for GuiProvider {
 
 impl GuiProvider {
     fn request(&self, msg: &str, is_password: bool) -> Option<String> {
-        let (tx, rx) = oneshot::channel();
+        let (tx, mut rx) = oneshot::channel();
         let request = InputRequest {
             msg: msg.to_string(),
             is_password,
@@ -60,7 +60,6 @@ impl GuiProvider {
             .blocking_send(GuiInteraction::Request(request));
 
         // Wait for response, but also poll for cancellation and page changes
-        let mut rx = rx;
         loop {
             if self.cancel_token.is_cancelled() {
                 let _ = self
@@ -70,17 +69,18 @@ impl GuiProvider {
             }
 
             // Check page guard — if page changed, dismiss the prompt
-            if let Ok(guard) = self.page_guard.lock() {
-                if let Some(ref check) = *guard {
-                    if !check() {
-                        drop(guard);
-                        log::info!("[*] Page changed while prompting, dismissing prompt");
-                        let _ = self
-                            .interaction_tx
-                            .blocking_send(GuiInteraction::DismissPrompt);
-                        return None;
-                    }
-                }
+            let page_changed = self
+                .page_guard
+                .lock()
+                .ok()
+                .and_then(|g| g.as_ref().map(|check| !check()))
+                .unwrap_or(false);
+            if page_changed {
+                log::info!("[*] Page changed while prompting, dismissing prompt");
+                let _ = self
+                    .interaction_tx
+                    .blocking_send(GuiInteraction::DismissPrompt);
+                return None;
             }
 
             match rx.try_recv() {
