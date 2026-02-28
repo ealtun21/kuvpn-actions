@@ -16,9 +16,19 @@ use crate::types::{
 use kuvpn::{ErrorCategory, SessionConfig, VpnSession};
 use std::time::Duration;
 
-fn load_window_icon() -> Option<iced::window::Icon> {
-    iced::window::icon::from_file_data(crate::types::WINDOW_ICON, Some(image::ImageFormat::Png))
-        .ok()
+/// Returns the window settings used for every window open call.
+pub(super) fn window_settings(use_csd: bool) -> iced::window::Settings {
+    iced::window::Settings {
+        exit_on_close_request: false,
+        size: iced::Size::new(580.0, 650.0),
+        min_size: Some(iced::Size::new(560.0, 580.0)),
+        max_size: Some(iced::Size::new(580.0, 650.0)),
+        resizable: false,
+        decorations: !use_csd,
+        transparent: use_csd,
+        icon: crate::load_window_icon(),
+        ..Default::default()
+    }
 }
 
 pub struct KuVpnGui {
@@ -80,6 +90,13 @@ impl KuVpnGui {
         if let Err(e) = self.settings.save() {
             log::error!("Failed to save settings: {}", e);
         }
+    }
+
+    fn is_transitioning(&self) -> bool {
+        matches!(
+            self.status,
+            ConnectionStatus::Connecting | ConnectionStatus::Disconnecting
+        )
     }
 
     /// Shows the window if hidden, or brings it to the foreground if already visible.
@@ -199,6 +216,135 @@ impl KuVpnGui {
             },
         ))
     }
+
+    // ── Private message handlers ──────────────────────────────────────────────
+
+    fn handle_connect_pressed(&mut self) -> Task<Message> {
+        if self.status != ConnectionStatus::Disconnected && self.status != ConnectionStatus::Error {
+            return Task::none();
+        }
+
+        self.automation_warning = None;
+        self.error_message = None;
+        self.error_category = None;
+        self.status_message = "Initializing...".to_string();
+        self.connection_start = Some(Instant::now());
+        self.status = ConnectionStatus::Connecting;
+        self.logs.clear();
+
+        let (headless, no_auto_login) = login_mode_flags(self.settings.login_mode_val);
+        let config = SessionConfig {
+            url: self.settings.url.clone(),
+            domain: self.settings.domain.clone(),
+            user_agent: "Mozilla/5.0".to_string(),
+            headless,
+            no_auto_login,
+            email: if self.settings.email.is_empty() {
+                None
+            } else {
+                Some(self.settings.email.clone())
+            },
+            openconnect_path: if self.settings.openconnect_path.is_empty() {
+                "openconnect".to_string()
+            } else {
+                self.settings.openconnect_path.clone()
+            },
+            escalation_tool: Some(self.settings.escalation_tool.clone()),
+            interface_name: "kuvpn0".to_string(),
+        };
+
+        let session = Arc::new(VpnSession::new(config));
+        self.session = Some(Arc::clone(&session));
+
+        let (log_tx, log_rx) = crossbeam_channel::unbounded();
+        session.set_logs_tx(log_tx);
+
+        crate::logger::LOGGER_INIT.call_once(|| {
+            let _ = log::set_logger(&crate::logger::GUI_LOGGER);
+            log::set_max_level(log::LevelFilter::Trace);
+        });
+
+        let (gui_tx, gui_rx) = tokio::sync::mpsc::channel(100);
+        crate::logger::GUI_LOGGER.set_tx(gui_tx);
+
+        self.build_connection_stream(session, log_rx, gui_rx)
+    }
+
+    fn handle_connection_finished(
+        &mut self,
+        err: Option<String>,
+        category: Option<kuvpn::ErrorCategory>,
+    ) -> Task<Message> {
+        self.status = if err.is_some() {
+            ConnectionStatus::Error
+        } else {
+            ConnectionStatus::Disconnected
+        };
+        self.mfa_info = None;
+        self.connection_start = None;
+        self.active_interface = None;
+
+        if let Some(tray) = &self.tray_icon {
+            crate::tray::update_tray_icon(tray, self.status);
+        }
+
+        if let Some(e) = err {
+            self.error_category = category;
+            let is_automation_failure =
+                matches!(category, Some(kuvpn::ErrorCategory::Authentication))
+                    && (e.contains("Full Auto mode unable to complete login")
+                        || e.contains("Could not find a handler"));
+
+            if is_automation_failure {
+                self.automation_warning = Some(
+                    "Full Auto mode was unable to complete the login flow.\n\n\
+                     What to do:\n\
+                     • Switch to Manual mode and complete login yourself\n\
+                     • Try clearing session data (Wipe Session button)\n\
+                     • Use Visual Auto mode to record a video for bug reporting\n\n\
+                     Check console/logs for technical details."
+                        .to_string(),
+                );
+                self.error_message = None;
+            } else {
+                self.error_message = Some(e);
+            }
+        }
+        Task::none()
+    }
+
+    fn handle_status_changed(&mut self, status: ConnectionStatus) -> Task<Message> {
+        if self.status == status {
+            return Task::none();
+        }
+        self.status = status;
+
+        if let Some(item) = &self.connect_item {
+            item.set_enabled(status == ConnectionStatus::Disconnected);
+        }
+        if let Some(item) = &self.disconnect_item {
+            item.set_enabled(status == ConnectionStatus::Connected);
+        }
+
+        if status == ConnectionStatus::Connected {
+            #[cfg(unix)]
+            {
+                self.active_interface = kuvpn::get_vpn_interface_name("kuvpn0");
+            }
+        } else if matches!(
+            status,
+            ConnectionStatus::Disconnected | ConnectionStatus::Error
+        ) {
+            self.active_interface = None;
+        }
+
+        if let Some(tray) = &self.tray_icon {
+            crate::tray::update_tray_icon(tray, status);
+        }
+        Task::none()
+    }
+
+    // ── Iced update ───────────────────────────────────────────────────────────
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
@@ -323,17 +469,7 @@ impl KuVpnGui {
                     self.is_visible = true;
                     self.window_open_pending = true;
                     let use_csd = self.settings.use_client_decorations;
-                    let (id, task) = iced::window::open(iced::window::Settings {
-                        exit_on_close_request: false,
-                        size: iced::Size::new(580.0, 650.0),
-                        min_size: Some(iced::Size::new(560.0, 580.0)),
-                        max_size: Some(iced::Size::new(580.0, 650.0)),
-                        resizable: false,
-                        decorations: !use_csd,
-                        transparent: use_csd,
-                        icon: load_window_icon(),
-                        ..Default::default()
-                    });
+                    let (id, task) = iced::window::open(window_settings(use_csd));
                     self.window_id = Some(id);
                     return task.map(Message::WindowOpened);
                 }
@@ -357,9 +493,7 @@ impl KuVpnGui {
             }
             Message::LogLevelSliderChanged(val) => {
                 self.settings.log_level_val = val;
-                if let Ok(mut guard) = crate::logger::GUI_LOGGER.user_level.lock() {
-                    *guard = log_level_from_slider(val);
-                }
+                crate::logger::GUI_LOGGER.set_level(log_level_from_slider(val));
                 self.save_settings();
                 Task::none()
             }
@@ -381,69 +515,12 @@ impl KuVpnGui {
                 Task::none()
             }
             Message::Tick => {
-                if self.status == ConnectionStatus::Connecting
-                    || self.status == ConnectionStatus::Disconnecting
-                {
+                if self.is_transitioning() {
                     self.rotation += 0.1;
                 }
                 Task::none()
             }
-            // ConnectPressed handled above
-            Message::ConnectPressed => {
-                if self.status == ConnectionStatus::Disconnected
-                    || self.status == ConnectionStatus::Error
-                {
-                    self.automation_warning = None; // Clear previous warnings
-                    self.error_message = None;
-                    self.error_category = None;
-                    self.status_message = "Initializing...".to_string();
-                    self.connection_start = Some(Instant::now());
-                    let (headless, no_auto_login) = login_mode_flags(self.settings.login_mode_val);
-
-                    let config = SessionConfig {
-                        url: self.settings.url.clone(),
-                        domain: self.settings.domain.clone(),
-                        user_agent: "Mozilla/5.0".to_string(),
-                        headless,
-                        no_auto_login,
-                        email: if self.settings.email.is_empty() {
-                            None
-                        } else {
-                            Some(self.settings.email.clone())
-                        },
-                        openconnect_path: if self.settings.openconnect_path.is_empty() {
-                            "openconnect".to_string()
-                        } else {
-                            self.settings.openconnect_path.clone()
-                        },
-                        escalation_tool: Some(self.settings.escalation_tool.clone()),
-                        interface_name: "kuvpn0".to_string(),
-                    };
-
-                    let session = Arc::new(VpnSession::new(config));
-                    self.session = Some(Arc::clone(&session));
-                    self.status = ConnectionStatus::Connecting;
-                    self.logs.clear();
-
-                    let (log_tx, log_rx) = crossbeam_channel::unbounded();
-                    session.set_logs_tx(log_tx.clone());
-
-                    // Initialize global logger once
-                    crate::logger::LOGGER_INIT.call_once(|| {
-                        let _ = log::set_logger(&crate::logger::GUI_LOGGER);
-                        log::set_max_level(log::LevelFilter::Trace);
-                    });
-
-                    // Bridge global logger to our log stream
-                    let (gui_tx, gui_rx) = tokio::sync::mpsc::channel(100);
-                    if let Ok(mut guard) = crate::logger::GUI_LOGGER.tx.lock() {
-                        *guard = Some(gui_tx);
-                    }
-
-                    return self.build_connection_stream(session, log_rx, gui_rx);
-                }
-                Task::none()
-            }
+            Message::ConnectPressed => self.handle_connect_pressed(),
             Message::DisconnectPressed => {
                 if let Some(session) = &self.session {
                     session.cancel();
@@ -452,22 +529,12 @@ impl KuVpnGui {
             }
             Message::LogAppended(raw_log) => {
                 if let Some(parsed) = kuvpn::ParsedLog::parse(&raw_log) {
-                    // Update UI status/error messages
-                    // Note: Don't overwrite error_message from logs since ConnectionFinished
-                    // provides properly formatted, categorized error messages
-                    match parsed.level {
-                        log::Level::Warn | log::Level::Info => {
-                            self.status_message = parsed.message.clone()
-                        }
-                        _ => {}
+                    // Update status message for info/warn (errors come via ConnectionFinished).
+                    if matches!(parsed.level, log::Level::Info | log::Level::Warn) {
+                        self.status_message = parsed.message.clone();
                     }
 
-                    let user_filter = if let Ok(guard) = crate::logger::GUI_LOGGER.user_level.lock()
-                    {
-                        *guard
-                    } else {
-                        log::LevelFilter::Info
-                    };
+                    let user_filter = crate::logger::GUI_LOGGER.get_level();
 
                     if parsed.level <= user_filter {
                         self.logs
@@ -553,76 +620,9 @@ impl KuVpnGui {
                 Task::none()
             }
             Message::ConnectionFinished(err, category) => {
-                self.status = if err.is_some() {
-                    ConnectionStatus::Error
-                } else {
-                    ConnectionStatus::Disconnected
-                };
-                self.mfa_info = None;
-                self.connection_start = None;
-                self.active_interface = None;
-
-                // Update tray icon based on final status
-                if let Some(tray) = &self.tray_icon {
-                    crate::tray::update_tray_icon(tray, self.status);
-                }
-
-                if let Some(e) = err {
-                    // Store the error category for display
-                    self.error_category = category;
-
-                    // Check if this is an automation failure that needs the special banner
-                    if matches!(category, Some(kuvpn::ErrorCategory::Authentication))
-                        && (e.contains("Full Auto mode unable to complete login")
-                            || e.contains("Could not find a handler"))
-                    {
-                        // For automation failures, show simple actionable message
-                        self.automation_warning = Some(
-                            "Full Auto mode was unable to complete the login flow.\n\n\
-                             What to do:\n\
-                             • Switch to Manual mode and complete login yourself\n\
-                             • Try clearing session data (Wipe Session button)\n\
-                             • Use Visual Auto mode to record a video for bug reporting\n\n\
-                             Check console/logs for technical details."
-                                .to_string(),
-                        );
-                        // Clear error_message so we don't show it twice
-                        self.error_message = None;
-                    } else {
-                        // For other errors, show in the normal error display
-                        self.error_message = Some(e.clone());
-                    }
-                }
-                Task::none()
+                self.handle_connection_finished(err, category)
             }
-            Message::StatusChanged(status) => {
-                if self.status != status {
-                    self.status = status;
-                    if let Some(item) = &self.connect_item {
-                        item.set_enabled(status == ConnectionStatus::Disconnected);
-                    }
-                    if let Some(item) = &self.disconnect_item {
-                        item.set_enabled(status == ConnectionStatus::Connected);
-                    }
-                    // Detect and store the active VPN interface name when connected.
-                    // On Linux this checks sysfs; on macOS it reads ifconfig for utun%d.
-                    if status == ConnectionStatus::Connected {
-                        #[cfg(unix)]
-                        {
-                            self.active_interface = kuvpn::get_vpn_interface_name("kuvpn0");
-                        }
-                    } else if status == ConnectionStatus::Disconnected
-                        || status == ConnectionStatus::Error
-                    {
-                        self.active_interface = None;
-                    }
-                    // Update tray icon based on new status
-                    if let Some(tray) = &self.tray_icon {
-                        crate::tray::update_tray_icon(tray, status);
-                    }
-                }
-                Task::none()
-            }
+            Message::StatusChanged(status) => self.handle_status_changed(status),
             Message::ResetSettings => {
                 let old_use_csd = self.settings.use_client_decorations;
                 self.settings = GuiSettings::default();
@@ -776,9 +776,7 @@ impl KuVpnGui {
     pub fn subscription(&self) -> Subscription<Message> {
         let mut subs = vec![];
 
-        if self.status == ConnectionStatus::Connecting
-            || self.status == ConnectionStatus::Disconnecting
-        {
+        if self.is_transitioning() {
             subs.push(
                 iced::time::every(std::time::Duration::from_millis(16)).map(|_| Message::Tick),
             );
@@ -827,9 +825,7 @@ impl Default for KuVpnGui {
         #[allow(unused_mut)]
         let mut settings = GuiSettings::load();
 
-        if let Ok(mut guard) = crate::logger::GUI_LOGGER.user_level.lock() {
-            *guard = log_level_from_slider(settings.log_level_val);
-        }
+        crate::logger::GUI_LOGGER.set_level(log_level_from_slider(settings.log_level_val));
 
         // Detect which privilege escalation tools are installed on this system.
         // On Windows this is always empty (elevation is handled differently).

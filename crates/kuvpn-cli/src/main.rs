@@ -14,86 +14,245 @@ use kuvpn::{
     init_logger, run_login_and_get_dsid, ConnectionStatus, LoginConfig, ParsedLog, SessionConfig,
     VpnSession,
 };
-use log::info;
 use std::process::ExitCode;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
-/// The main entry point of the application.
+// ── Terminal styles ───────────────────────────────────────────────────────────
+
+struct CliStyles {
+    green: Style,
+    red: Style,
+    dim: Style,
+    bold: Style,
+    yellow: Style,
+}
+
+impl CliStyles {
+    fn new() -> Self {
+        Self {
+            green: Style::new().green().bold(),
+            red: Style::new().red().bold(),
+            dim: Style::new().dim(),
+            bold: Style::new().bold(),
+            yellow: Style::new().yellow().bold(),
+        }
+    }
+}
+
+// ── Log message handling ──────────────────────────────────────────────────────
+
+/// Processes one parsed log entry.
+///
+/// Returns `true` if the message was handled (no further processing needed).
+/// Mutates `spinner_active` and `connection_start` in place.
+fn handle_log(
+    parsed: &ParsedLog,
+    spinner: &ProgressBar,
+    spinner_active: &mut bool,
+    connection_start: &mut Option<Instant>,
+    styles: &CliStyles,
+    interface_name: &str,
+) -> bool {
+    let msg = parsed.message.as_str();
+
+    match msg {
+        "Accessing campus gateway..." => {
+            if !*spinner_active {
+                spinner.enable_steady_tick(Duration::from_millis(80));
+                *spinner_active = true;
+            }
+            spinner.set_message("Accessing campus gateway...");
+            return true;
+        }
+        "Initializing tunnel..." => {
+            clear_spinner(spinner, spinner_active);
+            eprintln!(
+                "  {} Accessing campus gateway...",
+                styles.green.apply_to("✓")
+            );
+            eprintln!("  {} Initializing tunnel...", styles.green.apply_to("✓"));
+            return true;
+        }
+        "VPN interface already active, monitoring..." => {
+            clear_spinner(spinner, spinner_active);
+            eprintln!(
+                "  {} VPN already active, monitoring connection",
+                styles.yellow.apply_to("~"),
+            );
+            *connection_start = Some(Instant::now());
+            return true;
+        }
+        "Connected." => {
+            clear_spinner(spinner, spinner_active);
+            *connection_start = Some(Instant::now());
+            print_connected(interface_name, styles);
+            eprintln!("    {}", styles.dim.apply_to("Press Ctrl+C to disconnect"));
+            return true;
+        }
+        "Disconnecting..." => {
+            if *spinner_active {
+                spinner.finish_and_clear();
+            }
+            spinner.set_message("Disconnecting...");
+            spinner.enable_steady_tick(Duration::from_millis(80));
+            *spinner_active = true;
+            return true;
+        }
+        "Disconnected." => {
+            clear_spinner(spinner, spinner_active);
+            let duration = connection_start
+                .map(|s| format!(" (session: {})", format_duration(s.elapsed())))
+                .unwrap_or_default();
+            eprintln!(
+                "  {} Disconnected{}",
+                styles.dim.apply_to("●"),
+                styles.dim.apply_to(duration),
+            );
+            return true;
+        }
+        _ if msg.ends_with("requires a password. Prompting...") => return true,
+        _ => {}
+    }
+
+    if parsed.level == log::Level::Error {
+        clear_spinner(spinner, spinner_active);
+        eprintln!("  {} {}", styles.red.apply_to("✗"), msg);
+        if msg.contains("Full Auto mode unable to complete login")
+            || msg.contains("Could not find a handler")
+        {
+            eprintln!();
+            eprintln!(
+                "  {} Try the following:",
+                styles.bold.apply_to("Suggestions:")
+            );
+            eprintln!(
+                "    {} Switch to manual mode: {}",
+                styles.dim.apply_to("•"),
+                styles.bold.apply_to("--no-auto-login --disable-headless"),
+            );
+            eprintln!(
+                "    {} Wipe session cache:    {}",
+                styles.dim.apply_to("•"),
+                styles.bold.apply_to("--clean"),
+            );
+        }
+        return true;
+    }
+
+    // Pass through to the logger for non-status messages.
+    match parsed.level {
+        log::Level::Warn => log::warn!("{}", msg),
+        _ => log::info!("{}", msg),
+    }
+    true
+}
+
+fn clear_spinner(spinner: &ProgressBar, active: &mut bool) {
+    if *active {
+        spinner.finish_and_clear();
+        *active = false;
+    }
+}
+
+fn print_connected(interface_name: &str, styles: &CliStyles) {
+    #[cfg(unix)]
+    {
+        let iface = kuvpn::get_vpn_interface_name(interface_name)
+            .unwrap_or_else(|| interface_name.to_string());
+        eprintln!(
+            "  {} Connected to KU VPN {}",
+            styles.green.apply_to("✓"),
+            styles.dim.apply_to(format!("(interface: {})", iface)),
+        );
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = interface_name;
+        eprintln!("  {} Connected to KU VPN", styles.green.apply_to("✓"));
+    }
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+
 fn main() -> ExitCode {
     let args = Args::parse();
     init_logger(args.level.clone().into());
 
-    let green = Style::new().green().bold();
-    let red = Style::new().red().bold();
-    let dim = Style::new().dim();
-    let bold = Style::new().bold();
-    let yellow = Style::new().yellow().bold();
+    let styles = CliStyles::new();
 
-    // Print banner
     eprintln!(
         "{} {}",
-        bold.apply_to("KUVPN"),
-        dim.apply_to(format!("v{}", env!("CARGO_PKG_VERSION"))),
+        styles.bold.apply_to("KUVPN"),
+        styles
+            .dim
+            .apply_to(format!("v{}", env!("CARGO_PKG_VERSION"))),
     );
 
-    // Ensure only one instance is running
     if let Err(e) = kuvpn::utils::ensure_single_instance() {
-        eprintln!("  {} {}", red.apply_to("✗"), e);
+        eprintln!("  {} {}", styles.red.apply_to("✗"), e);
         return ExitCode::FAILURE;
     }
 
-    // Handle the clean session option.
     if args.clean {
-        match kuvpn::utils::wipe_user_data_dir() {
+        return match kuvpn::utils::wipe_user_data_dir() {
             Ok(_) => {
-                eprintln!("  {} Session data wiped", green.apply_to("✓"));
-                return ExitCode::SUCCESS;
+                eprintln!("  {} Session data wiped", styles.green.apply_to("✓"));
+                ExitCode::SUCCESS
             }
             Err(e) => {
-                eprintln!("  {} Failed to wipe session data: {}", red.apply_to("✗"), e);
-                return ExitCode::FAILURE;
+                eprintln!(
+                    "  {} Failed to wipe session data: {}",
+                    styles.red.apply_to("✗"),
+                    e
+                );
+                ExitCode::FAILURE
             }
-        }
+        };
     }
 
     if args.get_dsid {
-        let spinner = ProgressBar::new_spinner();
-        spinner.set_style(
-            ProgressStyle::default_spinner()
-                .template("{spinner:.cyan} {msg}")
-                .unwrap(),
-        );
-        spinner.set_message("Retrieving DSID...");
-        spinner.enable_steady_tick(std::time::Duration::from_millis(80));
-
-        let login_config = LoginConfig {
-            headless: !args.disable_headless,
-            url: args.url,
-            domain: args.domain,
-            user_agent: "Mozilla/5.0".to_string(),
-            no_auto_login: args.no_auto_login,
-            email: args.email,
-        };
-        match run_login_and_get_dsid(
-            &login_config,
-            &kuvpn::utils::TerminalCredentialsProvider,
-            None,
-            None,
-        ) {
-            Ok(dsid) => {
-                spinner.finish_and_clear();
-                println!("{}", dsid);
-                return ExitCode::SUCCESS;
-            }
-            Err(e) => {
-                spinner.finish_and_clear();
-                eprintln!("  {} Login failed: {}", red.apply_to("✗"), e);
-                return ExitCode::FAILURE;
-            }
-        }
+        return run_get_dsid(&args, &styles);
     }
 
+    run_vpn_session(&args, &styles)
+}
+
+fn run_get_dsid(args: &Args, styles: &CliStyles) -> ExitCode {
+    let spinner = ProgressBar::new_spinner();
+    spinner.set_style(spinner_style());
+    spinner.set_message("Retrieving DSID...");
+    spinner.enable_steady_tick(Duration::from_millis(80));
+
+    let config = LoginConfig {
+        headless: !args.disable_headless,
+        url: args.url.clone(),
+        domain: args.domain.clone(),
+        user_agent: "Mozilla/5.0".to_string(),
+        no_auto_login: args.no_auto_login,
+        email: args.email.clone(),
+    };
+
+    match run_login_and_get_dsid(
+        &config,
+        &kuvpn::utils::TerminalCredentialsProvider,
+        None,
+        None,
+    ) {
+        Ok(dsid) => {
+            spinner.finish_and_clear();
+            println!("{}", dsid);
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            spinner.finish_and_clear();
+            eprintln!("  {} Login failed: {}", styles.red.apply_to("✗"), e);
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run_vpn_session(args: &Args, styles: &CliStyles) -> ExitCode {
     let config = SessionConfig {
         url: args.url.clone(),
         domain: args.domain.clone(),
@@ -106,13 +265,8 @@ fn main() -> ExitCode {
         interface_name: args.interface_name.clone(),
     };
 
-    // Create a shared spinner so the credentials provider can suspend it
     let spinner = Arc::new(ProgressBar::new_spinner());
-    spinner.set_style(
-        ProgressStyle::default_spinner()
-            .template("{spinner:.cyan} {msg}")
-            .unwrap(),
-    );
+    spinner.set_style(spinner_style());
 
     let session = VpnSession::new(config);
     let (log_tx, log_rx) = crossbeam_channel::unbounded();
@@ -123,157 +277,43 @@ fn main() -> ExitCode {
     });
     let _join_handle = session.connect(provider);
 
-    // Set up Ctrl+C handler for graceful disconnect
-    let cancel_session = session.cancel_token();
-    ctrlc::set_handler(move || {
-        cancel_session.cancel();
-    })
-    .ok();
+    let cancel = session.cancel_token();
+    ctrlc::set_handler(move || cancel.cancel()).ok();
 
     let mut connection_start: Option<Instant> = None;
     let mut spinner_active = false;
 
     loop {
-        while let Ok(log_msg) = log_rx.try_recv() {
-            if let Some(parsed) = ParsedLog::parse(&log_msg) {
-                let msg = &parsed.message;
-
-                // Handle key status messages directly (bypass log system)
-                match msg.as_str() {
-                    "Accessing campus gateway..." => {
-                        if !spinner_active {
-                            spinner.enable_steady_tick(std::time::Duration::from_millis(80));
-                            spinner_active = true;
-                        }
-                        spinner.set_message("Accessing campus gateway...");
-                        continue;
-                    }
-                    "Initializing tunnel..." => {
-                        if spinner_active {
-                            spinner.finish_and_clear();
-                            eprintln!("  {} Accessing campus gateway...", green.apply_to("✓"),);
-                            spinner_active = false;
-                        }
-                        eprintln!("  {} Initializing tunnel...", green.apply_to("✓"),);
-                        continue;
-                    }
-                    "VPN interface already active, monitoring..." => {
-                        if spinner_active {
-                            spinner.finish_and_clear();
-                            spinner_active = false;
-                        }
-                        eprintln!(
-                            "  {} VPN already active, monitoring connection",
-                            yellow.apply_to("~"),
-                        );
-                        connection_start = Some(Instant::now());
-                        continue;
-                    }
-                    "Connected." => {
-                        if spinner_active {
-                            spinner.finish_and_clear();
-                            spinner_active = false;
-                        }
-                        connection_start = Some(Instant::now());
-
-                        #[cfg(unix)]
-                        {
-                            let iface = kuvpn::get_vpn_interface_name(&args.interface_name)
-                                .unwrap_or_else(|| args.interface_name.clone());
-                            eprintln!(
-                                "  {} Connected to KU VPN {}",
-                                green.apply_to("✓"),
-                                dim.apply_to(format!("(interface: {})", iface)),
-                            );
-                        }
-                        #[cfg(not(unix))]
-                        eprintln!("  {} Connected to KU VPN", green.apply_to("✓"),);
-
-                        eprintln!("    {}", dim.apply_to("Press Ctrl+C to disconnect"),);
-                        continue;
-                    }
-                    "Disconnecting..." => {
-                        if spinner_active {
-                            spinner.finish_and_clear();
-                        }
-                        spinner.set_message("Disconnecting...");
-                        spinner.enable_steady_tick(std::time::Duration::from_millis(80));
-                        spinner_active = true;
-                        continue;
-                    }
-                    "Disconnected." => {
-                        if spinner_active {
-                            spinner.finish_and_clear();
-                            spinner_active = false;
-                        }
-                        let duration_str = connection_start
-                            .map(|s| format!(" (session: {})", format_duration(s.elapsed())))
-                            .unwrap_or_default();
-                        eprintln!(
-                            "  {} Disconnected{}",
-                            dim.apply_to("●"),
-                            dim.apply_to(duration_str),
-                        );
-                        continue;
-                    }
-                    _ => {
-                        // Suppress password prompt log messages (provider handles the prompt)
-                        if msg.ends_with("requires a password. Prompting...") {
-                            continue;
-                        }
-                    }
-                }
-
-                // Handle errors - always print
-                if parsed.level == log::Level::Error {
-                    if spinner_active {
-                        spinner.finish_and_clear();
-                        spinner_active = false;
-                    }
-                    eprintln!("  {} {}", red.apply_to("✗"), msg);
-
-                    // Show recovery suggestions for auth errors
-                    if msg.contains("Full Auto mode unable to complete login")
-                        || msg.contains("Could not find a handler")
-                    {
-                        eprintln!();
-                        eprintln!("  {} Try the following:", bold.apply_to("Suggestions:"));
-                        eprintln!(
-                            "    {} Switch to manual mode: {}",
-                            dim.apply_to("•"),
-                            bold.apply_to("--no-auto-login --disable-headless"),
-                        );
-                        eprintln!(
-                            "    {} Wipe session cache:    {}",
-                            dim.apply_to("•"),
-                            bold.apply_to("--clean"),
-                        );
-                    }
-                    continue;
-                }
-
-                // Other messages go through the log system
-                match parsed.level {
-                    log::Level::Warn => log::warn!("{}", msg),
-                    _ => info!("{}", msg),
-                }
+        while let Ok(raw) = log_rx.try_recv() {
+            if let Some(parsed) = ParsedLog::parse(&raw) {
+                handle_log(
+                    &parsed,
+                    &spinner,
+                    &mut spinner_active,
+                    &mut connection_start,
+                    styles,
+                    &args.interface_name,
+                );
             } else {
-                info!("{}", log_msg);
+                log::info!("{}", raw);
             }
         }
 
         if session.is_finished() {
-            if spinner_active {
-                spinner.finish_and_clear();
-            }
-            if session.status() == ConnectionStatus::Error {
-                return ExitCode::FAILURE;
-            }
-            break;
+            clear_spinner(&spinner, &mut spinner_active);
+            return if session.status() == ConnectionStatus::Error {
+                ExitCode::FAILURE
+            } else {
+                ExitCode::SUCCESS
+            };
         }
 
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        std::thread::sleep(Duration::from_millis(100));
     }
+}
 
-    ExitCode::SUCCESS
+fn spinner_style() -> ProgressStyle {
+    ProgressStyle::default_spinner()
+        .template("{spinner:.cyan} {msg}")
+        .unwrap()
 }

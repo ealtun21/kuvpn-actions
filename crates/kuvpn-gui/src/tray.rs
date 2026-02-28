@@ -91,11 +91,12 @@ pub fn update_tray_icon(tray: &TrayIcon, status: kuvpn::ConnectionStatus) {
         }
     };
 
-    if let Ok(icon) = svg_to_tray_icon(svg_bytes) {
-        if let Err(e) = tray.set_icon(Some(icon)) {
-            log::error!("Failed to update tray icon: {}", e);
+    match svg_to_tray_icon(svg_bytes) {
+        Err(_) => log::error!("Failed to convert SVG to tray icon"),
+        Ok(icon) => {
+            if let Err(e) = tray.set_icon(Some(icon)) {
+                log::error!("Failed to update tray icon: {}", e);
+            }
         }
-    } else {
-        log::error!("Failed to convert SVG to tray icon");
     }
 }

@@ -14,6 +14,49 @@ use iced::widget::{button, column, container, mouse_area, row, stack, svg, text,
 use iced::{Alignment, Border, Color, Element, Length, Shadow};
 use kuvpn::ConnectionStatus;
 
+/// Builds a single tab-bar segment button with the given icon, label, target tab,
+/// segment position, and active state.
+fn tab_button(
+    icon: &'static [u8],
+    label: &'static str,
+    tab: Tab,
+    position: SegmentPosition,
+    active: bool,
+) -> Element<'static, Message> {
+    button(
+        container(
+            row![
+                svg(svg::Handle::from_memory(icon))
+                    .width(15)
+                    .height(15)
+                    .style(move |_theme: &iced::Theme, _status| svg::Style {
+                        color: Some(if active {
+                            iced::Color::WHITE
+                        } else {
+                            COLOR_TEXT_DIM
+                        }),
+                    }),
+                text(label).size(13),
+            ]
+            .spacing(6)
+            .align_y(Alignment::Center),
+        )
+        .width(Length::Fill)
+        .center_x(Length::Fill),
+    )
+    .padding([10, 0])
+    .width(Length::Fill)
+    .on_press(Message::TabChanged(tab))
+    .style(move |theme, status| {
+        if active {
+            btn_segment_selected(theme, status, position)
+        } else {
+            btn_segment_unselected(theme, status, position)
+        }
+    })
+    .into()
+}
+
 impl KuVpnGui {
     fn view_title_bar(&self) -> Element<'_, Message> {
         let (dot_color, bar_label) = match self.status {
@@ -203,106 +246,31 @@ impl KuVpnGui {
     }
 
     fn view_tab_bar(&self) -> Element<'_, Message> {
-        let conn_active = self.current_tab == Tab::Connection;
-        let conn_btn = button(
-            container(
-                row![
-                    svg(svg::Handle::from_memory(ICON_SHIELD_SVG))
-                        .width(15)
-                        .height(15)
-                        .style(move |_theme: &iced::Theme, _status| svg::Style {
-                            color: Some(if conn_active {
-                                iced::Color::WHITE
-                            } else {
-                                COLOR_TEXT_DIM
-                            })
-                        }),
-                    text("Connection").size(13),
-                ]
-                .spacing(6)
-                .align_y(Alignment::Center),
-            )
-            .width(Length::Fill)
-            .center_x(Length::Fill),
-        )
-        .padding([10, 0])
-        .width(Length::Fill)
-        .on_press(Message::TabChanged(Tab::Connection))
-        .style(move |theme, status| {
-            if conn_active {
-                btn_segment_selected(theme, status, SegmentPosition::Left)
-            } else {
-                btn_segment_unselected(theme, status, SegmentPosition::Left)
-            }
-        });
-
-        let settings_active = self.current_tab == Tab::Settings;
-        let settings_btn = button(
-            container(
-                row![
-                    svg(svg::Handle::from_memory(ICON_SETTINGS_SVG))
-                        .width(15)
-                        .height(15)
-                        .style(move |_theme: &iced::Theme, _status| svg::Style {
-                            color: Some(if settings_active {
-                                iced::Color::WHITE
-                            } else {
-                                COLOR_TEXT_DIM
-                            })
-                        }),
-                    text("Settings").size(13),
-                ]
-                .spacing(6)
-                .align_y(Alignment::Center),
-            )
-            .width(Length::Fill)
-            .center_x(Length::Fill),
-        )
-        .padding([10, 0])
-        .width(Length::Fill)
-        .on_press(Message::TabChanged(Tab::Settings))
-        .style(move |theme, status| {
-            if settings_active {
-                btn_segment_selected(theme, status, SegmentPosition::Middle)
-            } else {
-                btn_segment_unselected(theme, status, SegmentPosition::Middle)
-            }
-        });
-
-        let console_active = self.current_tab == Tab::Console;
-        let console_btn = button(
-            container(
-                row![
-                    svg(svg::Handle::from_memory(ICON_TERMINAL_SVG))
-                        .width(15)
-                        .height(15)
-                        .style(move |_theme: &iced::Theme, _status| svg::Style {
-                            color: Some(if console_active {
-                                iced::Color::WHITE
-                            } else {
-                                COLOR_TEXT_DIM
-                            })
-                        }),
-                    text("Console").size(13),
-                ]
-                .spacing(6)
-                .align_y(Alignment::Center),
-            )
-            .width(Length::Fill)
-            .center_x(Length::Fill),
-        )
-        .padding([10, 0])
-        .width(Length::Fill)
-        .on_press(Message::TabChanged(Tab::Console))
-        .style(move |theme, status| {
-            if console_active {
-                btn_segment_selected(theme, status, SegmentPosition::Right)
-            } else {
-                btn_segment_unselected(theme, status, SegmentPosition::Right)
-            }
-        });
-
-        row![conn_btn, settings_btn, console_btn].spacing(0).into()
+        row![
+            tab_button(
+                ICON_SHIELD_SVG,
+                "Connection",
+                Tab::Connection,
+                SegmentPosition::Left,
+                self.current_tab == Tab::Connection
+            ),
+            tab_button(
+                ICON_SETTINGS_SVG,
+                "Settings",
+                Tab::Settings,
+                SegmentPosition::Middle,
+                self.current_tab == Tab::Settings
+            ),
+            tab_button(
+                ICON_TERMINAL_SVG,
+                "Console",
+                Tab::Console,
+                SegmentPosition::Right,
+                self.current_tab == Tab::Console
+            ),
+        ]
+        .spacing(0)
+        .into()
     }
 
     fn view_connection_tab(&self) -> Element<'_, Message> {

@@ -273,10 +273,9 @@ impl BrowserSession {
         }
 
         let mut handled: HashSet<&'static str> = HashSet::new();
-        let mut last_url = "".to_string();
+        let mut last_url = String::new();
         let mut retries = 0;
         let mut reset_count = 0;
-        let mut is_in_mfa_wait;
 
         loop {
             if let Some(token) = cancel_token {
@@ -319,7 +318,7 @@ impl BrowserSession {
                 // Here we just reset the flag and wire up the guard to read it.
                 self.setup_page_guard(provider);
 
-                match self.try_handle_page(
+                let is_in_mfa_wait = match self.try_handle_page(
                     &mut handled,
                     config.email.as_ref(),
                     provider,
@@ -327,17 +326,17 @@ impl BrowserSession {
                 ) {
                     Ok((true, is_mfa)) => {
                         retries = 0;
-                        is_in_mfa_wait = is_mfa;
+                        is_mfa
                     }
                     Ok((false, _)) => {
                         retries += 1;
-                        is_in_mfa_wait = false;
+                        false
                     }
                     Err(e) => {
                         log::warn!("[!] Handler error: {}", e);
                         return Err(e);
                     }
-                }
+                };
 
                 provider.clear_page_guard();
 

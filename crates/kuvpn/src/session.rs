@@ -4,7 +4,7 @@ use crate::openconnect::{
     OpenConnectRunner, VpnProcess,
 };
 use crate::utils::{CancellationToken, CredentialsProvider};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -122,6 +122,22 @@ fn resolve_sudo_password(
     Ok(None)
 }
 
+/// Spawns a thread that reads lines from `stream` and sends them to the log channel
+/// prefixed with `level` (e.g. "Info" or "Warn").
+fn spawn_stream_reader<R: Read + Send + 'static>(
+    stream: R,
+    level: &'static str,
+    logs_tx: Arc<Mutex<Option<crossbeam_channel::Sender<String>>>>,
+) {
+    thread::spawn(move || {
+        for line in BufReader::new(stream).lines().map_while(Result::ok) {
+            if let Some(tx) = logs_tx.lock().unwrap().as_ref() {
+                let _ = tx.send(format!("{}|{}", level, line));
+            }
+        }
+    });
+}
+
 struct SessionThread {
     config: SessionConfig,
     status: Arc<Mutex<ConnectionStatus>>,
@@ -160,6 +176,26 @@ impl SessionThread {
         *self.last_error.lock().unwrap() = Some(msg.to_string());
         *self.error_category.lock().unwrap() = Some(crate::error::ErrorCategory::Connection);
         self.send_log(format!("Error|{}", msg));
+    }
+
+    fn clear_browser_pid(&self) {
+        *self.browser_pid.lock().unwrap() = None;
+    }
+
+    fn handle_login_error(&self, e: anyhow::Error) {
+        let mut status = self.status.lock().unwrap();
+        if *status == ConnectionStatus::Disconnecting {
+            *status = ConnectionStatus::Disconnected;
+        } else {
+            let category = e
+                .downcast_ref::<crate::error::AuthError>()
+                .map(|ae| ae.category())
+                .unwrap_or(crate::error::ErrorCategory::Authentication);
+            *status = ConnectionStatus::Error;
+            *self.last_error.lock().unwrap() = Some(e.to_string());
+            *self.error_category.lock().unwrap() = Some(category);
+            self.send_log(format!("Error|{}", e));
+        }
     }
 
     fn run(self, provider: Arc<dyn CredentialsProvider>) {
@@ -211,36 +247,15 @@ impl SessionThread {
             email: self.config.email.clone(),
         };
 
-        match run_login_and_get_dsid(
+        let result = run_login_and_get_dsid(
             &login_config,
             provider.as_ref(),
             Some(self.cancel_token.clone()),
             Some(Arc::clone(&self.browser_pid)),
-        ) {
-            Ok(d) => {
-                *self.browser_pid.lock().unwrap() = None;
-                Ok(d)
-            }
-            Err(e) => {
-                *self.browser_pid.lock().unwrap() = None;
-                let mut s = self.status.lock().unwrap();
-                if *s != ConnectionStatus::Disconnecting {
-                    *s = ConnectionStatus::Error;
-                    let category =
-                        if let Some(auth_err) = e.downcast_ref::<crate::error::AuthError>() {
-                            auth_err.category()
-                        } else {
-                            crate::error::ErrorCategory::Authentication
-                        };
-                    *self.last_error.lock().unwrap() = Some(e.to_string());
-                    *self.error_category.lock().unwrap() = Some(category);
-                    self.send_log(format!("Error|{}", e));
-                } else {
-                    *s = ConnectionStatus::Disconnected;
-                }
-                Err(())
-            }
-        }
+        );
+
+        self.clear_browser_pid();
+        result.map_err(|e| self.handle_login_error(e))
     }
 
     fn start_openconnect(
@@ -292,26 +307,10 @@ impl SessionThread {
     fn spawn_log_readers(&self, proc: &mut VpnProcess) {
         if let VpnProcess::Unix(ref mut child) = proc {
             if let Some(stdout) = child.stdout.take() {
-                let logs_tx = Arc::clone(&self.logs_tx);
-                thread::spawn(move || {
-                    let reader = BufReader::new(stdout);
-                    for l in reader.lines().map_while(Result::ok) {
-                        if let Some(tx) = logs_tx.lock().unwrap().as_ref() {
-                            let _ = tx.send(format!("Info|{}", l));
-                        }
-                    }
-                });
+                spawn_stream_reader(stdout, "Info", Arc::clone(&self.logs_tx));
             }
             if let Some(stderr) = child.stderr.take() {
-                let logs_tx = Arc::clone(&self.logs_tx);
-                thread::spawn(move || {
-                    let reader = BufReader::new(stderr);
-                    for l in reader.lines().map_while(Result::ok) {
-                        if let Some(tx) = logs_tx.lock().unwrap().as_ref() {
-                            let _ = tx.send(format!("Warn|{}", l));
-                        }
-                    }
-                });
+                spawn_stream_reader(stderr, "Warn", Arc::clone(&self.logs_tx));
             }
         }
     }
@@ -363,10 +362,7 @@ impl SessionThread {
         }
 
         if is_openconnect_running() {
-            self.set_status(ConnectionStatus::Error);
-            *self.last_error.lock().unwrap() =
-                Some("Failed to stop OpenConnect. Please close it manually.".to_string());
-            self.send_log("Error|Failed to stop OpenConnect.");
+            self.set_conn_error("Failed to stop OpenConnect. Please close it manually.");
         } else {
             self.set_status(ConnectionStatus::Disconnected);
             self.send_log("Info|Disconnected.");
@@ -401,6 +397,31 @@ impl VpnSession {
         *self.logs_tx.lock().unwrap() = Some(tx);
     }
 
+    fn take_browser_pid(&self) -> Option<u32> {
+        self.browser_pid.lock().unwrap().take()
+    }
+
+    fn transition_to_disconnecting(&self) {
+        let mut status = self.status.lock().unwrap();
+        if matches!(
+            *status,
+            ConnectionStatus::Connected | ConnectionStatus::Connecting
+        ) {
+            *status = ConnectionStatus::Disconnecting;
+        }
+    }
+
+    fn try_begin_connect(&self) -> bool {
+        let mut s = self.status.lock().unwrap();
+        if *s != ConnectionStatus::Disconnected && *s != ConnectionStatus::Error {
+            return false;
+        }
+        *s = ConnectionStatus::Connecting;
+        *self.last_error.lock().unwrap() = None;
+        *self.error_category.lock().unwrap() = None;
+        true
+    }
+
     pub fn status(&self) -> ConnectionStatus {
         *self.status.lock().unwrap()
     }
@@ -425,14 +446,10 @@ impl VpnSession {
 
     pub fn cancel(&self) {
         self.cancel_token.cancel();
-        let mut status = self.status.lock().unwrap();
-        if *status == ConnectionStatus::Connected || *status == ConnectionStatus::Connecting {
-            *status = ConnectionStatus::Disconnecting;
-        }
-        drop(status);
+        self.transition_to_disconnecting();
 
         // Force-kill the browser process to unblock any pending CDP calls
-        if let Some(pid) = self.browser_pid.lock().unwrap().take() {
+        if let Some(pid) = self.take_browser_pid() {
             log::info!("[*] Force-killing browser process (PID: {})", pid);
             #[cfg(unix)]
             {
@@ -453,16 +470,9 @@ impl VpnSession {
     }
 
     pub fn connect(&self, provider: Arc<dyn CredentialsProvider>) -> thread::JoinHandle<()> {
-        {
-            let mut s = self.status.lock().unwrap();
-            if *s != ConnectionStatus::Disconnected && *s != ConnectionStatus::Error {
-                return thread::spawn(|| {});
-            }
-            *s = ConnectionStatus::Connecting;
-            *self.last_error.lock().unwrap() = None;
-            *self.error_category.lock().unwrap() = None;
+        if !self.try_begin_connect() {
+            return thread::spawn(|| {});
         }
-
         let thread = SessionThread::from_session(self);
         thread::spawn(move || thread.run(provider))
     }
