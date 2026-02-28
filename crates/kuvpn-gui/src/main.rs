@@ -32,6 +32,14 @@ fn get_subscription(gui: &KuVpnGui) -> iced::Subscription<Message> {
 }
 
 pub fn main() -> iced::Result {
+    // VPN helper mode: invoked by the app itself under elevation to manage
+    // OpenConnect's lifecycle (single UAC prompt per connection).
+    // Must run before any GUI initialisation.
+    #[cfg(windows)]
+    if let Some(code) = kuvpn::run_vpn_helper_if_requested() {
+        std::process::exit(code);
+    }
+
     // Ensure only one instance is running
     if let Err(e) = kuvpn::utils::ensure_single_instance() {
         eprintln!("{}", e);
