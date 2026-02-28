@@ -14,6 +14,7 @@ pub const WINDOW_ICON: &[u8] = include_bytes!("../assets/icon-512.png");
 pub const TRAY_ICON_NORMAL: &[u8] = include_bytes!("../assets/vpn-normal.svg");
 pub const TRAY_ICON_CONNECTED: &[u8] = include_bytes!("../assets/vpn-connected.svg");
 pub const TRAY_ICON_DISCONNECTED: &[u8] = include_bytes!("../assets/vpn-disconnected.svg");
+pub const TRAY_ICON_CONNECTING: &[u8] = include_bytes!("../assets/vpn-connecting.svg");
 
 // Colors (Refined Koç University Palette)
 pub const COLOR_BG: Color = Color::from_rgb(0.07, 0.07, 0.07);
@@ -106,6 +107,7 @@ pub enum Message {
     AutoHideAfterPromptToggled(bool),
     AutoHideWindow,
     ShowPasswordHeld(bool),
+    ActionNotifTick,
 }
 
 #[derive(Debug)]
