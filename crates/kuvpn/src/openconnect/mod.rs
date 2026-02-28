@@ -5,7 +5,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::{Child, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use which::which;
 
@@ -38,6 +38,8 @@ pub enum VpnProcess {
     Windows {
         /// Set to `true` when the runas background thread finishes.
         thread_finished: Arc<AtomicBool>,
+        /// PID of the openconnect process (0 = not yet discovered).
+        pid: Arc<AtomicU32>,
     },
 }
 
@@ -48,7 +50,10 @@ impl VpnProcess {
             VpnProcess::Unix(child) => unix::kill_vpn_process(child),
 
             #[cfg(windows)]
-            VpnProcess::Windows { .. } => windows::kill_vpn_process(),
+            VpnProcess::Windows { pid, .. } => {
+                let p = pid.load(Ordering::SeqCst);
+                windows::kill_vpn_process(if p == 0 { None } else { Some(p) })
+            }
 
             #[allow(unreachable_patterns)]
             _ => Ok(()),
@@ -62,7 +67,9 @@ impl VpnProcess {
             VpnProcess::Unix(child) => unix::vpn_process_alive(child),
 
             #[cfg(windows)]
-            VpnProcess::Windows { thread_finished } => windows::vpn_process_alive(thread_finished),
+            VpnProcess::Windows {
+                thread_finished, ..
+            } => windows::vpn_process_alive(thread_finished),
 
             #[allow(unreachable_patterns)]
             _ => false,
@@ -76,7 +83,9 @@ impl VpnProcess {
                 child.wait()?;
                 Ok(())
             }
-            VpnProcess::Windows { thread_finished } => {
+            VpnProcess::Windows {
+                thread_finished, ..
+            } => {
                 let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
                 while !thread_finished.load(Ordering::SeqCst) {
                     if std::time::Instant::now() >= deadline {
