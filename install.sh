@@ -11,6 +11,7 @@ GUI_NAME="KUVPN"
 VERSION="${VERSION:-latest}"
 INSTALL_CLI=0
 INSTALL_GUI=0
+MUSL_LINUX=0
 
 # --- Colors ---
 if [ -t 1 ]; then
@@ -144,6 +145,15 @@ detect_package_manager() {
     elif command -v zypper >/dev/null 2>&1; then echo "zypper"
     elif command -v brew >/dev/null 2>&1; then echo "brew"
     else echo "none"
+    fi
+}
+
+# --- Musl Detection ---
+detect_musl() {
+    if [ "$(uname -s)" = "Linux" ]; then
+        if ldd --version 2>&1 | grep -qi musl; then
+            MUSL_LINUX=1
+        fi
     fi
 }
 
@@ -444,6 +454,15 @@ update_shell_config() {
 # --- Interactive Selection ---
 interactive_select() {
     echo ""
+    if [ "$MUSL_LINUX" -eq 1 ]; then
+        log_warn "GUI is not supported on musl-based Linux systems."
+        echo "  The GUI (AppImage) requires glibc and cannot run on musl libc."
+        echo "  Only the CLI (statically linked musl binary) is available."
+        echo ""
+        INSTALL_CLI=1
+        INSTALL_GUI=0
+        return
+    fi
     echo "What would you like to install?"
     echo "  1) CLI only  (command-line, run with: kuvpn)"
     echo "  2) GUI only  (graphical app with system tray)"
@@ -522,6 +541,8 @@ echo ""
 log_info "KUVPN Installer"
 echo ""
 
+detect_musl
+
 # Parse arguments
 if [ $# -eq 0 ]; then
     interactive_select
@@ -529,8 +550,23 @@ else
     for arg in "$@"; do
         case $arg in
             --cli)         INSTALL_CLI=1 ;;
-            --gui)         INSTALL_GUI=1 ;;
-            --all)         INSTALL_CLI=1; INSTALL_GUI=1 ;;
+            --gui)
+                if [ "$MUSL_LINUX" -eq 1 ]; then
+                    log_warn "GUI is not supported on musl-based Linux. Ignoring --gui."
+                    echo "  The GUI (AppImage) requires glibc. Only the CLI is available on musl."
+                else
+                    INSTALL_GUI=1
+                fi
+                ;;
+            --all)
+                INSTALL_CLI=1
+                if [ "$MUSL_LINUX" -eq 1 ]; then
+                    log_warn "GUI is not supported on musl-based Linux. Installing CLI only."
+                    echo "  The GUI (AppImage) requires glibc. Only the CLI is available on musl."
+                else
+                    INSTALL_GUI=1
+                fi
+                ;;
             --version=*)   VERSION="${arg#*=}" ;;
             -y|--yes|--force) ;; # legacy flag, no-op now
         esac
