@@ -6,15 +6,35 @@ pub struct GuiLogger {
     pub user_level: Mutex<log::LevelFilter>,
 }
 
+impl GuiLogger {
+    pub fn set_tx(&self, tx: mpsc::Sender<String>) {
+        if let Ok(mut guard) = self.tx.lock() {
+            *guard = Some(tx);
+        }
+    }
+
+    pub fn set_level(&self, level: log::LevelFilter) {
+        if let Ok(mut guard) = self.user_level.lock() {
+            *guard = level;
+        }
+    }
+
+    pub fn get_level(&self) -> log::LevelFilter {
+        self.user_level
+            .lock()
+            .map(|g| *g)
+            .unwrap_or(log::LevelFilter::Info)
+    }
+}
+
 impl log::Log for GuiLogger {
     fn enabled(&self, metadata: &log::Metadata) -> bool {
         metadata.level() <= log::Level::Trace
     }
     fn log(&self, record: &log::Record) {
-        if let Ok(guard) = self.tx.lock() {
-            if let Some(tx) = &*guard {
-                let _ = tx.try_send(format!("{:?}|{}", record.level(), record.args()));
-            }
+        let Ok(guard) = self.tx.lock() else { return };
+        if let Some(tx) = &*guard {
+            let _ = tx.try_send(format!("{:?}|{}", record.level(), record.args()));
         }
     }
     fn flush(&self) {}

@@ -1,7 +1,7 @@
 use headless_chrome::browser::default_executable;
 use headless_chrome::{Browser, LaunchOptions};
 use std::error::Error;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::time::Duration;
 
 /// Creates a browser instance configured with a blank page, a custom user agent,
@@ -30,10 +30,6 @@ pub fn create_browser(
     manual_mode: bool,
 ) -> Result<Browser, Box<dyn Error>> {
     let user_agent = OsString::from(format!("--user-agent={agent}"));
-    let window = OsString::from("--new-window");
-    let no_first_run = OsString::from("--no-first-run");
-    let no_default_browser_check = OsString::from("--no-default-browser-check");
-    let disable_session_crashed_bubble = OsString::from("--disable-session-crashed-bubble");
 
     let mut attempts = 0;
     loop {
@@ -56,12 +52,12 @@ pub fn create_browser(
             .window_size(Some((800, 800)))
             .enable_gpu(false)
             .args(vec![
-                window.as_os_str(),
+                OsStr::new("--new-window"),
                 user_agent.as_os_str(),
-                no_first_run.as_os_str(),
-                no_default_browser_check.as_os_str(),
-                disable_session_crashed_bubble.as_os_str(),
-                std::ffi::OsStr::new("--lang=en-US"),
+                OsStr::new("--no-first-run"),
+                OsStr::new("--no-default-browser-check"),
+                OsStr::new("--disable-session-crashed-bubble"),
+                OsStr::new("--lang=en-US"),
             ])
             .user_data_dir(Some(user_data_dir));
 
