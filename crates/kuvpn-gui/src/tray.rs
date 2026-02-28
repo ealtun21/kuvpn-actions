@@ -3,7 +3,9 @@ use tray_icon::{
     TrayIcon, TrayIconBuilder,
 };
 
-use crate::types::{TRAY_ICON_CONNECTED, TRAY_ICON_DISCONNECTED, TRAY_ICON_NORMAL};
+use crate::types::{
+    TRAY_ICON_CONNECTED, TRAY_ICON_CONNECTING, TRAY_ICON_DISCONNECTED, TRAY_ICON_NORMAL,
+};
 
 pub struct TrayComponents {
     pub tray: TrayIcon,
@@ -12,13 +14,19 @@ pub struct TrayComponents {
     pub disconnect_item: MenuItem,
 }
 
+/// Render size for tray icons. Windows system tray uses 16–32 px; supply 32 so
+/// the OS has clean source pixels for DPI scaling rather than downsampling from 512.
+#[cfg(windows)]
+const TRAY_RENDER_SIZE: u32 = 32;
+#[cfg(not(windows))]
+const TRAY_RENDER_SIZE: u32 = 256;
+
 /// Convert SVG bytes to a tray icon
 fn svg_to_tray_icon(svg_bytes: &[u8]) -> Result<tray_icon::Icon, Box<dyn std::error::Error>> {
     let opt = resvg::usvg::Options::default();
     let tree = resvg::usvg::Tree::from_data(svg_bytes, &opt)?;
 
-    // Render at a reasonable size for tray icons
-    let size = 512;
+    let size = TRAY_RENDER_SIZE;
 
     let mut pixmap = resvg::tiny_skia::Pixmap::new(size, size).ok_or("Failed to create pixmap")?;
 
@@ -79,17 +87,17 @@ pub fn init_tray() -> TrayComponents {
     }
 }
 
-/// Update the tray icon based on connection status
+/// Update the tray icon and tooltip based on connection status
 pub fn update_tray_icon(tray: &TrayIcon, status: kuvpn::ConnectionStatus) {
-    let svg_bytes = match status {
-        kuvpn::ConnectionStatus::Connected => TRAY_ICON_CONNECTED,
-        kuvpn::ConnectionStatus::Disconnected => TRAY_ICON_NORMAL,
-        kuvpn::ConnectionStatus::Error => TRAY_ICON_DISCONNECTED,
-        kuvpn::ConnectionStatus::Connecting | kuvpn::ConnectionStatus::Disconnecting => {
-            // Keep current icon during transition states
-            return;
-        }
+    let (svg_bytes, tooltip) = match status {
+        kuvpn::ConnectionStatus::Connected => (TRAY_ICON_CONNECTED, "KUVPN — Connected"),
+        kuvpn::ConnectionStatus::Disconnected => (TRAY_ICON_NORMAL, "KUVPN — Disconnected"),
+        kuvpn::ConnectionStatus::Error => (TRAY_ICON_DISCONNECTED, "KUVPN — Error"),
+        kuvpn::ConnectionStatus::Connecting => (TRAY_ICON_CONNECTING, "KUVPN — Connecting…"),
+        kuvpn::ConnectionStatus::Disconnecting => (TRAY_ICON_CONNECTING, "KUVPN — Disconnecting…"),
     };
+
+    let _ = tray.set_tooltip(Some(tooltip));
 
     match svg_to_tray_icon(svg_bytes) {
         Err(_) => log::error!("Failed to convert SVG to tray icon"),

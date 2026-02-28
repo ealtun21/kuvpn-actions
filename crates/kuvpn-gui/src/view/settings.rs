@@ -7,7 +7,7 @@ use crate::types::{
     ICON_TRASH_SVG,
 };
 use iced::widget::{button, column, container, row, scrollable, svg, text, text_input};
-use iced::{Alignment, Border, Color, Element, Length, Padding};
+use iced::{Alignment, Border, Color, Element, Length, Padding, Shadow, Vector};
 
 impl KuVpnGui {
     pub fn view_advanced_settings(&self) -> Element<'_, Message> {
@@ -323,45 +323,109 @@ impl KuVpnGui {
                 divider(),
                 // --- Actions Section ---
                 section_label("ACTIONS"),
-                row![
-                    button(
-                        row![
-                            svg(svg::Handle::from_memory(ICON_TRASH_SVG))
-                                .width(13)
-                                .height(13)
-                                .style(|_, _| svg::Style {
-                                    color: Some(COLOR_TEXT)
-                                }),
-                            text("WIPE SESSION").size(11).color(COLOR_TEXT),
-                        ]
-                        .spacing(7)
-                        .align_y(Alignment::Center)
-                    )
-                    .padding([10, 14])
-                    .on_press(Message::ClearSessionPressed)
-                    .style(btn_secondary),
-                    button(
-                        row![
-                            svg(svg::Handle::from_memory(ICON_REFRESH_SVG))
-                                .width(13)
-                                .height(13)
-                                .style(|_, _| svg::Style {
-                                    color: Some(COLOR_TEXT)
-                                }),
-                            text("RESET DEFAULTS").size(11).color(COLOR_TEXT),
-                        ]
-                        .spacing(7)
-                        .align_y(Alignment::Center)
-                    )
-                    .padding([10, 14])
-                    .on_press(if is_locked {
-                        Message::Tick
+                {
+                    let fade = self.notif_fade;
+
+                    let wipe_btn: Element<'_, Message> =
+                        if let Some(success) = self.session_wipe_result {
+                            let (label, r, g, b) = if success {
+                                ("✓  WIPED", 0.42f32, 0.55f32, 0.35f32)
+                            } else {
+                                ("✗  FAILED", 0.8f32, 0.2f32, 0.2f32)
+                            };
+                            button(text(label).size(11).color(Color::from_rgba(1.0, 1.0, 1.0, fade)))
+                                .padding([10, 14])
+                                .on_press(Message::ClearSessionPressed)
+                                .style(move |_, _| button::Style {
+                                    background: Some(
+                                        Color::from_rgba(r, g, b, 0.55 * fade).into(),
+                                    ),
+                                    border: Border {
+                                        radius: 10.0.into(),
+                                        color: Color::from_rgba(r, g, b, 0.75 * fade),
+                                        width: 1.5,
+                                    },
+                                    shadow: Shadow {
+                                        color: Color::from_rgba(r, g, b, 0.45 * fade),
+                                        offset: Vector::new(0.0, 0.0),
+                                        blur_radius: 12.0,
+                                    },
+                                    ..Default::default()
+                                })
+                                .into()
+                        } else {
+                            button(
+                                row![
+                                    svg(svg::Handle::from_memory(ICON_TRASH_SVG))
+                                        .width(13)
+                                        .height(13)
+                                        .style(|_, _| svg::Style {
+                                            color: Some(COLOR_TEXT)
+                                        }),
+                                    text("WIPE SESSION").size(11).color(COLOR_TEXT),
+                                ]
+                                .spacing(7)
+                                .align_y(Alignment::Center),
+                            )
+                            .padding([10, 14])
+                            .on_press(Message::ClearSessionPressed)
+                            .style(btn_secondary)
+                            .into()
+                        };
+
+                    let reset_btn: Element<'_, Message> = if self.reset_notification {
+                        button(
+                            text("✓  RESTORED").size(11).color(Color::from_rgba(1.0, 1.0, 1.0, fade)),
+                        )
+                        .padding([10, 14])
+                        .on_press(if is_locked {
+                            Message::Tick
+                        } else {
+                            Message::ResetSettings
+                        })
+                        .style(move |_, _| button::Style {
+                            background: Some(
+                                Color::from_rgba(0.42, 0.55, 0.35, 0.55 * fade).into(),
+                            ),
+                            border: Border {
+                                radius: 10.0.into(),
+                                color: Color::from_rgba(0.42, 0.55, 0.35, 0.75 * fade),
+                                width: 1.5,
+                            },
+                            shadow: Shadow {
+                                color: Color::from_rgba(0.42, 0.55, 0.35, 0.45 * fade),
+                                offset: Vector::new(0.0, 0.0),
+                                blur_radius: 12.0,
+                            },
+                            ..Default::default()
+                        })
+                        .into()
                     } else {
-                        Message::ResetSettings
-                    })
-                    .style(btn_secondary),
-                ]
-                .spacing(10)
+                        button(
+                            row![
+                                svg(svg::Handle::from_memory(ICON_REFRESH_SVG))
+                                    .width(13)
+                                    .height(13)
+                                    .style(|_, _| svg::Style {
+                                        color: Some(COLOR_TEXT)
+                                    }),
+                                text("RESET DEFAULTS").size(11).color(COLOR_TEXT),
+                            ]
+                            .spacing(7)
+                            .align_y(Alignment::Center),
+                        )
+                        .padding([10, 14])
+                        .on_press(if is_locked {
+                            Message::Tick
+                        } else {
+                            Message::ResetSettings
+                        })
+                        .style(btn_secondary)
+                        .into()
+                    };
+
+                    row([wipe_btn, reset_btn]).spacing(10)
+                }
             ]
             .spacing(12);
 
