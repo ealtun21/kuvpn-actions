@@ -5,7 +5,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::{Child, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use which::which;
 
@@ -38,8 +38,8 @@ pub enum VpnProcess {
     Windows {
         /// Set to `true` when the runas background thread finishes.
         thread_finished: Arc<AtomicBool>,
-        /// PID of the openconnect process (0 = not yet discovered).
-        pid: Arc<AtomicU32>,
+        /// Creating this file signals the elevated helper to stop OpenConnect.
+        stop_file: std::path::PathBuf,
     },
 }
 
@@ -50,10 +50,7 @@ impl VpnProcess {
             VpnProcess::Unix(child) => unix::kill_vpn_process(child),
 
             #[cfg(windows)]
-            VpnProcess::Windows { pid, .. } => {
-                let p = pid.load(Ordering::SeqCst);
-                windows::kill_vpn_process(if p == 0 { None } else { Some(p) })
-            }
+            VpnProcess::Windows { stop_file, .. } => windows::kill_vpn_process(stop_file),
 
             #[allow(unreachable_patterns)]
             _ => Ok(()),

@@ -1,7 +1,7 @@
 //! Windows-specific OpenConnect process management.
 
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use runas::Command as AdminCommand;
@@ -11,49 +11,25 @@ use super::VpnProcess;
 
 // ── Private helpers ───────────────────────────────────────────────────────────
 
-/// Sends an elevated `taskkill /PID` and returns `true` if openconnect stopped.
-fn try_taskkill_pid(pid: u32) -> bool {
-    let mut cmd = AdminCommand::new("taskkill");
-    cmd.show(false)
-        .arg("/F")
-        .arg("/T")
-        .arg("/PID")
-        .arg(pid.to_string());
-    let _ = cmd.status();
-    std::thread::sleep(std::time::Duration::from_millis(500));
-    !is_openconnect_running()
+/// Returns a string unique within this process lifetime (PID + nanosecond timestamp).
+fn unique_id() -> String {
+    use std::time::SystemTime;
+    let t = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    format!("{}-{}", std::process::id(), t)
 }
 
 // ── Platform implementations ──────────────────────────────────────────────────
 
-/// Terminates the specific openconnect process that we launched (elevation required).
-/// Falls back to a non-elevated attempt if the PID is unknown or the kill fails.
-pub(super) fn kill_vpn_process(pid: Option<u32>) -> anyhow::Result<()> {
-    use std::os::windows::process::CommandExt;
-    use std::process::Command as StdCommand;
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
-
-    log::info!("Requesting Admin elevation to stop OpenConnect...");
-
-    if let Some(p) = pid {
-        if try_taskkill_pid(p) {
-            log::info!("OpenConnect (PID {}) terminated successfully", p);
-            return Ok(());
-        }
-        log::warn!(
-            "Elevated kill of PID {} failed, trying non-elevated fallback...",
-            p
-        );
-    } else {
-        log::warn!("OpenConnect PID unknown, trying non-elevated fallback...");
-    }
-
-    // Last resort: non-elevated taskkill by name (may fail for elevated openconnect).
-    let _ = StdCommand::new("taskkill")
-        .creation_flags(CREATE_NO_WINDOW)
-        .args(["/F", "/IM", "openconnect.exe"])
-        .status();
-
+/// Signals the elevated helper to stop OpenConnect by creating the stop-signal file.
+/// The helper polls for this file every 200 ms and terminates OpenConnect when it appears.
+/// No second UAC prompt is needed because the helper owns the OpenConnect child process.
+pub(super) fn kill_vpn_process(stop_file: &Path) -> anyhow::Result<()> {
+    log::info!("Sending stop signal to VPN helper...");
+    std::fs::File::create(stop_file)
+        .map_err(|e| anyhow::anyhow!("Failed to create stop signal file: {}", e))?;
     Ok(())
 }
 
@@ -64,64 +40,56 @@ pub(super) fn vpn_process_alive(thread_finished: &Arc<AtomicBool>) -> bool {
     is_openconnect_running()
 }
 
-/// Executes openconnect on Windows with admin elevation (via `runas`).
+/// Starts OpenConnect on Windows via an elevated helper process (single UAC prompt).
+///
+/// Instead of elevating openconnect directly, we elevate a copy of ourselves with
+/// `--vpn-helper <stop-file> <oc-path> <url> <dsid>`.  The helper starts openconnect
+/// as its own child (inheriting the elevated token) and monitors the stop-signal file.
+/// When the parent creates that file, the helper kills openconnect and exits — all
+/// without a second UAC prompt.
 pub(super) fn execute(
     cookie_value: String,
     url: String,
     openconnect_path: &Path,
 ) -> anyhow::Result<VpnProcess> {
-    log::info!("Requesting Admin elevation for OpenConnect...");
+    // Path to this binary — used as the helper executable.
+    let helper_exe = std::env::current_exe()
+        .map_err(|e| anyhow::anyhow!("Cannot locate helper binary: {}", e))?;
 
     let oc_path_str = openconnect_path
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("openconnect path contains invalid UTF-8"))?;
 
-    let mut cmd = AdminCommand::new(oc_path_str);
+    // Unique per-session stop-signal file in the user's temp directory.
+    let stop_file = std::env::temp_dir().join(format!("kuvpn-stop-{}.signal", unique_id()));
+
+    log::info!("Requesting Admin elevation for OpenConnect (single prompt)...");
+
+    let mut cmd = AdminCommand::new(&helper_exe);
     cmd.show(false)
-        .arg("--protocol")
-        .arg("nc")
-        .arg("-C")
-        .arg(format!("DSID={}", cookie_value))
-        .arg(url);
+        .arg("--vpn-helper")
+        .arg(&stop_file)
+        .arg(oc_path_str)
+        .arg(&url)
+        .arg(&cookie_value);
 
-    // `runas` blocks until the process exits, so we run it on a background thread.
-    // The `thread_finished` flag signals when the process has ended.
+    // `runas` blocks until the helper exits, so we run it on a background thread.
     let thread_finished = Arc::new(AtomicBool::new(false));
-    let pid = Arc::new(AtomicU32::new(0));
-
-    let tf_main = Arc::clone(&thread_finished);
+    let tf_clone = Arc::clone(&thread_finished);
     std::thread::spawn(move || {
         match cmd.status() {
-            Ok(status) if !status.success() => log::error!("OpenConnect exited with failure."),
-            Err(e) => log::error!("Failed to run elevated OpenConnect: {}", e),
+            Ok(status) if !status.success() => {
+                log::error!("VPN helper exited with failure.")
+            }
+            Err(e) => log::error!("Failed to run elevated helper: {}", e),
             _ => {}
         }
-        tf_main.store(true, Ordering::SeqCst);
-    });
-
-    // Discover the PID in a second thread — `runas` gives us no handle, so we poll
-    // the process list until openconnect appears (or the main thread finishes first).
-    let tf_pid = Arc::clone(&thread_finished);
-    let pid_clone = Arc::clone(&pid);
-    std::thread::spawn(move || {
-        for _ in 0..20 {
-            // Stop searching if the process already exited (UAC cancelled, instant failure).
-            if tf_pid.load(Ordering::SeqCst) {
-                return;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(500));
-            if let Some(found) = get_openconnect_pid() {
-                pid_clone.store(found, Ordering::SeqCst);
-                log::info!("[*] OpenConnect process found (PID: {})", found);
-                return;
-            }
-        }
-        log::warn!("[!] Could not discover OpenConnect PID after launch");
+        tf_clone.store(true, Ordering::SeqCst);
     });
 
     Ok(VpnProcess::Windows {
         thread_finished,
-        pid,
+        stop_file,
     })
 }
 
@@ -153,7 +121,8 @@ pub fn get_openconnect_pid() -> Option<u32> {
     })
 }
 
-/// Gracefully terminates a process by PID (with admin elevation).
+/// Terminates a process by PID with admin elevation.
+/// Used as a last-resort cleanup; normal disconnect goes through `kill_vpn_process`.
 pub fn kill_process(pid: u32) -> anyhow::Result<()> {
     let mut cmd = AdminCommand::new("taskkill");
     cmd.show(false)
