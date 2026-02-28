@@ -54,6 +54,12 @@ pub struct KuVpnGui {
     /// True after the first (startup) auto-test completes; used to suppress
     /// the replacement notification for the initial auto-detection pass.
     pub oc_startup_tested: bool,
+    /// Result of the last Wipe Session action: Some(true) = success, Some(false) = failed.
+    pub session_wipe_result: Option<bool>,
+    /// True immediately after Reset Defaults is pressed; shows confirmation in the view.
+    pub reset_notification: bool,
+    /// Drives the fade animation for action notifications (1.0 = fully visible → 0.0 = gone).
+    pub notif_fade: f32,
 
     // VPN Session
     pub session: Option<Arc<VpnSession>>,
@@ -108,7 +114,11 @@ impl KuVpnGui {
             })
         } else if self.is_visible {
             if let Some(id) = self.window_id {
-                return iced::window::gain_focus(id);
+                // Unminimize first (no-op if already visible), then focus.
+                return Task::batch(vec![
+                    iced::window::minimize(id, false),
+                    iced::window::gain_focus(id),
+                ]);
             }
             Task::none()
         } else {
@@ -230,6 +240,9 @@ impl KuVpnGui {
         self.status_message = "Initializing...".to_string();
         self.connection_start = Some(Instant::now());
         self.status = ConnectionStatus::Connecting;
+        if let Some(tray) = &self.tray_icon {
+            crate::tray::update_tray_icon(tray, self.status);
+        }
         self.logs.clear();
 
         let (headless, no_auto_login) = login_mode_flags(self.settings.login_mode_val);
@@ -600,23 +613,29 @@ impl KuVpnGui {
                 Task::none()
             }
             Message::ClearSessionPressed => {
+                self.reset_notification = false;
                 match kuvpn::get_user_data_dir() {
                     Ok(dir) => {
                         if dir.exists() {
                             if let Err(e) = std::fs::remove_dir_all(&dir) {
                                 self.logs
                                     .push(format!("[!] Failed to clear session: {}", e));
+                                self.session_wipe_result = Some(false);
                             } else {
                                 self.logs.push("[✓] Saved session data wiped.".to_string());
+                                self.session_wipe_result = Some(true);
                             }
                         } else {
                             self.logs.push("[*] No active session found.".to_string());
+                            self.session_wipe_result = Some(true);
                         }
                     }
                     Err(e) => {
                         self.logs.push(format!("[!] System error: {}", e));
+                        self.session_wipe_result = Some(false);
                     }
                 }
+                self.notif_fade = 1.0;
                 Task::none()
             }
             Message::ConnectionFinished(err, category) => {
@@ -639,12 +658,23 @@ impl KuVpnGui {
                 self.oc_test_result = None;
                 self.oc_path_notification = None;
                 self.oc_startup_tested = false; // treat the next test as a fresh startup
+                self.session_wipe_result = None;
+                self.reset_notification = true;
+                self.notif_fade = 1.0;
 
                 // If window decoration setting changed, refresh window
                 if old_use_csd != self.settings.use_client_decorations {
                     return self.restart_window_task(100);
                 }
-                Task::none()
+
+                // Also resolve the openconnect path with the reset defaults
+                let path = self.settings.openconnect_path.clone();
+                Task::perform(
+                    async move {
+                        kuvpn::locate_openconnect(&path).map(|p| p.to_string_lossy().into_owned())
+                    },
+                    Message::OpenConnectTestResult,
+                )
             }
             Message::TestOpenConnect => {
                 let path = self.settings.openconnect_path.clone();
@@ -677,6 +707,16 @@ impl KuVpnGui {
                     self.oc_path_notification = None;
                 }
                 self.oc_startup_tested = true;
+                Task::none()
+            }
+            Message::ActionNotifTick => {
+                // Decrement fade: 1.0 → 0.0 over 3 seconds (60 ticks × 50ms)
+                self.notif_fade -= 1.0 / 60.0;
+                if self.notif_fade <= 0.0 {
+                    self.notif_fade = 0.0;
+                    self.session_wipe_result = None;
+                    self.reset_notification = false;
+                }
                 Task::none()
             }
             Message::CopyLogs => {
@@ -782,6 +822,13 @@ impl KuVpnGui {
             );
         }
 
+        if self.notif_fade > 0.0 {
+            subs.push(
+                iced::time::every(std::time::Duration::from_millis(50))
+                    .map(|_| Message::ActionNotifTick),
+            );
+        }
+
         // GTK Event Loop pump (for Tray Icon on Linux)
         #[cfg(target_os = "linux")]
         subs.push(
@@ -867,6 +914,9 @@ impl Default for KuVpnGui {
             automation_warning: None,
             oc_path_notification: None,
             oc_startup_tested: false,
+            session_wipe_result: None,
+            reset_notification: false,
+            notif_fade: 0.0,
             session: None,
             tray_icon: None,
             show_item: None,
