@@ -176,6 +176,14 @@ fn print_connected(interface_name: &str, styles: &CliStyles) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 fn main() -> ExitCode {
+    // VPN helper mode: invoked by the app itself under elevation to manage
+    // OpenConnect's lifecycle (single UAC prompt per connection).
+    // Must run before clap parses args (it would reject --vpn-helper as unknown).
+    #[cfg(windows)]
+    if let Some(code) = kuvpn::run_vpn_helper_if_requested() {
+        return ExitCode::from(code as u8);
+    }
+
     let args = Args::parse();
     init_logger(args.level.clone().into());
 
