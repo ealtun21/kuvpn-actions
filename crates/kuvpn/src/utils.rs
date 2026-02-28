@@ -87,12 +87,14 @@ impl CredentialsProvider for TerminalCredentialsProvider {
     }
 }
 
-use fd_lock::RwLock;
+use fd_lock::{RwLock, RwLockWriteGuard};
 use once_cell::sync::Lazy;
 use std::fs::File;
 use std::sync::Mutex;
 
-static INSTANCE_LOCK: Lazy<Mutex<Option<RwLock<File>>>> = Lazy::new(|| Mutex::new(None));
+// Stores the write guard to keep the lock held for the process lifetime.
+static INSTANCE_LOCK: Lazy<Mutex<Option<RwLockWriteGuard<'static, File>>>> =
+    Lazy::new(|| Mutex::new(None));
 
 /// Ensures that only one instance of the application is running.
 /// Returns an error if another instance is already active.
@@ -103,16 +105,16 @@ pub fn ensure_single_instance() -> Result<(), Box<dyn Error>> {
     lock_path.push("kuvpn.lock");
 
     let file = File::create(&lock_path)?;
-    let mut lock = RwLock::new(file);
+    // Leak the RwLock to get a 'static reference so the guard can outlive this function.
+    let lock_ref: &'static mut RwLock<File> = Box::leak(Box::new(RwLock::new(file)));
 
-    if lock.try_write().is_err() {
-        return Err("Another instance of KUVPN is already running.".into());
+    match lock_ref.try_write() {
+        Ok(guard) => {
+            *INSTANCE_LOCK.lock().unwrap() = Some(guard);
+            Ok(())
+        }
+        Err(_) => Err("Another instance of KUVPN is already running.".into()),
     }
-
-    let mut guard = INSTANCE_LOCK.lock().unwrap();
-    *guard = Some(lock);
-
-    Ok(())
 }
 
 /// Platform-relative path from the home directory to the kuvpn profile directory.
