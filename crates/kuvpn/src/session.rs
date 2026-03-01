@@ -372,6 +372,7 @@ impl SessionThread {
     }
 }
 
+#[derive(Clone)]
 pub struct VpnSession {
     config: SessionConfig,
     status: Arc<Mutex<ConnectionStatus>>,

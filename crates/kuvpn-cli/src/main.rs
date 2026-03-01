@@ -91,12 +91,8 @@ fn handle_log(
             return true;
         }
         "Disconnecting..." => {
-            if *spinner_active {
-                spinner.finish_and_clear();
-            }
-            spinner.set_message("Disconnecting...");
-            spinner.enable_steady_tick(Duration::from_millis(80));
-            *spinner_active = true;
+            clear_spinner(spinner, spinner_active);
+            eprintln!("  {} Disconnecting...", styles.dim.apply_to("●"));
             return true;
         }
         "Disconnected." => {
@@ -189,13 +185,15 @@ fn main() -> ExitCode {
 
     let styles = CliStyles::new();
 
-    eprintln!(
-        "{} {}",
-        styles.bold.apply_to("KUVPN"),
-        styles
-            .dim
-            .apply_to(format!("v{}", env!("CARGO_PKG_VERSION"))),
-    );
+    if !args.get_dsid {
+        eprintln!(
+            "{} {}",
+            styles.bold.apply_to("KUVPN"),
+            styles
+                .dim
+                .apply_to(format!("v{}", env!("CARGO_PKG_VERSION"))),
+        );
+    }
 
     if let Err(e) = kuvpn::utils::ensure_single_instance() {
         eprintln!("  {} {}", styles.red.apply_to("✗"), e);
@@ -227,7 +225,7 @@ fn main() -> ExitCode {
 }
 
 fn run_get_dsid(args: &Args, styles: &CliStyles) -> ExitCode {
-    let spinner = ProgressBar::new_spinner();
+    let spinner = Arc::new(ProgressBar::new_spinner());
     spinner.set_style(spinner_style());
     spinner.set_message("Retrieving DSID...");
     spinner.enable_steady_tick(Duration::from_millis(80));
@@ -241,14 +239,19 @@ fn run_get_dsid(args: &Args, styles: &CliStyles) -> ExitCode {
         email: args.email.clone(),
     };
 
-    match run_login_and_get_dsid(
-        &config,
-        &kuvpn::utils::TerminalCredentialsProvider,
-        None,
-        None,
-    ) {
+    let provider = CliCredentialsProvider {
+        spinner: Arc::clone(&spinner),
+    };
+
+    match run_login_and_get_dsid(&config, &provider, None, None) {
         Ok(dsid) => {
             spinner.finish_and_clear();
+            // Clear all status output so the DSID is the only thing on screen
+            // (and so piped output is clean). Only do this when stderr is a TTY.
+            let term = console::Term::stderr();
+            if term.is_term() {
+                let _ = term.clear_screen();
+            }
             println!("{}", dsid);
             ExitCode::SUCCESS
         }
@@ -285,29 +288,35 @@ fn run_vpn_session(args: &Args, styles: &CliStyles) -> ExitCode {
     });
     let _join_handle = session.connect(provider);
 
-    let cancel = session.cancel_token();
-    ctrlc::set_handler(move || cancel.cancel()).ok();
+    // Clone the session so the ctrlc handler can call session.cancel(), which
+    // also kills the browser process (not just sets the token).
+    let cancel_session = session.clone();
+    ctrlc::set_handler(move || cancel_session.cancel()).ok();
 
     let mut connection_start: Option<Instant> = None;
     let mut spinner_active = false;
 
     loop {
-        while let Ok(raw) = log_rx.try_recv() {
-            if let Some(parsed) = ParsedLog::parse(&raw) {
-                handle_log(
-                    &parsed,
-                    &spinner,
-                    &mut spinner_active,
-                    &mut connection_start,
-                    styles,
-                    &args.interface_name,
-                );
-            } else {
-                log::info!("{}", raw);
-            }
-        }
+        drain_logs(
+            &log_rx,
+            &spinner,
+            &mut spinner_active,
+            &mut connection_start,
+            styles,
+            &args.interface_name,
+        );
 
         if session.is_finished() {
+            // One final drain: session.cleanup() sends "Disconnected." before
+            // setting status, so there may be messages still in the channel.
+            drain_logs(
+                &log_rx,
+                &spinner,
+                &mut spinner_active,
+                &mut connection_start,
+                styles,
+                &args.interface_name,
+            );
             clear_spinner(&spinner, &mut spinner_active);
             return if session.status() == ConnectionStatus::Error {
                 ExitCode::FAILURE
@@ -317,6 +326,30 @@ fn run_vpn_session(args: &Args, styles: &CliStyles) -> ExitCode {
         }
 
         std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+fn drain_logs(
+    log_rx: &crossbeam_channel::Receiver<String>,
+    spinner: &ProgressBar,
+    spinner_active: &mut bool,
+    connection_start: &mut Option<Instant>,
+    styles: &CliStyles,
+    interface_name: &str,
+) {
+    while let Ok(raw) = log_rx.try_recv() {
+        if let Some(parsed) = ParsedLog::parse(&raw) {
+            handle_log(
+                &parsed,
+                spinner,
+                spinner_active,
+                connection_start,
+                styles,
+                interface_name,
+            );
+        } else {
+            log::info!("{}", raw);
+        }
     }
 }
 
