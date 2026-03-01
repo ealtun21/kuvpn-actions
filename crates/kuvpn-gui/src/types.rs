@@ -108,6 +108,7 @@ pub enum Message {
     AutoHideWindow,
     ShowPasswordHeld(bool),
     ActionNotifTick,
+    ScriptPathChanged(String),
 }
 
 #[derive(Debug)]

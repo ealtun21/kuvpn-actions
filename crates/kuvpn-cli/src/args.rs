@@ -77,4 +77,9 @@ pub struct Args {
     /// Name for the TUN/TAP interface created by openconnect
     #[arg(long, default_value = "kuvpn0")]
     pub interface_name: String,
+
+    /// Optional path to a custom script passed via --script to openconnect.
+    /// Useful for split DNS or custom routing rules. Unix only.
+    #[arg(long)]
+    pub script: Option<String>,
 }

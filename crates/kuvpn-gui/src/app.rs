@@ -288,6 +288,11 @@ impl KuVpnGui {
             },
             escalation_tool: Some(self.settings.escalation_tool.clone()),
             interface_name: "kuvpn0".to_string(),
+            script_path: if self.settings.script_path.is_empty() {
+                None
+            } else {
+                Some(self.settings.script_path.clone())
+            },
         };
 
         let session = Arc::new(VpnSession::new(config));
@@ -731,6 +736,11 @@ impl KuVpnGui {
                     self.oc_path_notification = None;
                 }
                 self.oc_startup_tested = true;
+                Task::none()
+            }
+            Message::ScriptPathChanged(p) => {
+                self.settings.script_path = p;
+                self.save_settings();
                 Task::none()
             }
             Message::ActionNotifTick => {

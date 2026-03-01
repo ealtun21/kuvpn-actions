@@ -14,6 +14,10 @@ pub struct GuiSettings {
     pub use_client_decorations: bool,
     #[serde(default = "default_auto_hide")]
     pub auto_hide_after_prompt: bool,
+    /// Optional path to a custom routing/DNS script for openconnect (`--script`).
+    /// Empty string means no script. Unix only.
+    #[serde(default)]
+    pub script_path: String,
 }
 
 fn default_auto_hide() -> bool {
@@ -33,6 +37,7 @@ impl Default for GuiSettings {
             close_to_tray: true,
             use_client_decorations: true,
             auto_hide_after_prompt: true,
+            script_path: String::new(),
         }
     }
 }

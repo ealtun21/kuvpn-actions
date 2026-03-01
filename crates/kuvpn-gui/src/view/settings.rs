@@ -217,6 +217,25 @@ impl KuVpnGui {
                     .spacing(4)
                 },
                 oc_path_notif,
+                {
+                    #[cfg(not(windows))]
+                    {
+                        self.view_unified_field(
+                            "OC Script:",
+                            "/etc/vpnc/vpnc-script",
+                            &self.settings.script_path,
+                            "Optional: path to a custom --script for openconnect (split DNS, custom routing). Leave empty for default.",
+                            is_locked,
+                            Message::ScriptPathChanged,
+                        )
+                    }
+                    #[cfg(windows)]
+                    {
+                        iced::widget::Space::new()
+                            .width(Length::Shrink)
+                            .height(Length::Shrink)
+                    }
+                },
                 divider(),
                 // --- System Section ---
                 section_label("SYSTEM"),

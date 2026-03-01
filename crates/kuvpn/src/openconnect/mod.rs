@@ -185,6 +185,8 @@ pub struct OpenConnectRunner {
     pub path: PathBuf,
     pub interface_name: String,
     pub escalation_tool: Option<String>,
+    /// Optional path to a custom routing/DNS script (`--script`). Unix only.
+    pub script_path: Option<String>,
 }
 
 impl OpenConnectRunner {
@@ -194,11 +196,13 @@ impl OpenConnectRunner {
         openconnect_path: &str,
         interface_name: String,
         escalation_tool: Option<String>,
+        script_path: Option<String>,
     ) -> Option<Self> {
         locate_openconnect(openconnect_path).map(|path| Self {
             path,
             interface_name,
             escalation_tool,
+            script_path,
         })
     }
 
@@ -220,6 +224,7 @@ impl OpenConnectRunner {
             stderr,
             &self.interface_name,
             sudo_password,
+            self.script_path.as_deref(),
         )
     }
 }
@@ -238,6 +243,7 @@ pub fn execute_openconnect(
     stderr: Stdio,
     interface_name: &str,
     sudo_password: Option<String>,
+    script_path: Option<&str>,
 ) -> anyhow::Result<VpnProcess> {
     #[cfg(unix)]
     return unix::execute(
@@ -249,11 +255,12 @@ pub fn execute_openconnect(
         stderr,
         interface_name,
         sudo_password,
+        script_path,
     );
 
     #[cfg(windows)]
     {
-        let _ = (run_command, stdout, stderr, interface_name, sudo_password);
+        let _ = (run_command, stdout, stderr, interface_name, sudo_password, script_path);
         return windows::execute(cookie_value, url, openconnect_path);
     }
 }

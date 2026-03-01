@@ -67,6 +67,9 @@ pub struct SessionConfig {
     pub openconnect_path: String,
     pub escalation_tool: Option<String>,
     pub interface_name: String,
+    /// Optional path to a custom script passed via `--script` to openconnect.
+    /// Unix only; ignored on Windows.
+    pub script_path: Option<String>,
 }
 
 /// Prompts for the sudo/pkexec password if the chosen escalation tool requires
@@ -269,6 +272,7 @@ impl SessionThread {
             &self.config.openconnect_path,
             self.config.interface_name.to_string(),
             self.config.escalation_tool.clone(),
+            self.config.script_path.clone(),
         )
         .ok_or_else(|| {
             self.set_conn_error(&format!(

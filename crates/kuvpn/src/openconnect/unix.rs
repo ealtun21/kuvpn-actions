@@ -263,6 +263,7 @@ pub(super) fn execute(
     // On macOS openconnect auto-assigns a utun%d interface; the name is ignored.
     #[cfg_attr(target_os = "macos", allow(unused_variables))] interface_name: &str,
     sudo_password: Option<String>,
+    script_path: Option<&str>,
 ) -> anyhow::Result<VpnProcess> {
     let command_to_run = resolve_escalation_tool(run_command).ok_or_else(|| {
         anyhow::anyhow!(
@@ -303,6 +304,10 @@ pub(super) fn execute(
     // macOS does not support custom TUN interface names; openconnect auto-assigns utun%d.
     #[cfg(not(target_os = "macos"))]
     cmd.arg("--interface").arg(interface_name);
+
+    if let Some(script) = script_path {
+        cmd.arg("--script").arg(script);
+    }
 
     cmd.arg("-C")
         .arg(format!("DSID={}", cookie_value))
