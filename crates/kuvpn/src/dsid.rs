@@ -1,4 +1,5 @@
 use crate::browser::create_browser;
+use crate::dsid_cache::DsidCache;
 use crate::error::AuthError;
 use crate::handlers::AuthTab;
 use crate::utils::{CancellationToken, CredentialsProvider};
@@ -252,6 +253,29 @@ impl BrowserSession {
         Ok((false, false))
     }
 
+    fn save_dsid_cache(&self, dsid: &str, domain: &str) {
+        if let Ok(cookies) = self.tab.0.get_cookies() {
+            if let Some(c) = cookies
+                .iter()
+                .find(|c| c.name == "DSID" && c.domain.contains(domain))
+            {
+                let expires_unix = c.expires as u64;
+                if expires_unix > 0 {
+                    let cache = DsidCache {
+                        dsid: dsid.to_string(),
+                        expires_unix,
+                        domain: domain.to_string(),
+                    };
+                    if let Err(e) = cache.save() {
+                        log::warn!("[!] Failed to save DSID cache: {}", e);
+                    } else {
+                        log::info!("[✓] DSID cache saved (expires: {})", expires_unix);
+                    }
+                }
+            }
+        }
+    }
+
     fn run_login(
         &self,
         config: &LoginConfig,
@@ -289,6 +313,7 @@ impl BrowserSession {
             match self.tab.poll_dsid(&config.domain) {
                 Ok(Some(dsid)) => {
                     log::info!("[✓] Found valid DSID, quitting.");
+                    self.save_dsid_cache(&dsid, &config.domain);
                     return Ok(dsid);
                 }
                 Ok(None) => {} // Keep going
@@ -404,12 +429,22 @@ impl BrowserSession {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /// Runs the browser-based login flow and returns the DSID cookie on success.
+///
+/// Before opening a browser, checks the on-disk DSID cache. If the cached
+/// cookie is still valid for `config.domain`, it is returned immediately.
 pub fn run_login_and_get_dsid(
     config: &LoginConfig,
     provider: &dyn CredentialsProvider,
     cancel_token: Option<CancellationToken>,
     browser_pid_out: Option<Arc<Mutex<Option<u32>>>>,
 ) -> anyhow::Result<String> {
+    if let Some(cache) = DsidCache::load() {
+        if cache.domain == config.domain && cache.is_valid() {
+            log::info!("[✓] Using cached DSID (valid until Unix ts {})", cache.expires_unix);
+            return Ok(cache.dsid);
+        }
+    }
+
     let session = BrowserSession::open(config).map_err(|e| AuthError::BrowserError {
         message: format!("Failed to create browser: {}", e),
     })?;
