@@ -54,12 +54,16 @@ impl KuVpnGui {
                 ]
                 .spacing(10)
                 .align_y(Alignment::Center),
-                scrollable(container(column(log_lines).spacing(2)).padding(Padding {
-                    top: 0.0,
-                    right: 24.0,
-                    bottom: 0.0,
-                    left: 0.0,
-                }))
+                scrollable(
+                    container(column(log_lines).spacing(2))
+                        .width(Length::Fill)
+                        .padding(Padding {
+                            top: 0.0,
+                            right: 24.0,
+                            bottom: 0.0,
+                            left: 0.0,
+                        }),
+                )
                 .height(Length::Fill)
                 .direction(scrollable::Direction::Both {
                     vertical: scrollable::Scrollbar::default(),
