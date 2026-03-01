@@ -14,10 +14,24 @@ pub struct GuiSettings {
     pub use_client_decorations: bool,
     #[serde(default = "default_auto_hide")]
     pub auto_hide_after_prompt: bool,
+    #[serde(default)]
+    pub auto_reconnect: bool,
+    #[serde(default = "default_reconnect_retries_str")]
+    pub reconnect_max_retries: String,
+    #[serde(default = "default_reconnect_cooldown_str")]
+    pub reconnect_cooldown_secs: String,
 }
 
 fn default_auto_hide() -> bool {
     true
+}
+
+fn default_reconnect_retries_str() -> String {
+    "3".to_string()
+}
+
+fn default_reconnect_cooldown_str() -> String {
+    "10".to_string()
 }
 
 impl Default for GuiSettings {
@@ -33,6 +47,9 @@ impl Default for GuiSettings {
             close_to_tray: true,
             use_client_decorations: true,
             auto_hide_after_prompt: true,
+            auto_reconnect: false,
+            reconnect_max_retries: default_reconnect_retries_str(),
+            reconnect_cooldown_secs: default_reconnect_cooldown_str(),
         }
     }
 }

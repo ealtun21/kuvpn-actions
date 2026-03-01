@@ -274,6 +274,9 @@ fn run_vpn_session(args: &Args, styles: &CliStyles) -> ExitCode {
         openconnect_path: args.openconnect_path.clone(),
         escalation_tool: args.run_command.clone(),
         interface_name: args.interface_name.clone(),
+        auto_reconnect: args.auto_reconnect,
+        reconnect_max_retries: args.reconnect_max_retries,
+        reconnect_cooldown_secs: args.reconnect_cooldown_secs,
     };
 
     let spinner = Arc::new(ProgressBar::new_spinner());

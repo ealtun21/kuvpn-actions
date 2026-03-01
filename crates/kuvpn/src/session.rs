@@ -67,6 +67,12 @@ pub struct SessionConfig {
     pub openconnect_path: String,
     pub escalation_tool: Option<String>,
     pub interface_name: String,
+    /// Automatically reconnect when OpenConnect exits unexpectedly.
+    pub auto_reconnect: bool,
+    /// Maximum number of reconnect attempts (0 = unlimited).
+    pub reconnect_max_retries: u32,
+    /// Seconds to wait between reconnect attempts.
+    pub reconnect_cooldown_secs: u64,
 }
 
 /// Prompts for the sudo/pkexec password if the chosen escalation tool requires
@@ -201,16 +207,43 @@ impl SessionThread {
     }
 
     fn run(self, provider: Arc<dyn CredentialsProvider>) {
-        if self.is_vpn_connected() {
-            self.send_log("Info|VPN interface already active, monitoring...");
-            self.set_status(ConnectionStatus::Connected);
-            self.run_watchdog(None);
-        } else {
-            match self.launch_vpn(&provider) {
-                Ok(Some(proc)) => self.run_watchdog(Some(proc)),
-                Ok(None) => {} // cancelled
-                Err(_) => return,
+        let max = self.config.reconnect_max_retries;
+        let cooldown = Duration::from_secs(self.config.reconnect_cooldown_secs);
+        let mut attempt = 0u32;
+
+        loop {
+            let unexpected_disconnect = if self.is_vpn_connected() {
+                self.send_log("Info|VPN interface already active, monitoring...");
+                self.set_status(ConnectionStatus::Connected);
+                self.run_watchdog(None)
+            } else {
+                match self.launch_vpn(&provider) {
+                    Ok(Some(proc)) => self.run_watchdog(Some(proc)),
+                    Ok(None) => false, // user cancelled
+                    Err(_) => false,   // auth/launch error
+                }
+            };
+
+            // Retry only when: auto-reconnect on, not user-cancelled, unexpected disconnect,
+            // and retries remain (max == 0 means unlimited).
+            if self.config.auto_reconnect
+                && !self.cancel_token.is_cancelled()
+                && unexpected_disconnect
+                && (max == 0 || attempt < max)
+            {
+                attempt += 1;
+                self.set_status(ConnectionStatus::Connecting);
+                *self.last_error.lock().unwrap() = None;
+                *self.error_category.lock().unwrap() = None;
+                self.send_log(format!(
+                    "Info|Reconnecting ({}/{})...",
+                    attempt,
+                    if max == 0 { "∞".to_string() } else { max.to_string() }
+                ));
+                thread::sleep(cooldown);
+                continue;
             }
+            break;
         }
         self.cleanup();
     }
@@ -317,14 +350,24 @@ impl SessionThread {
         }
     }
 
-    fn run_watchdog(&self, mut process: Option<VpnProcess>) {
+    /// Watches the VPN tunnel until it stops.
+    ///
+    /// Returns `true` when the tunnel was successfully established and then died
+    /// unexpectedly (a candidate for auto-reconnect).  Returns `false` for
+    /// user-initiated cancellations and launch-phase errors.
+    fn run_watchdog(&self, mut process: Option<VpnProcess>) -> bool {
         let start_time = Instant::now();
         let mut connected_detected = process.is_none();
         let timeout = Duration::from_secs(30);
 
         loop {
             if self.cancel_token.is_cancelled() {
-                break;
+                if let Some(ref mut p) = process {
+                    self.send_log("Info|Disconnecting...".to_string());
+                    let _ = p.kill();
+                    let _ = p.wait();
+                }
+                return false; // user-cancelled
             }
 
             if self.is_vpn_connected() {
@@ -334,26 +377,25 @@ impl SessionThread {
                     self.send_log("Info|Connected.");
                 }
             } else if connected_detected {
-                break;
+                // Tunnel was up and just went down unexpectedly.
+                if let Some(ref mut p) = process {
+                    let _ = p.kill();
+                    let _ = p.wait();
+                }
+                return true; // unexpected disconnect — eligible for reconnect
             } else if start_time.elapsed() > timeout {
                 self.set_conn_error("VPN tunnel failed to establish within timeout");
                 if let Some(ref mut p) = process {
                     let _ = p.kill();
                 }
-                return;
+                return false;
             } else if let Some(ref mut p) = process {
                 if !p.is_process_alive() {
                     self.set_conn_error("OpenConnect process exited before tunnel was established");
-                    return;
+                    return false;
                 }
             }
             thread::sleep(Duration::from_millis(1000));
-        }
-
-        if let Some(ref mut p) = process {
-            self.send_log("Info|Disconnecting...".to_string());
-            let _ = p.kill();
-            let _ = p.wait();
         }
     }
 
