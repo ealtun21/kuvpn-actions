@@ -4,7 +4,7 @@ use crate::types::{
     ICON_INFO_SVG, ICON_PHONE_SVG, ICON_REFRESH_SVG, ICON_SHIELD_CHECK_SVG, ICON_SHIELD_SVG,
     ICON_SHIELD_X_SVG,
 };
-use iced::widget::{column, container, row, svg, text};
+use iced::widget::{button, column, container, row, svg, text};
 use iced::{Alignment, Border, Color, Element, Font, Length, Shadow, Vector};
 use kuvpn::ConnectionStatus;
 
@@ -261,37 +261,54 @@ impl KuVpnGui {
 
     /// Warning/automation banner
     pub fn view_warning_card<'a>(&'a self, warning: &'a str) -> Element<'a, Message> {
-        container(
-            column![
-                row![
-                    svg(svg::Handle::from_memory(ICON_INFO_SVG))
-                        .width(18)
-                        .height(18)
-                        .style(|_, _| svg::Style {
-                            color: Some(COLOR_WARNING)
-                        }),
-                    text("Automation Issue").size(13).color(COLOR_WARNING),
-                ]
-                .spacing(8)
-                .align_y(Alignment::Center),
-                text(warning)
-                    .size(11)
-                    .color(COLOR_TEXT)
-                    .wrapping(iced::widget::text::Wrapping::Word),
+        let mut inner = column![
+            row![
+                svg(svg::Handle::from_memory(ICON_INFO_SVG))
+                    .width(18)
+                    .height(18)
+                    .style(|_, _| svg::Style {
+                        color: Some(COLOR_WARNING)
+                    }),
+                text("Automation Issue").size(13).color(COLOR_WARNING),
             ]
-            .spacing(6),
-        )
-        .width(Length::Fill)
-        .padding([12, 16])
-        .style(|_| container::Style {
-            background: Some(Color::from_rgba(0.80, 0.60, 0.30, 0.06).into()),
-            border: Border {
-                color: Color::from_rgba(0.80, 0.60, 0.30, 0.3),
-                width: 1.0,
-                radius: 10.0.into(),
-            },
-            ..Default::default()
-        })
-        .into()
+            .spacing(8)
+            .align_y(Alignment::Center),
+            text(warning)
+                .size(11)
+                .color(COLOR_TEXT)
+                .wrapping(iced::widget::text::Wrapping::Word),
+        ]
+        .spacing(6);
+
+        if self.last_diagnostic_path.is_some() {
+            inner = inner.push(
+                button(text("Open diagnostics folder").size(11).color(COLOR_WARNING))
+                    .on_press(Message::OpenDiagnosticsFolder)
+                    .padding([4, 8])
+                    .style(|_, _| iced::widget::button::Style {
+                        background: None,
+                        border: Border {
+                            color: Color::from_rgba(0.80, 0.60, 0.30, 0.5),
+                            width: 1.0,
+                            radius: 4.0.into(),
+                        },
+                        ..Default::default()
+                    }),
+            );
+        }
+
+        container(inner)
+            .width(Length::Fill)
+            .padding([12, 16])
+            .style(|_| container::Style {
+                background: Some(Color::from_rgba(0.80, 0.60, 0.30, 0.06).into()),
+                border: Border {
+                    color: Color::from_rgba(0.80, 0.60, 0.30, 0.3),
+                    width: 1.0,
+                    radius: 10.0.into(),
+                },
+                ..Default::default()
+            })
+            .into()
     }
 }

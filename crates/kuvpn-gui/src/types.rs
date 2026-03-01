@@ -108,6 +108,7 @@ pub enum Message {
     AutoHideWindow,
     ShowPasswordHeld(bool),
     ActionNotifTick,
+    OpenDiagnosticsFolder,
 }
 
 #[derive(Debug)]

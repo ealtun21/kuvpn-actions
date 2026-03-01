@@ -4,6 +4,7 @@
 //! using a browser and establishing VPN connections via OpenConnect.
 
 pub mod browser;
+pub mod diagnostics;
 pub mod dsid;
 pub mod error;
 pub mod handlers;
