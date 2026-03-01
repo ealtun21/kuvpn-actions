@@ -149,6 +149,9 @@ pub fn get_user_data_dir() -> Result<PathBuf, Box<dyn Error>> {
 /// Completely removes the user data directory
 pub fn wipe_user_data_dir() -> Result<(), Box<dyn Error>> {
     let path = get_user_data_dir()?;
+    if !path.to_string_lossy().contains("kuvpn") {
+        return Err("Refusing to wipe: path does not appear to be a kuvpn directory".into());
+    }
     if path.exists() {
         std::fs::remove_dir_all(&path)?;
         log::info!("Wiped profile directory: {:?}", path);
@@ -158,5 +161,9 @@ pub fn wipe_user_data_dir() -> Result<(), Box<dyn Error>> {
 
 /// Escapes JavaScript strings to prevent injection.
 pub fn js_escape(s: &str) -> String {
-    s.replace("\\", "\\\\").replace("'", "\\'")
+    s.replace('\\', "\\\\")
+        .replace('\'', "\\'")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t")
 }

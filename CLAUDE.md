@@ -81,3 +81,26 @@ Three-page docs live in `docs/`:
 ## Issues to be fixed
 
 - **Windows ARM** — no free GitHub-hosted Windows ARM runner available yet. Revisit when runners become available. (BACKLOG)
+
+## Backlog Features
+
+### High Priority
+
+- **DSID Cookie Caching** — Cache the retrieved DSID cookie along with its expiry timestamp. On reconnect, skip the entire browser automation flow if the cached cookie is still valid. Store in the user data dir alongside other config. Requires parsing the cookie expiry from the VPN server response or storing a TTL from first use. (BACKLOG)
+
+- **Auto-Reconnect on Disconnect** — After OpenConnect dies unexpectedly (process exit without user-initiated disconnect), automatically restart the VPN session. Should be configurable: enable/disable toggle, retry count (default 3), cooldown between retries (default 10s). Should NOT auto-reconnect if the user explicitly pressed Disconnect. (BACKLOG)
+
+- **Connection History** — Persist a log of connect/disconnect events with timestamps and durations in the user data dir (e.g. `connection_history.json`). Display in a scrollable list in the GUI. Useful for diagnosing patterns of instability. CLI can print history with a `--history` flag. (BACKLOG)
+
+### Medium Priority
+
+- **Autostart on Login** — Register KUVPN to launch at system startup. Platform implementations: `.desktop` file in `~/.config/autostart/` on Linux, `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` on Windows, `LaunchAgent` plist in `~/Library/LaunchAgents/` on macOS. Expose as a toggle in GUI settings. (BACKLOG)
+
+- **Verbose Diagnostic Export** — When browser automation fails (wrong page detected, unexpected element, JS error, handler timeout), capture and save to the user data dir:
+  - A screenshot of the browser at the moment of failure (chromiumoxide supports `Page::capture_screenshot`)
+  - The full HTML source of the page at the moment of failure (via `Page::get_document` + `DOM::get_outer_html`)
+  - The current URL
+  - A timestamp and the error message
+  This diagnostic bundle should be surfaced to the user (GUI: show a "Save diagnostics" dialog; CLI: print the file path). Purpose is to let developers see exactly what page the automation encountered so the handler can be updated. (BACKLOG)
+
+- **Configurable DNS Fallback** — Expose an optional setting for a custom `--script` path passed to OpenConnect, enabling split DNS or custom routing rules (e.g. only route `.ku.edu.tr` through VPN). For power users. (BACKLOG)
