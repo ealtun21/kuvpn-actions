@@ -77,4 +77,8 @@ pub struct Args {
     /// Name for the TUN/TAP interface created by openconnect
     #[arg(long, default_value = "kuvpn0")]
     pub interface_name: String,
+
+    /// Print connection history and exit
+    #[arg(long, default_value_t = false)]
+    pub history: bool,
 }

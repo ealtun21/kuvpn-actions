@@ -81,6 +81,10 @@ pub fn main() -> iced::Result {
                 Task::batch(vec![
                     task.map(Message::WindowOpened),
                     Task::done(Message::TestOpenConnect),
+                    Task::perform(
+                        async { kuvpn::load_events().unwrap_or_default() },
+                        Message::HistoryLoaded,
+                    ),
                 ]),
             )
         },

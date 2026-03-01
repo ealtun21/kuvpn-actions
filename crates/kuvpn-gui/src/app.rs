@@ -61,6 +61,9 @@ pub struct KuVpnGui {
     /// Drives the fade animation for action notifications (1.0 = fully visible → 0.0 = gone).
     pub notif_fade: f32,
 
+    // Connection history
+    pub history: Vec<kuvpn::ConnectionEvent>,
+
     // VPN Session
     pub session: Option<Arc<VpnSession>>,
 
@@ -733,6 +736,15 @@ impl KuVpnGui {
                 self.oc_startup_tested = true;
                 Task::none()
             }
+            Message::HistoryLoaded(events) => {
+                self.history = events;
+                Task::none()
+            }
+            Message::ClearHistory => {
+                let _ = kuvpn::clear_events();
+                self.history.clear();
+                Task::none()
+            }
             Message::ActionNotifTick => {
                 // Decrement fade: 1.0 → 0.0 over 3 seconds (60 ticks × 50ms)
                 self.notif_fade -= 1.0 / 60.0;
@@ -941,6 +953,7 @@ impl Default for KuVpnGui {
             session_wipe_result: None,
             reset_notification: false,
             notif_fade: 0.0,
+            history: Vec::new(),
             session: None,
             tray_icon: None,
             status_item: None,
