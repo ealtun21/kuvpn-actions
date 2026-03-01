@@ -66,9 +66,11 @@ pub struct KuVpnGui {
 
     // Tray & Window state
     pub tray_icon: Option<TrayIcon>,
+    pub status_item: Option<MenuItem>,
     pub show_item: Option<MenuItem>,
     pub connect_item: Option<MenuItem>,
     pub disconnect_item: Option<MenuItem>,
+    pub wipe_item: Option<MenuItem>,
     pub window_id: Option<iced::window::Id>,
     pub is_visible: bool,
     pub window_close_pending: bool,
@@ -229,6 +231,27 @@ impl KuVpnGui {
 
     // ── Private message handlers ──────────────────────────────────────────────
 
+    /// Update tray menu item states to match `status`. Call this any time
+    /// `self.status` is changed directly (not via `handle_status_changed`).
+    fn sync_tray_menu_items(&self, status: ConnectionStatus) {
+        let is_idle = matches!(
+            status,
+            ConnectionStatus::Disconnected | ConnectionStatus::Error
+        );
+        if let Some(item) = &self.connect_item {
+            item.set_enabled(is_idle);
+        }
+        if let Some(item) = &self.disconnect_item {
+            item.set_enabled(status == ConnectionStatus::Connected);
+        }
+        if let Some(item) = &self.wipe_item {
+            item.set_enabled(is_idle);
+        }
+        if let Some(item) = &self.status_item {
+            item.set_text(crate::tray::status_label(status));
+        }
+    }
+
     fn handle_connect_pressed(&mut self) -> Task<Message> {
         if self.status != ConnectionStatus::Disconnected && self.status != ConnectionStatus::Error {
             return Task::none();
@@ -243,6 +266,7 @@ impl KuVpnGui {
         if let Some(tray) = &self.tray_icon {
             crate::tray::update_tray_icon(tray, self.status);
         }
+        self.sync_tray_menu_items(ConnectionStatus::Connecting);
         self.logs.clear();
 
         let (headless, no_auto_login) = login_mode_flags(self.settings.login_mode_val);
@@ -300,6 +324,7 @@ impl KuVpnGui {
         if let Some(tray) = &self.tray_icon {
             crate::tray::update_tray_icon(tray, self.status);
         }
+        self.sync_tray_menu_items(self.status);
 
         if let Some(e) = err {
             self.error_category = category;
@@ -332,12 +357,7 @@ impl KuVpnGui {
         }
         self.status = status;
 
-        if let Some(item) = &self.connect_item {
-            item.set_enabled(status == ConnectionStatus::Disconnected);
-        }
-        if let Some(item) = &self.disconnect_item {
-            item.set_enabled(status == ConnectionStatus::Connected);
-        }
+        self.sync_tray_menu_items(status);
 
         if status == ConnectionStatus::Connected {
             #[cfg(unix)]
@@ -367,9 +387,6 @@ impl KuVpnGui {
                 self.is_visible = true;
                 self.window_close_pending = false;
                 self.window_open_pending = false;
-                if let Some(item) = &self.show_item {
-                    item.set_text("Toggle Visibility");
-                }
                 // Explicitly focus the new window. winit's focus_window() is gated on
                 // is_visible; calling it here (after the window is created) ensures the
                 // app is brought to front on every platform, including macOS accessory
@@ -415,6 +432,12 @@ impl KuVpnGui {
                 }
                 "connect" => self.update(Message::ConnectPressed),
                 "disconnect" => self.update(Message::DisconnectPressed),
+                "wipe" => self.update(Message::ClearSessionPressed),
+                "copy_logs" => self.update(Message::CopyLogs),
+                "settings" => {
+                    self.current_tab = Tab::Settings;
+                    self.show_or_focus_window()
+                }
                 _ => Task::none(),
             },
             Message::CloseToTrayToggled(v) => {
@@ -919,9 +942,11 @@ impl Default for KuVpnGui {
             notif_fade: 0.0,
             session: None,
             tray_icon: None,
+            status_item: None,
             show_item: None,
             connect_item: None,
             disconnect_item: None,
+            wipe_item: None,
             window_id: None,
             is_visible: false,
             window_close_pending: false,

@@ -62,9 +62,11 @@ pub fn main() -> iced::Result {
             if let Ok(mut guard) = components.lock() {
                 if let Some(c) = guard.take() {
                     gui.tray_icon = Some(c.tray);
+                    gui.status_item = Some(c.status_item);
                     gui.show_item = Some(c.show_item);
                     gui.connect_item = Some(c.connect_item);
                     gui.disconnect_item = Some(c.disconnect_item);
+                    gui.wipe_item = Some(c.wipe_item);
                 }
             }
 
