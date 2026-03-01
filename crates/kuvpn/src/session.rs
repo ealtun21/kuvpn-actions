@@ -131,8 +131,10 @@ fn spawn_stream_reader<R: Read + Send + 'static>(
 ) {
     thread::spawn(move || {
         for line in BufReader::new(stream).lines().map_while(Result::ok) {
-            if let Some(tx) = logs_tx.lock().unwrap().as_ref() {
-                let _ = tx.send(format!("{}|{}", level, line));
+            if let Ok(guard) = logs_tx.lock() {
+                if let Some(tx) = guard.as_ref() {
+                    let _ = tx.send(format!("{}|{}", level, line));
+                }
             }
         }
     });

@@ -416,7 +416,9 @@ pub fn run_login_and_get_dsid(
 
     if let Some(ref pid_holder) = browser_pid_out {
         if let Some(pid) = session.browser.get_process_id() {
-            *pid_holder.lock().unwrap() = Some(pid);
+            if let Ok(mut guard) = pid_holder.lock() {
+                *guard = Some(pid);
+            }
         }
     }
 

@@ -38,6 +38,8 @@ pub enum VpnProcess {
     Windows {
         /// Set to `true` when the runas background thread finishes.
         thread_finished: Arc<AtomicBool>,
+        /// Set to `true` if the helper failed to start (e.g. UAC denied).
+        thread_failed: Arc<AtomicBool>,
         /// Creating this file signals the elevated helper to stop OpenConnect.
         stop_file: std::path::PathBuf,
     },
@@ -65,8 +67,10 @@ impl VpnProcess {
 
             #[cfg(windows)]
             VpnProcess::Windows {
-                thread_finished, ..
-            } => windows::vpn_process_alive(thread_finished),
+                thread_finished,
+                thread_failed,
+                ..
+            } => windows::vpn_process_alive(thread_finished, thread_failed),
 
             #[allow(unreachable_patterns)]
             _ => false,

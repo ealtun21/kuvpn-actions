@@ -33,7 +33,13 @@ pub(super) fn kill_vpn_process(stop_file: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub(super) fn vpn_process_alive(thread_finished: &Arc<AtomicBool>) -> bool {
+pub(super) fn vpn_process_alive(
+    thread_finished: &Arc<AtomicBool>,
+    thread_failed: &Arc<AtomicBool>,
+) -> bool {
+    if thread_failed.load(Ordering::SeqCst) {
+        return false;
+    }
     if !thread_finished.load(Ordering::SeqCst) {
         return true;
     }
@@ -75,20 +81,30 @@ pub(super) fn execute(
 
     // `runas` blocks until the helper exits, so we run it on a background thread.
     let thread_finished = Arc::new(AtomicBool::new(false));
+    let thread_failed = Arc::new(AtomicBool::new(false));
     let tf_clone = Arc::clone(&thread_finished);
+    let fail_clone = Arc::clone(&thread_failed);
     std::thread::spawn(move || {
-        match cmd.status() {
+        let failed = match cmd.status() {
             Ok(status) if !status.success() => {
-                log::error!("VPN helper exited with failure.")
+                log::error!("VPN helper exited with failure.");
+                true
             }
-            Err(e) => log::error!("Failed to run elevated helper: {}", e),
-            _ => {}
+            Err(e) => {
+                log::error!("Failed to run elevated helper: {}", e);
+                true
+            }
+            _ => false,
+        };
+        if failed {
+            fail_clone.store(true, Ordering::SeqCst);
         }
         tf_clone.store(true, Ordering::SeqCst);
     });
 
     Ok(VpnProcess::Windows {
         thread_finished,
+        thread_failed,
         stop_file,
     })
 }
