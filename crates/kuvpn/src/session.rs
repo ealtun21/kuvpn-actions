@@ -257,6 +257,15 @@ impl SessionThread {
         );
 
         self.clear_browser_pid();
+
+        // If browser automation saved a diagnostic bundle, forward its path over
+        // the structured log channel so the CLI/GUI can surface it to the user.
+        let diag_path = crate::diagnostics::PENDING_DIAG_PATH
+            .with(|cell| cell.borrow_mut().take());
+        if let Some(path) = diag_path {
+            self.send_log(format!("Diagnostic|{}", path.display()));
+        }
+
         result.map_err(|e| self.handle_login_error(e))
     }
 

@@ -293,7 +293,14 @@ fn run_vpn_session(args: &Args, styles: &CliStyles) -> ExitCode {
 
     loop {
         while let Ok(raw) = log_rx.try_recv() {
-            if let Some(parsed) = ParsedLog::parse(&raw) {
+            if let Some(path) = raw.strip_prefix("Diagnostic|") {
+                clear_spinner(&spinner, &mut spinner_active);
+                eprintln!(
+                    "  {} Automation diagnostic saved: {}",
+                    styles.dim.apply_to("●"),
+                    path
+                );
+            } else if let Some(parsed) = ParsedLog::parse(&raw) {
                 handle_log(
                     &parsed,
                     &spinner,
