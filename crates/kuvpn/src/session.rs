@@ -1,9 +1,11 @@
 use crate::dsid::{run_login_and_get_dsid, LoginConfig};
+use crate::dsid_cache::DsidCache;
 use crate::openconnect::{
     get_openconnect_pid, is_openconnect_running, is_vpn_interface_up, kill_process,
     OpenConnectRunner, VpnProcess,
 };
 use crate::utils::{CancellationToken, CredentialsProvider};
+use std::cell::Cell;
 use std::io::{BufRead, BufReader, Read};
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
@@ -148,6 +150,9 @@ struct SessionThread {
     error_category: Arc<Mutex<Option<crate::error::ErrorCategory>>>,
     logs_tx: Arc<Mutex<Option<crossbeam_channel::Sender<String>>>>,
     browser_pid: Arc<Mutex<Option<u32>>>,
+    /// Set when `acquire_dsid` returns a cached DSID. Used to detect stale cache
+    /// (OpenConnect exits quickly without connecting → cached DSID was invalidated).
+    used_cached_dsid: Cell<bool>,
 }
 
 impl SessionThread {
@@ -160,6 +165,7 @@ impl SessionThread {
             error_category: Arc::clone(&s.error_category),
             logs_tx: Arc::clone(&s.logs_tx),
             browser_pid: Arc::clone(&s.browser_pid),
+            used_cached_dsid: Cell::new(false),
         }
     }
 
@@ -207,7 +213,18 @@ impl SessionThread {
             self.run_watchdog(None);
         } else {
             match self.launch_vpn(&provider) {
-                Ok(Some(proc)) => self.run_watchdog(Some(proc)),
+                Ok(Some(proc)) => {
+                    let stale_cache = self.run_watchdog(Some(proc));
+                    if stale_cache {
+                        let _ = DsidCache::clear();
+                        self.send_log("Info|Cached DSID invalid, re-authenticating...");
+                        match self.launch_vpn(&provider) {
+                            Ok(Some(proc2)) => { self.run_watchdog(Some(proc2)); }
+                            Ok(None) => {}
+                            Err(_) => {}
+                        }
+                    }
+                }
                 Ok(None) => {} // cancelled
                 Err(_) => return,
             }
@@ -240,6 +257,16 @@ impl SessionThread {
     }
 
     fn acquire_dsid(&self, provider: &Arc<dyn CredentialsProvider>) -> Result<String, ()> {
+        // Fast path: return a valid cached DSID without opening a browser.
+        if let Some(cache) = DsidCache::load() {
+            if cache.domain == self.config.domain && cache.is_valid() {
+                log::info!("[✓] Using cached DSID");
+                self.used_cached_dsid.set(true);
+                return Ok(cache.dsid);
+            }
+        }
+        self.used_cached_dsid.set(false);
+
         let login_config = LoginConfig {
             headless: self.config.headless,
             url: self.config.url.clone(),
@@ -317,10 +344,18 @@ impl SessionThread {
         }
     }
 
-    fn run_watchdog(&self, mut process: Option<VpnProcess>) {
+    /// Monitors the VPN tunnel until it disconnects or the cancel token fires.
+    ///
+    /// Returns `true` when a stale cached DSID is suspected (OpenConnect exited
+    /// before the tunnel was established, and the DSID came from the cache).
+    fn run_watchdog(&self, mut process: Option<VpnProcess>) -> bool {
         let start_time = Instant::now();
         let mut connected_detected = process.is_none();
         let timeout = Duration::from_secs(30);
+        // If OpenConnect exits within this window without ever connecting, and the
+        // DSID came from the cache, treat it as a stale DSID (e.g. invalidated by
+        // another device logging in with the same account).
+        let stale_threshold = Duration::from_secs(15);
 
         loop {
             if self.cancel_token.is_cancelled() {
@@ -340,11 +375,18 @@ impl SessionThread {
                 if let Some(ref mut p) = process {
                     let _ = p.kill();
                 }
-                return;
+                return false;
             } else if let Some(ref mut p) = process {
                 if !p.is_process_alive() {
+                    if self.used_cached_dsid.get()
+                        && !connected_detected
+                        && start_time.elapsed() < stale_threshold
+                    {
+                        // Stale cache suspected — let the caller retry with fresh auth.
+                        return true;
+                    }
                     self.set_conn_error("OpenConnect process exited before tunnel was established");
-                    return;
+                    return false;
                 }
             }
             thread::sleep(Duration::from_millis(1000));
@@ -355,6 +397,7 @@ impl SessionThread {
             let _ = p.kill();
             let _ = p.wait();
         }
+        false
     }
 
     fn cleanup(&self) {

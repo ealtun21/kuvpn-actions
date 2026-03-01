@@ -5,6 +5,7 @@
 
 pub mod browser;
 pub mod dsid;
+pub mod dsid_cache;
 pub mod error;
 pub mod handlers;
 #[cfg(windows)]
