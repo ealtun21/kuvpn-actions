@@ -67,7 +67,7 @@ impl KuVpnGui {
             ConnectionStatus::Disconnected => (COLOR_TEXT_DIM, "Ready"),
         };
 
-        let title_bar_content = row![
+        let mut title_row = row![
             svg(svg::Handle::from_memory(crate::types::KU_LOGO_BYTES))
                 .width(20)
                 .height(20)
@@ -89,46 +89,60 @@ impl KuVpnGui {
             text(bar_label)
                 .size(11)
                 .color(Color::from_rgb(0.45, 0.45, 0.45)),
-            Space::new().width(Length::Fill),
-            button(text("−").size(18).color(COLOR_TEXT))
-                .padding([0, 12])
-                .on_press(Message::MinimizeWindow)
-                .style(|_theme, status| button::Style {
-                    background: Some(Color::TRANSPARENT.into()),
-                    text_color: COLOR_TEXT,
-                    border: Border::default(),
-                    shadow: Shadow::default(),
-                    ..match status {
-                        button::Status::Hovered => button::Style {
-                            background: Some(Color::from_rgba(1.0, 1.0, 1.0, 0.1).into()),
-                            ..Default::default()
-                        },
-                        _ => Default::default(),
-                    }
-                }),
-            button(text("✕").size(14).color(COLOR_TEXT))
-                .padding([0, 12])
-                .on_press(Message::ToggleVisibility {
-                    from_close_request: true,
-                })
-                .style(|_theme, status| button::Style {
-                    background: Some(Color::TRANSPARENT.into()),
-                    text_color: COLOR_TEXT,
-                    border: Border::default(),
-                    shadow: Shadow::default(),
-                    ..match status {
-                        button::Status::Hovered => button::Style {
-                            background: Some(Color::from_rgba(0.8, 0.2, 0.2, 0.8).into()),
-                            text_color: Color::WHITE,
-                            ..Default::default()
-                        },
-                        _ => Default::default(),
-                    }
-                }),
         ]
         .spacing(8)
-        .align_y(Alignment::Center)
-        .padding([8, 12]);
+        .align_y(Alignment::Center);
+
+        if let Some(code) = &self.mfa_info {
+            title_row = title_row.push(
+                text(format!("MFA: {}", code))
+                    .size(11)
+                    .color(COLOR_WARNING),
+            );
+        }
+
+        let title_bar_content = title_row
+            .push(Space::new().width(Length::Fill))
+            .push(
+                button(text("−").size(18).color(COLOR_TEXT))
+                    .padding([0, 12])
+                    .on_press(Message::MinimizeWindow)
+                    .style(|_theme, status| button::Style {
+                        background: Some(Color::TRANSPARENT.into()),
+                        text_color: COLOR_TEXT,
+                        border: Border::default(),
+                        shadow: Shadow::default(),
+                        ..match status {
+                            button::Status::Hovered => button::Style {
+                                background: Some(Color::from_rgba(1.0, 1.0, 1.0, 0.1).into()),
+                                ..Default::default()
+                            },
+                            _ => Default::default(),
+                        }
+                    }),
+            )
+            .push(
+                button(text("✕").size(14).color(COLOR_TEXT))
+                    .padding([0, 12])
+                    .on_press(Message::ToggleVisibility {
+                        from_close_request: true,
+                    })
+                    .style(|_theme, status| button::Style {
+                        background: Some(Color::TRANSPARENT.into()),
+                        text_color: COLOR_TEXT,
+                        border: Border::default(),
+                        shadow: Shadow::default(),
+                        ..match status {
+                            button::Status::Hovered => button::Style {
+                                background: Some(Color::from_rgba(0.8, 0.2, 0.2, 0.8).into()),
+                                text_color: Color::WHITE,
+                                ..Default::default()
+                            },
+                            _ => Default::default(),
+                        }
+                    }),
+            )
+            .padding([8, 12]);
 
         mouse_area(
             container(title_bar_content)
