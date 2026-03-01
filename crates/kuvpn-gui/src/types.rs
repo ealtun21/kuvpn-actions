@@ -49,6 +49,7 @@ pub use kuvpn::ConnectionStatus;
 pub enum Tab {
     Connection,
     Settings,
+    History,
     Console,
 }
 
@@ -108,6 +109,8 @@ pub enum Message {
     AutoHideWindow,
     ShowPasswordHeld(bool),
     ActionNotifTick,
+    HistoryLoaded(Vec<kuvpn::ConnectionEvent>),
+    ClearHistory,
 }
 
 #[derive(Debug)]

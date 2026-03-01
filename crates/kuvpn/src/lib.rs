@@ -7,6 +7,7 @@ pub mod browser;
 pub mod dsid;
 pub mod error;
 pub mod handlers;
+pub mod history;
 #[cfg(windows)]
 pub mod helper;
 pub mod logger;
@@ -28,5 +29,6 @@ pub use openconnect::{
 pub use openconnect::{
     find_askpass, list_available_escalation_tools, needs_password_prompt, resolve_escalation_tool,
 };
+pub use history::{append_event, clear_events, load_events, ConnectionEvent, EventKind};
 pub use session::{ConnectionStatus, ParsedLog, SessionConfig, VpnSession};
 pub use utils::get_user_data_dir;

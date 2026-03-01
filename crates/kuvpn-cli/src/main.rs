@@ -200,6 +200,10 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
+    if args.history {
+        return print_history(&styles);
+    }
+
     if args.clean {
         return match kuvpn::utils::wipe_user_data_dir() {
             Ok(_) => {
@@ -222,6 +226,71 @@ fn main() -> ExitCode {
     }
 
     run_vpn_session(&args, &styles)
+}
+
+fn print_history(styles: &CliStyles) -> ExitCode {
+    match kuvpn::load_events() {
+        Ok(events) if events.is_empty() => {
+            eprintln!("  {} No connection history found.", styles.dim.apply_to("●"));
+            ExitCode::SUCCESS
+        }
+        Ok(events) => {
+            for event in events.iter().rev() {
+                let kind = match event.kind {
+                    kuvpn::EventKind::Connected => styles.green.apply_to("Connected   ").to_string(),
+                    kuvpn::EventKind::Disconnected => {
+                        styles.dim.apply_to("Disconnected").to_string()
+                    }
+                    kuvpn::EventKind::Error => styles.red.apply_to("Error       ").to_string(),
+                };
+                let dur = event
+                    .duration_secs
+                    .map(|d| format!(" ({})", credentials::format_duration(std::time::Duration::from_secs(d))))
+                    .unwrap_or_default();
+                let msg = event
+                    .message
+                    .as_deref()
+                    .map(|m| format!(" — {}", m))
+                    .unwrap_or_default();
+                eprintln!(
+                    "  {} [{}]{}{}",
+                    kind,
+                    format_unix_ts(event.timestamp_unix),
+                    dur,
+                    msg
+                );
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("  {} Failed to load history: {}", styles.red.apply_to("✗"), e);
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn format_unix_ts(unix: u64) -> String {
+    let secs = unix;
+    let mins = secs / 60;
+    let hours_total = mins / 60;
+    let days_total = hours_total / 24;
+    let sec_part = secs % 60;
+    let min_part = mins % 60;
+    let hour_part = hours_total % 24;
+    let z = days_total + 719468;
+    let era = z / 146097;
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+        y, m, d, hour_part, min_part, sec_part
+    )
 }
 
 fn run_get_dsid(args: &Args, styles: &CliStyles) -> ExitCode {
