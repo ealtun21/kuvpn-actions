@@ -9,9 +9,11 @@ use crate::types::{
 
 pub struct TrayComponents {
     pub tray: TrayIcon,
+    pub status_item: MenuItem,
     pub show_item: MenuItem,
     pub connect_item: MenuItem,
     pub disconnect_item: MenuItem,
+    pub wipe_item: MenuItem,
 }
 
 /// Render size for tray icons. Windows system tray uses 16–32 px; supply 32 so
@@ -43,16 +45,39 @@ fn svg_to_tray_icon(svg_bytes: &[u8]) -> Result<tray_icon::Icon, Box<dyn std::er
     Ok(tray_icon::Icon::from_rgba(rgba_data, size, size)?)
 }
 
+/// Return the status label text for the tray menu item.
+pub fn status_label(status: kuvpn::ConnectionStatus) -> &'static str {
+    match status {
+        kuvpn::ConnectionStatus::Connected => "Status: Connected",
+        kuvpn::ConnectionStatus::Disconnected => "Status: Disconnected",
+        kuvpn::ConnectionStatus::Error => "Status: Error",
+        kuvpn::ConnectionStatus::Connecting => "Status: Connecting...",
+        kuvpn::ConnectionStatus::Disconnecting => "Status: Disconnecting...",
+    }
+}
+
 pub fn init_tray() -> TrayComponents {
-    let show_item = MenuItem::with_id("show", "Toggle Visibility", true, None);
+    let status_item = MenuItem::with_id("status", "Status: Disconnected", false, None);
+    let show_item = MenuItem::with_id("show", "Show / Hide", true, None);
     let connect_item = MenuItem::with_id("connect", "Connect", true, None);
-    let disconnect_item = MenuItem::with_id("disconnect", "Disconnect", true, None);
+    let disconnect_item = MenuItem::with_id("disconnect", "Disconnect", false, None);
+    let wipe_item = MenuItem::with_id("wipe", "Wipe Session", true, None);
+    let copy_logs_item = MenuItem::with_id("copy_logs", "Copy Logs", true, None);
+    let settings_item = MenuItem::with_id("settings", "Settings", true, None);
     let quit_item = MenuItem::with_id("quit", "Quit", true, None);
 
     let tray_menu = Menu::with_items(&[
+        &status_item,
+        &PredefinedMenuItem::separator(),
         &show_item,
+        &PredefinedMenuItem::separator(),
         &connect_item,
         &disconnect_item,
+        &PredefinedMenuItem::separator(),
+        &wipe_item,
+        &copy_logs_item,
+        &PredefinedMenuItem::separator(),
+        &settings_item,
         &PredefinedMenuItem::separator(),
         &quit_item,
     ])
@@ -81,9 +106,11 @@ pub fn init_tray() -> TrayComponents {
 
     TrayComponents {
         tray,
+        status_item,
         show_item,
         connect_item,
         disconnect_item,
+        wipe_item,
     }
 }
 
