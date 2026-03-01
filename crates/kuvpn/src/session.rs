@@ -458,7 +458,10 @@ impl VpnSession {
             {
                 use nix::sys::signal::{self, Signal};
                 use nix::unistd::Pid;
-                let _ = signal::kill(Pid::from_raw(pid as i32), Signal::SIGTERM);
+                // Use SIGKILL so the OS closes Chrome's socket immediately,
+                // unblocking any pending CDP calls (e.g. poll_dsid / evaluate)
+                // without waiting for Chrome's graceful shutdown (up to 30 s).
+                let _ = signal::kill(Pid::from_raw(pid as i32), Signal::SIGKILL);
             }
             #[cfg(windows)]
             {

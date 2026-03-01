@@ -225,6 +225,16 @@ fn main() -> ExitCode {
 }
 
 fn run_get_dsid(args: &Args, styles: &CliStyles) -> ExitCode {
+    // Save the cursor position before any output (spinner + log lines).
+    // On success we restore here and erase to end-of-screen, removing only
+    // what this invocation drew — unlike clear_screen() which wipes the
+    // entire visible terminal including whatever was there before.
+    let term = console::Term::stderr();
+    let is_tty = term.is_term();
+    if is_tty {
+        eprint!("\x1b[s"); // ANSI save cursor
+    }
+
     let spinner = Arc::new(ProgressBar::new_spinner());
     spinner.set_style(spinner_style());
     spinner.set_message("Retrieving DSID...");
@@ -246,11 +256,10 @@ fn run_get_dsid(args: &Args, styles: &CliStyles) -> ExitCode {
     match run_login_and_get_dsid(&config, &provider, None, None) {
         Ok(dsid) => {
             spinner.finish_and_clear();
-            // Clear all status output so the DSID is the only thing on screen
-            // (and so piped output is clean). Only do this when stderr is a TTY.
-            let term = console::Term::stderr();
-            if term.is_term() {
-                let _ = term.clear_screen();
+            if is_tty {
+                // Restore to saved position then erase from there to
+                // end-of-screen — clears the spinner and all log lines.
+                eprint!("\x1b[u\x1b[J");
             }
             println!("{}", dsid);
             ExitCode::SUCCESS
@@ -290,6 +299,7 @@ fn run_vpn_session(args: &Args, styles: &CliStyles) -> ExitCode {
 
     // Clone the session so the ctrlc handler can call session.cancel(), which
     // also kills the browser process (not just sets the token).
+    let cancel_token = session.cancel_token();
     let cancel_session = session.clone();
     ctrlc::set_handler(move || cancel_session.cancel()).ok();
 
@@ -323,6 +333,25 @@ fn run_vpn_session(args: &Args, styles: &CliStyles) -> ExitCode {
             } else {
                 ExitCode::SUCCESS
             };
+        }
+
+        // Safety net: if the user cancelled but the session thread is still
+        // blocked (e.g. waiting on a CDP call to a dead browser), don't spin
+        // forever. Give it a brief window to flush any final log messages, then
+        // exit. Normally the SIGKILL above makes this unnecessary, but this
+        // handles edge cases (PID not yet stored, slow OS socket teardown, etc).
+        if cancel_token.is_cancelled() {
+            std::thread::sleep(Duration::from_millis(500));
+            drain_logs(
+                &log_rx,
+                &spinner,
+                &mut spinner_active,
+                &mut connection_start,
+                styles,
+                &args.interface_name,
+            );
+            clear_spinner(&spinner, &mut spinner_active);
+            return ExitCode::SUCCESS;
         }
 
         std::thread::sleep(Duration::from_millis(100));
