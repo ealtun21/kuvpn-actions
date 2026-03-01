@@ -32,6 +32,10 @@ impl log::Log for GuiLogger {
         metadata.level() <= log::Level::Trace
     }
     fn log(&self, record: &log::Record) {
+        // Suppress Iced/wgpu/winit internal logs — only forward kuvpn crate output.
+        if !record.target().starts_with("kuvpn") {
+            return;
+        }
         let Ok(guard) = self.tx.lock() else { return };
         if let Some(tx) = &*guard {
             let _ = tx.try_send(format!("{:?}|{}", record.level(), record.args()));

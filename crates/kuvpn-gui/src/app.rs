@@ -585,6 +585,7 @@ impl KuVpnGui {
 
             Message::MfaPushReceived(code) => {
                 self.mfa_info = Some(code.clone());
+                self.current_tab = Tab::Connection;
                 log::info!("MFA received - bringing window to front");
                 if !self.is_visible && !self.window_close_pending && !self.window_open_pending {
                     self.was_shown_for_prompt = true;
