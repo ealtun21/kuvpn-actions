@@ -10,6 +10,7 @@ use std::time::SystemTime;
 #[serde(rename_all = "snake_case")]
 pub enum EventKind {
     Connected,
+    Reconnected,
     Disconnected,
     Error,
 }

@@ -90,6 +90,7 @@ fn view_event_row<'a>(event: &'a kuvpn::ConnectionEvent) -> Element<'a, Message>
 
     let (dot_color, kind_label) = match event.kind {
         EventKind::Connected => (COLOR_SUCCESS, "Connected"),
+        EventKind::Reconnected => (COLOR_WARNING, "Reconnected"),
         EventKind::Disconnected => (COLOR_TEXT_DIM, "Disconnected"),
         EventKind::Error => (Color::from_rgb(0.8, 0.2, 0.2), "Error"),
     };

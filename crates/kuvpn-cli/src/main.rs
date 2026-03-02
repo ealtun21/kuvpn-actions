@@ -107,6 +107,12 @@ fn handle_log(
             );
             return true;
         }
+        _ if msg.starts_with("Reconnecting") => {
+            *connection_start = None;
+            clear_spinner(spinner, spinner_active);
+            eprintln!("  {} {}", styles.yellow.apply_to("~"), msg);
+            return true;
+        }
         _ if msg.ends_with("requires a password. Prompting...") => return true,
         _ => {}
     }
@@ -238,6 +244,7 @@ fn print_history(styles: &CliStyles) -> ExitCode {
             for event in events.iter().rev() {
                 let kind = match event.kind {
                     kuvpn::EventKind::Connected => styles.green.apply_to("Connected   ").to_string(),
+                    kuvpn::EventKind::Reconnected => styles.yellow.apply_to("Reconnected ").to_string(),
                     kuvpn::EventKind::Disconnected => {
                         styles.dim.apply_to("Disconnected").to_string()
                     }
