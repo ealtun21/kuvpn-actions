@@ -10,7 +10,7 @@ impl KuVpnGui {
     pub fn view_history(&self) -> Element<'_, Message> {
         let heading = row![
             text("Connection History")
-                .size(16)
+                .size(14)
                 .color(COLOR_TEXT)
                 .width(Length::Fill),
             button(
@@ -67,9 +67,24 @@ impl KuVpnGui {
             col
         };
 
-        let content = column![heading, scrollable(events_col).style(custom_scrollbar)]
-            .spacing(12)
-            .width(Length::Fill);
+        // Wrap events in a container with right padding so items don't render
+        // under the scrollbar rail when it appears.
+        let scrollable_content = container(events_col).width(Length::Fill).padding(Padding {
+            top: 0.0,
+            right: 16.0,
+            bottom: 0.0,
+            left: 0.0,
+        });
+
+        let content = column![
+            heading,
+            scrollable(scrollable_content)
+                .height(Length::Fill)
+                .style(custom_scrollbar)
+        ]
+        .spacing(12)
+        .width(Length::Fill)
+        .height(Length::Fill);
 
         container(content)
             .padding(Padding {

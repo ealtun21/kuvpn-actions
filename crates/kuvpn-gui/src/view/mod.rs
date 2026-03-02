@@ -95,11 +95,8 @@ impl KuVpnGui {
         .align_y(Alignment::Center);
 
         if let Some(code) = &self.mfa_info {
-            title_row = title_row.push(
-                text(format!("MFA: {}", code))
-                    .size(11)
-                    .color(COLOR_WARNING),
-            );
+            title_row =
+                title_row.push(text(format!("MFA: {}", code)).size(11).color(COLOR_WARNING));
         }
 
         let title_bar_content = title_row

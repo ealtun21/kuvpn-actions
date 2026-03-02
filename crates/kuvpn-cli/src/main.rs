@@ -237,14 +237,21 @@ fn main() -> ExitCode {
 fn print_history(styles: &CliStyles) -> ExitCode {
     match kuvpn::load_events() {
         Ok(events) if events.is_empty() => {
-            eprintln!("  {} No connection history found.", styles.dim.apply_to("●"));
+            eprintln!(
+                "  {} No connection history found.",
+                styles.dim.apply_to("●")
+            );
             ExitCode::SUCCESS
         }
         Ok(events) => {
             for event in events.iter().rev() {
                 let kind = match event.kind {
-                    kuvpn::EventKind::Connected => styles.green.apply_to("Connected   ").to_string(),
-                    kuvpn::EventKind::Reconnected => styles.yellow.apply_to("Reconnected ").to_string(),
+                    kuvpn::EventKind::Connected => {
+                        styles.green.apply_to("Connected   ").to_string()
+                    }
+                    kuvpn::EventKind::Reconnected => {
+                        styles.yellow.apply_to("Reconnected ").to_string()
+                    }
                     kuvpn::EventKind::Disconnected => {
                         styles.dim.apply_to("Disconnected").to_string()
                     }
@@ -252,7 +259,12 @@ fn print_history(styles: &CliStyles) -> ExitCode {
                 };
                 let dur = event
                     .duration_secs
-                    .map(|d| format!(" ({})", credentials::format_duration(std::time::Duration::from_secs(d))))
+                    .map(|d| {
+                        format!(
+                            " ({})",
+                            credentials::format_duration(std::time::Duration::from_secs(d))
+                        )
+                    })
                     .unwrap_or_default();
                 let msg = event
                     .message
@@ -270,7 +282,11 @@ fn print_history(styles: &CliStyles) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(e) => {
-            eprintln!("  {} Failed to load history: {}", styles.red.apply_to("✗"), e);
+            eprintln!(
+                "  {} Failed to load history: {}",
+                styles.red.apply_to("✗"),
+                e
+            );
             ExitCode::FAILURE
         }
     }

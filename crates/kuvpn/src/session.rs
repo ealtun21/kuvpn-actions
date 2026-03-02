@@ -226,9 +226,7 @@ impl SessionThread {
             };
 
             // Retry on unexpected disconnect unless user cancelled or retries exhausted.
-            if !self.cancel_token.is_cancelled()
-                && dropped_after.is_some()
-                && attempt < MAX_RETRIES
+            if !self.cancel_token.is_cancelled() && dropped_after.is_some() && attempt < MAX_RETRIES
             {
                 attempt += 1;
                 prev_duration = dropped_after;
@@ -397,7 +395,10 @@ impl SessionThread {
                     let _ = p.kill();
                     let _ = p.wait();
                 }
-                let duration = self.connected_at.map(|t| t.elapsed().as_secs()).unwrap_or(0);
+                let duration = self
+                    .connected_at
+                    .map(|t| t.elapsed().as_secs())
+                    .unwrap_or(0);
                 return Some(duration); // unexpected disconnect — eligible for reconnect
             } else if start_time.elapsed() > timeout {
                 self.set_conn_error("VPN tunnel failed to establish within timeout");
@@ -421,9 +422,7 @@ impl SessionThread {
             thread::sleep(Duration::from_millis(500));
         }
 
-        let duration_secs = self
-            .connected_at
-            .map(|t| t.elapsed().as_secs());
+        let duration_secs = self.connected_at.map(|t| t.elapsed().as_secs());
 
         if is_openconnect_running() {
             let err_msg = "Failed to stop OpenConnect. Please close it manually.";

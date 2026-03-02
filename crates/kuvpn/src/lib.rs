@@ -7,9 +7,9 @@ pub mod browser;
 pub mod dsid;
 pub mod error;
 pub mod handlers;
-pub mod history;
 #[cfg(windows)]
 pub mod helper;
+pub mod history;
 pub mod logger;
 pub mod openconnect;
 pub mod session;
@@ -20,6 +20,7 @@ pub use dsid::{run_login_and_get_dsid, LoginConfig};
 pub use error::{AuthError, ErrorCategory};
 #[cfg(windows)]
 pub use helper::run_vpn_helper_if_requested;
+pub use history::{append_event, clear_events, load_events, ConnectionEvent, EventKind};
 pub use logger::init_logger;
 pub use openconnect::{
     execute_openconnect, get_openconnect_pid, get_vpn_interface_name, is_openconnect_running,
@@ -29,6 +30,5 @@ pub use openconnect::{
 pub use openconnect::{
     find_askpass, list_available_escalation_tools, needs_password_prompt, resolve_escalation_tool,
 };
-pub use history::{append_event, clear_events, load_events, ConnectionEvent, EventKind};
 pub use session::{ConnectionStatus, ParsedLog, SessionConfig, VpnSession};
 pub use utils::get_user_data_dir;

@@ -107,6 +107,7 @@ pub enum Message {
     QuitAfterCleanup,
     AutoHideAfterPromptToggled(bool),
     AutoHideWindow,
+    AdvancedModeToggled(bool),
     ShowPasswordHeld(bool),
     ActionNotifTick,
     HistoryLoaded(Vec<kuvpn::ConnectionEvent>),

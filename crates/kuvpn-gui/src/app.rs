@@ -465,6 +465,11 @@ impl KuVpnGui {
                 self.save_settings();
                 Task::none()
             }
+            Message::AdvancedModeToggled(v) => {
+                self.settings.advanced_mode = v;
+                self.save_settings();
+                Task::none()
+            }
             Message::AutoHideWindow => {
                 if self.is_visible {
                     return self.update(Message::ToggleVisibility {

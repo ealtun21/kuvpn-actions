@@ -67,7 +67,7 @@ impl KuVpnGui {
             .width(Length::Fill)
             .into()
         } else {
-            text_input("Response Required", &self.current_input)
+            text_input("username@ku.edu.tr", &self.current_input)
                 .on_input(Message::InputChanged)
                 .on_submit(Message::SubmitInput)
                 .padding(12)

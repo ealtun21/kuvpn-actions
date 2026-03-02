@@ -43,9 +43,9 @@ impl KuVpnGui {
                         .style(|_, _| svg::Style {
                             color: Some(COLOR_TEXT_DIM)
                         }),
-                    text("SESSION LOGS")
-                        .size(12)
-                        .color(COLOR_TEXT_DIM)
+                    text("Session Logs")
+                        .size(14)
+                        .color(COLOR_TEXT)
                         .width(Length::Fill),
                     button(text("Copy All").size(11).color(COLOR_TEXT))
                         .padding([8, 14])
