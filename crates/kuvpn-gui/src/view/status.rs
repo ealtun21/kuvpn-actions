@@ -332,18 +332,22 @@ impl KuVpnGui {
 
         if self.last_diagnostic_path.is_some() {
             inner = inner.push(
-                button(text("Open diagnostics folder").size(11).color(COLOR_WARNING))
-                    .on_press(Message::OpenDiagnosticsFolder)
-                    .padding([4, 8])
-                    .style(|_, _| iced::widget::button::Style {
-                        background: None,
-                        border: Border {
-                            color: Color::from_rgba(0.80, 0.60, 0.30, 0.5),
-                            width: 1.0,
-                            radius: 4.0.into(),
-                        },
-                        ..Default::default()
-                    }),
+                button(
+                    text("Open diagnostics folder")
+                        .size(11)
+                        .color(COLOR_WARNING),
+                )
+                .on_press(Message::OpenDiagnosticsFolder)
+                .padding([4, 8])
+                .style(|_, _| iced::widget::button::Style {
+                    background: None,
+                    border: Border {
+                        color: Color::from_rgba(0.80, 0.60, 0.30, 0.5),
+                        width: 1.0,
+                        radius: 4.0.into(),
+                    },
+                    ..Default::default()
+                }),
             );
         }
 

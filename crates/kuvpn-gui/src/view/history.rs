@@ -107,6 +107,7 @@ fn view_event_row<'a>(event: &'a kuvpn::ConnectionEvent) -> Element<'a, Message>
         EventKind::Connected => (COLOR_SUCCESS, "Connected"),
         EventKind::Reconnected => (COLOR_WARNING, "Reconnected"),
         EventKind::Disconnected => (COLOR_TEXT_DIM, "Disconnected"),
+        EventKind::Cancelled => (COLOR_TEXT_DIM, "Cancelled"),
         EventKind::Error => (Color::from_rgb(0.8, 0.2, 0.2), "Error"),
     };
 
@@ -128,7 +129,12 @@ fn view_event_row<'a>(event: &'a kuvpn::ConnectionEvent) -> Element<'a, Message>
                 },
                 ..Default::default()
             }),
-        text(kind_label).size(12).color(COLOR_TEXT),
+        // Fixed width so the timestamp column always starts at the same position
+        // regardless of which label ("Disconnected" vs "Error" etc.) is shown.
+        text(kind_label)
+            .size(12)
+            .color(dot_color)
+            .width(Length::Fixed(88.0)),
         text(format!("{}{}", ts, duration_str))
             .size(11)
             .color(COLOR_TEXT_DIM),

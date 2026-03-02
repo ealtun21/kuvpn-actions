@@ -30,34 +30,41 @@ impl KuVpnGui {
             .on_press(Message::ConnectPressed)
             .style(btn_primary)
             .into(),
-            _ => button(
-                container(
-                    row![
-                        svg(svg::Handle::from_memory(ICON_POWER_SVG))
-                            .width(16)
-                            .height(16)
-                            .style(|_, _| svg::Style {
-                                color: Some(iced::Color::WHITE)
-                            }),
-                        text(if self.status == ConnectionStatus::Connecting {
-                            "CANCEL"
-                        } else {
-                            "DISCONNECT"
-                        })
-                        .size(15)
-                        .color(iced::Color::WHITE),
-                    ]
-                    .spacing(10)
-                    .align_y(Alignment::Center),
+            _ => {
+                let disconnecting = self.status == ConnectionStatus::Disconnecting;
+                button(
+                    container(
+                        row![
+                            svg(svg::Handle::from_memory(ICON_POWER_SVG))
+                                .width(16)
+                                .height(16)
+                                .style(|_, _| svg::Style {
+                                    color: Some(iced::Color::WHITE)
+                                }),
+                            text(if self.status == ConnectionStatus::Connecting {
+                                "CANCEL"
+                            } else {
+                                "DISCONNECT"
+                            })
+                            .size(15)
+                            .color(iced::Color::WHITE),
+                        ]
+                        .spacing(10)
+                        .align_y(Alignment::Center),
+                    )
+                    .width(Length::Fill)
+                    .center_x(Length::Fill),
                 )
+                .padding([14, 20])
                 .width(Length::Fill)
-                .center_x(Length::Fill),
-            )
-            .padding([14, 20])
-            .width(Length::Fill)
-            .on_press(Message::DisconnectPressed)
-            .style(btn_danger)
-            .into(),
+                .on_press_maybe(if disconnecting {
+                    None
+                } else {
+                    Some(Message::DisconnectPressed)
+                })
+                .style(btn_danger)
+                .into()
+            }
         }
     }
 }

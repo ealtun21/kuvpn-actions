@@ -12,6 +12,7 @@ pub enum EventKind {
     Connected,
     Reconnected,
     Disconnected,
+    Cancelled,
     Error,
 }
 

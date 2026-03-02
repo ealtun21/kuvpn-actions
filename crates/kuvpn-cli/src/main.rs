@@ -255,6 +255,7 @@ fn print_history(styles: &CliStyles) -> ExitCode {
                     kuvpn::EventKind::Disconnected => {
                         styles.dim.apply_to("Disconnected").to_string()
                     }
+                    kuvpn::EventKind::Cancelled => styles.dim.apply_to("Cancelled   ").to_string(),
                     kuvpn::EventKind::Error => styles.red.apply_to("Error       ").to_string(),
                 };
                 let dur = event

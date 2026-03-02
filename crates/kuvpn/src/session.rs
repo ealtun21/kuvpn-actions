@@ -289,8 +289,7 @@ impl SessionThread {
 
         // If browser automation saved a diagnostic bundle, forward its path over
         // the structured log channel so the CLI/GUI can surface it to the user.
-        let diag_path = crate::diagnostics::PENDING_DIAG_PATH
-            .with(|cell| cell.borrow_mut().take());
+        let diag_path = crate::diagnostics::PENDING_DIAG_PATH.with(|cell| cell.borrow_mut().take());
         if let Some(path) = diag_path {
             self.send_log(format!("Diagnostic|{}", path.display()));
         }
@@ -440,12 +439,19 @@ impl SessionThread {
             event.duration_secs = duration_secs;
             event.message = Some(err_msg.to_string());
             let _ = crate::history::append_event(&event);
-        } else {
+        } else if self.connected_at.is_some() {
+            // Was connected at some point — record a normal disconnect.
             self.set_status(ConnectionStatus::Disconnected);
             self.send_log("Info|Disconnected.");
             let mut event =
                 crate::history::ConnectionEvent::now(crate::history::EventKind::Disconnected);
             event.duration_secs = duration_secs;
+            let _ = crate::history::append_event(&event);
+        } else {
+            // Never reached the Connected state — record as cancelled, not disconnected.
+            self.set_status(ConnectionStatus::Disconnected);
+            self.send_log("Info|Cancelled.");
+            let event = crate::history::ConnectionEvent::now(crate::history::EventKind::Cancelled);
             let _ = crate::history::append_event(&event);
         }
     }

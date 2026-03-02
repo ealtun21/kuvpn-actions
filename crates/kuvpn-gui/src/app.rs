@@ -671,8 +671,7 @@ impl KuVpnGui {
                     Ok(dir) => {
                         if dir.exists() {
                             if let Err(e) = std::fs::remove_dir_all(&dir) {
-                                self.logs
-                                    .push(format!("Failed to clear session: {}", e));
+                                self.logs.push(format!("Failed to clear session: {}", e));
                                 self.session_wipe_result = Some(false);
                             } else {
                                 self.logs.push("Saved session data wiped.".to_string());

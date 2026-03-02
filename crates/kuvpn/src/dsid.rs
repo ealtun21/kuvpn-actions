@@ -6,7 +6,7 @@ use headless_chrome::{Browser, Tab};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Configuration for the browser-based login process.
 pub struct LoginConfig {
@@ -276,23 +276,21 @@ impl BrowserSession {
         cancel_token: Option<&CancellationToken>,
     ) -> anyhow::Result<String> {
         const MAX_RETRIES: usize = 20;
-        const STUCK_THRESHOLD: usize = 8; // ~3.2 seconds without progress before considering stuck
+        const STUCK_DURATION: Duration = Duration::from_secs(3);
         const MAX_RESETS: usize = 2; // maximum page resets allowed
 
         log::info!("Navigating to: {}", config.url);
         self.tab.0.navigate_to(&config.url)?;
 
         if let Err(e) = self.tab.0.wait_until_navigated() {
-            log::warn!(
-                "Initial navigation wait timed out: {}, continuing...",
-                e
-            );
+            log::warn!("Initial navigation wait timed out: {}, continuing...", e);
         }
 
         let mut handled: HashSet<&'static str> = HashSet::new();
         let mut last_url = String::new();
         let mut retries = 0;
         let mut reset_count = 0;
+        let mut stuck_since: Option<Instant> = None;
 
         loop {
             if let Some(token) = cancel_token {
@@ -323,6 +321,7 @@ impl BrowserSession {
                 log::info!("Page: {}", current_url);
                 last_url = current_url;
                 retries = 0;
+                stuck_since = None;
                 handled.clear(); // Allow re-authentication if Microsoft loops back
             }
 
@@ -343,10 +342,14 @@ impl BrowserSession {
                 ) {
                     Ok((true, is_mfa)) => {
                         retries = 0;
+                        stuck_since = None;
                         is_mfa
                     }
                     Ok((false, _)) => {
                         retries += 1;
+                        if stuck_since.is_none() {
+                            stuck_since = Some(Instant::now());
+                        }
                         false
                     }
                     Err(e) => {
@@ -359,8 +362,12 @@ impl BrowserSession {
                 provider.clear_page_guard();
 
                 // Page reset logic for stuck automation (only in Full Auto mode)
-                if retries > STUCK_THRESHOLD && !is_in_mfa_wait {
+                let is_stuck = stuck_since
+                    .map(|t| t.elapsed() >= STUCK_DURATION)
+                    .unwrap_or(false);
+                if is_stuck && !is_in_mfa_wait {
                     reset_count += 1;
+                    stuck_since = None;
 
                     if reset_count > MAX_RESETS {
                         let reason = format!(
@@ -379,7 +386,7 @@ impl BrowserSession {
 
                     log::warn!(
                         "Authentication stuck (no progress for {}s). Resetting page... (attempt {}/{})",
-                        (STUCK_THRESHOLD * 400) / 1000,
+                        STUCK_DURATION.as_secs(),
                         reset_count,
                         MAX_RESETS
                     );
@@ -399,6 +406,7 @@ impl BrowserSession {
                         let _ = self.tab.0.wait_until_navigated();
                         handled.clear(); // Clear handler history to allow re-triggering
                         retries = 0;
+                        stuck_since = None;
                         last_url = String::new();
                     }
                 }
