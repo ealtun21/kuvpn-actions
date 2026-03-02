@@ -354,7 +354,10 @@ impl BrowserSession {
                     }
                     Err(e) => {
                         log::warn!("Handler error: {}", e);
-                        self.capture_and_save_diagnostics(&e.to_string());
+                        let cancelled = cancel_token.map_or(false, |t| t.is_cancelled());
+                        if !cancelled {
+                            self.capture_and_save_diagnostics(&e.to_string());
+                        }
                         return Err(e);
                     }
                 };
