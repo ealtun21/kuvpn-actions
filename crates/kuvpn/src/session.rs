@@ -447,6 +447,11 @@ impl SessionThread {
                 crate::history::ConnectionEvent::now(crate::history::EventKind::Disconnected);
             event.duration_secs = duration_secs;
             let _ = crate::history::append_event(&event);
+        } else if *self.status.lock().unwrap() == ConnectionStatus::Error {
+            // An error occurred before ever connecting (auth failure, tunnel timeout, etc.)
+            let mut event = crate::history::ConnectionEvent::now(crate::history::EventKind::Error);
+            event.message = self.last_error.lock().unwrap().clone();
+            let _ = crate::history::append_event(&event);
         } else {
             // Never reached the Connected state — record as cancelled, not disconnected.
             self.set_status(ConnectionStatus::Disconnected);
