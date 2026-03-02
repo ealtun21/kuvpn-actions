@@ -131,7 +131,7 @@ fn handle_log(
             eprintln!(
                 "    {} Switch to manual mode: {}",
                 styles.dim.apply_to("•"),
-                styles.bold.apply_to("--no-auto-login --disable-headless"),
+                styles.bold.apply_to("--mode manual"),
             );
             eprintln!(
                 "    {} Wipe session cache:    {}",
@@ -187,11 +187,11 @@ fn main() -> ExitCode {
     }
 
     let args = Args::parse();
-    init_logger(args.level.clone().into());
+    init_logger(args.log.clone().into());
 
     let styles = CliStyles::new();
 
-    if !args.get_dsid {
+    if !args.dsid {
         eprintln!(
             "{} {}",
             styles.bold.apply_to("KUVPN"),
@@ -227,7 +227,7 @@ fn main() -> ExitCode {
         };
     }
 
-    if args.get_dsid {
+    if args.dsid {
         return run_get_dsid(&args, &styles);
     }
 
@@ -334,11 +334,11 @@ fn run_get_dsid(args: &Args, styles: &CliStyles) -> ExitCode {
     spinner.enable_steady_tick(Duration::from_millis(80));
 
     let config = LoginConfig {
-        headless: !args.disable_headless,
+        headless: args.mode.headless(),
         url: args.url.clone(),
         domain: args.domain.clone(),
         user_agent: "Mozilla/5.0".to_string(),
-        no_auto_login: args.no_auto_login,
+        no_auto_login: args.mode.no_auto_login(),
         email: args.email.clone(),
     };
 
@@ -370,8 +370,8 @@ fn run_vpn_session(args: &Args, styles: &CliStyles) -> ExitCode {
         url: args.url.clone(),
         domain: args.domain.clone(),
         user_agent: "Mozilla/5.0".to_string(),
-        headless: !args.disable_headless,
-        no_auto_login: args.no_auto_login,
+        headless: args.mode.headless(),
+        no_auto_login: args.mode.no_auto_login(),
         email: args.email.clone(),
         openconnect_path: args.openconnect_path.clone(),
         escalation_tool: args.run_command.clone(),

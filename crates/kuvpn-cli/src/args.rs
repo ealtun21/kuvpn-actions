@@ -29,17 +29,46 @@ impl From<LogLevel> for log::LevelFilter {
     }
 }
 
-/// Simple program to retrieve DSID cookie and execute OpenConnect command
+/// How much the login flow is automated (mirrors the GUI setting).
+#[derive(Debug, ValueEnum, Clone, Default)]
+pub enum LoginMode {
+    /// Headless browser, fully automated — best for everyday use (default)
+    #[default]
+    FullAuto,
+    /// Visible browser window, automation still runs — useful for debugging
+    Visual,
+    /// Visible browser, no automation — complete the login yourself; KUVPN
+    /// waits for the DSID cookie then starts OpenConnect
+    Manual,
+}
+
+impl LoginMode {
+    /// Whether the browser should run headlessly.
+    pub fn headless(&self) -> bool {
+        matches!(self, LoginMode::FullAuto)
+    }
+
+    /// Whether automatic login handlers are disabled.
+    pub fn no_auto_login(&self) -> bool {
+        matches!(self, LoginMode::Manual)
+    }
+}
+
+/// KUVPN CLI — automated VPN client for Koç University
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 pub struct Args {
+    /// Login mode: full-auto (default), visual, or manual
+    #[arg(short, long, value_enum, default_value_t = LoginMode::FullAuto)]
+    pub mode: LoginMode,
+
     /// The URL to the page where we will start logging in and looking for DSID
-    #[arg(short, long, default_value = "https://vpn.ku.edu.tr")]
+    #[arg(long, default_value = "https://vpn.ku.edu.tr")]
     pub url: String,
 
     /// The level of logging
     #[arg(short, long, value_enum, default_value_t = LogLevel::Error)]
-    pub level: LogLevel,
+    pub log: LogLevel,
 
     /// The Domain of the DSID found
     #[arg(long, default_value = "vpn.ku.edu.tr")]
@@ -47,18 +76,14 @@ pub struct Args {
 
     /// Gives the user the dsid without running openconnect
     #[arg(short, long, default_value_t = false)]
-    pub get_dsid: bool,
-
-    /// Gets DSID without headless mode
-    #[arg(short, long, default_value_t = false)]
-    pub disable_headless: bool,
+    pub dsid: bool,
 
     /// Delete session information
     #[arg(short, long, default_value_t = false)]
     pub clean: bool,
 
     /// Command to run openconnect with (e.g., sudo, pkexec, or a custom script)
-    #[arg(short, long)]
+    #[arg(long)]
     pub run_command: Option<String>,
 
     /// Path or command name for openconnect. Defaults to 'openconnect'.
@@ -66,12 +91,8 @@ pub struct Args {
     #[arg(long, default_value = "openconnect")]
     pub openconnect_path: String,
 
-    /// Disable automatic login handlers and only poll for DSID in a headful browser
-    #[arg(long, default_value_t = false)]
-    pub no_auto_login: bool,
-
     /// Email for login (optional)
-    #[arg(long, default_value = None)]
+    #[arg(short, long, default_value = None)]
     pub email: Option<String>,
 
     /// Name for the TUN/TAP interface created by openconnect
