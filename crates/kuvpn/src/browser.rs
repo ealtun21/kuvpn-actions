@@ -74,7 +74,7 @@ pub fn create_browser(
                 if attempts >= 2 {
                     return Err(format!("Browser failed even after wipe: {}", e).into());
                 }
-                log::warn!("[!] Browser connection failed. Wiping profile and retrying...");
+                log::warn!("Browser connection failed. Wiping profile and retrying...");
                 crate::utils::wipe_user_data_dir()?;
             }
         }

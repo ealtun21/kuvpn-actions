@@ -61,7 +61,7 @@ impl AuthTab {
         )?;
 
         if visible {
-            log::info!("[*] Detected KMSI – pressing Yes...");
+            log::info!("Detected KMSI – pressing Yes...");
             self.eval(
                 "var chk=document.querySelector('#KmsiCheckboxField'); \
                  if(chk && !chk.checked){chk.click();}",
@@ -88,7 +88,7 @@ impl AuthTab {
         )?;
 
         if is_conflict_page {
-            log::info!("[*] Detected existing VPN session. Continuing...");
+            log::info!("Detected existing VPN session. Continuing...");
             self.eval(r#"var btn=document.getElementById('btnContinue'); if(btn){btn.click();}"#)?;
             sleep(Duration::from_millis(500));
             return Ok(true);
@@ -115,7 +115,7 @@ impl AuthTab {
         )?;
 
         if is_denied_page {
-            log::info!("[*] Authenticator denied page detected. Pressing Next...");
+            log::info!("Authenticator denied page detected. Pressing Next...");
             self.eval(
                 "var btn=document.getElementById('idSIButton9'); \
                  if(btn){btn.focus();btn.click();}",
@@ -146,7 +146,7 @@ impl AuthTab {
         )?;
 
         if is_picker {
-            log::info!("[*] 'Pick an account' page detected. Selecting the first account...");
+            log::info!("'Pick an account' page detected. Selecting the first account...");
             self.eval(
                 r#"(function() {
                 var btn = document.querySelector(

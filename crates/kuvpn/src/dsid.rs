@@ -106,7 +106,7 @@ impl BrowserSession {
         if self.tab.is_azure_error_page()? {
             handled.insert("azure_error");
             let error_msg = self.tab.get_azure_error_details()?;
-            log::warn!("[!] Azure AD error page detected: {}", error_msg);
+            log::warn!("Azure AD error page detected: {}", error_msg);
             return Err(AuthError::AuthenticationFailed {
                 reason: error_msg,
                 suggest_manual_mode: false, // This is often a simple credential error
@@ -135,7 +135,7 @@ impl BrowserSession {
 
         if self.tab.is_incorrect_password_visible()? {
             handled.insert("incorrect_password");
-            log::warn!("[!] Incorrect password detected");
+            log::warn!("Incorrect password detected");
             return Err(AuthError::IncorrectPassword {
                 message: "Your account or password is incorrect.".to_string(),
             }
@@ -226,7 +226,7 @@ impl BrowserSession {
         if !handled.contains("generic_error") {
             if let Some(error_msg) = self.tab.detect_generic_error()? {
                 handled.insert("generic_error");
-                log::warn!("[!] Generic error detected: {}", error_msg);
+                log::warn!("Generic error detected: {}", error_msg);
                 return Err(AuthError::AuthenticationFailed {
                     reason: format!("Unexpected error encountered:\n\n{}", error_msg),
                     suggest_manual_mode: true,
@@ -239,7 +239,7 @@ impl BrowserSession {
         if !handled.contains("unexpected_state") {
             if let Some(state_msg) = self.tab.detect_unexpected_page_state()? {
                 handled.insert("unexpected_state");
-                log::warn!("[!] Unexpected page state: {}", state_msg);
+                log::warn!("Unexpected page state: {}", state_msg);
                 return Err(AuthError::AuthenticationFailed {
                     reason: format!("Unexpected page state:\n\n{}", state_msg),
                     suggest_manual_mode: true,
@@ -262,12 +262,12 @@ impl BrowserSession {
         const STUCK_THRESHOLD: usize = 8; // ~3.2 seconds without progress before considering stuck
         const MAX_RESETS: usize = 2; // maximum page resets allowed
 
-        log::info!("[*] Navigating to: {}", config.url);
+        log::info!("Navigating to: {}", config.url);
         self.tab.0.navigate_to(&config.url)?;
 
         if let Err(e) = self.tab.0.wait_until_navigated() {
             log::warn!(
-                "[!] Initial navigation wait timed out: {}, continuing...",
+                "Initial navigation wait timed out: {}, continuing...",
                 e
             );
         }
@@ -280,7 +280,7 @@ impl BrowserSession {
         loop {
             if let Some(token) = cancel_token {
                 if token.is_cancelled() {
-                    log::info!("[!] Cancellation requested, closing browser.");
+                    log::info!("Cancellation requested, closing browser.");
                     return Err(AuthError::Cancelled.into());
                 }
             }
@@ -288,12 +288,12 @@ impl BrowserSession {
             // Use poll_dsid as a heartbeat too. If it fails, the browser is likely gone.
             match self.tab.poll_dsid(&config.domain) {
                 Ok(Some(dsid)) => {
-                    log::info!("[✓] Found valid DSID, quitting.");
+                    log::info!("Found valid DSID, quitting.");
                     return Ok(dsid);
                 }
                 Ok(None) => {} // Keep going
                 Err(e) => {
-                    log::warn!("[!] Browser heartbeat lost (manual close?): {}", e);
+                    log::warn!("Browser heartbeat lost (manual close?): {}", e);
                     return Err(AuthError::BrowserError {
                         message: format!("Browser connection lost: {}", e),
                     }
@@ -303,7 +303,7 @@ impl BrowserSession {
 
             let current_url = self.tab.get_url();
             if current_url != last_url {
-                log::info!("[*] Page: {}", current_url);
+                log::info!("Page: {}", current_url);
                 last_url = current_url;
                 retries = 0;
                 handled.clear(); // Allow re-authentication if Microsoft loops back
@@ -333,7 +333,7 @@ impl BrowserSession {
                         false
                     }
                     Err(e) => {
-                        log::warn!("[!] Handler error: {}", e);
+                        log::warn!("Handler error: {}", e);
                         return Err(e);
                     }
                 };
@@ -358,7 +358,7 @@ impl BrowserSession {
                     }
 
                     log::warn!(
-                        "[!] Authentication stuck (no progress for {}s). Resetting page... (attempt {}/{})",
+                        "Authentication stuck (no progress for {}s). Resetting page... (attempt {}/{})",
                         (STUCK_THRESHOLD * 400) / 1000,
                         reset_count,
                         MAX_RESETS
@@ -366,13 +366,13 @@ impl BrowserSession {
 
                     // Log current page state to help diagnose the issue
                     if let Err(e) = self.tab.log_page_state() {
-                        log::debug!("[!] Failed to log page state: {}", e);
+                        log::debug!("Failed to log page state: {}", e);
                     }
 
                     // Navigate back to initial login URL
                     if let Err(e) = self.tab.0.navigate_to(&config.url) {
                         log::warn!(
-                            "[!] Reset navigation failed: {}, continuing with current page",
+                            "Reset navigation failed: {}, continuing with current page",
                             e
                         );
                     } else {

@@ -76,7 +76,7 @@ impl GuiProvider {
                 .and_then(|g| g.as_ref().map(|check| !check()))
                 .unwrap_or(false);
             if page_changed {
-                log::info!("[*] Page changed while prompting, dismissing prompt");
+                log::info!("Page changed while prompting, dismissing prompt");
                 let _ = self
                     .interaction_tx
                     .blocking_send(GuiInteraction::DismissPrompt);

@@ -1,9 +1,8 @@
 use crate::app::KuVpnGui;
 use crate::types::{
     btn_secondary, card, custom_scrollbar, Message, COLOR_TEXT, COLOR_TEXT_DIM, COLOR_WARNING,
-    ICON_TERMINAL_SVG,
 };
-use iced::widget::{button, column, container, row, scrollable, svg, text};
+use iced::widget::{button, column, container, row, scrollable, text};
 use iced::{Alignment, Color, Element, Font, Length, Padding};
 
 fn log_line_color(line: &str) -> Color {
@@ -37,12 +36,6 @@ impl KuVpnGui {
         container(
             column![
                 row![
-                    svg(svg::Handle::from_memory(ICON_TERMINAL_SVG))
-                        .width(14)
-                        .height(14)
-                        .style(|_, _| svg::Style {
-                            color: Some(COLOR_TEXT_DIM)
-                        }),
                     text("Session Logs")
                         .size(14)
                         .color(COLOR_TEXT)

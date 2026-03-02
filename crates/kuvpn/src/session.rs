@@ -523,7 +523,7 @@ impl VpnSession {
 
         // Force-kill the browser process to unblock any pending CDP calls
         if let Some(pid) = self.take_browser_pid() {
-            log::info!("[*] Force-killing browser process (PID: {})", pid);
+            log::info!("Force-killing browser process (PID: {})", pid);
             #[cfg(unix)]
             {
                 use nix::sys::signal::{self, Signal};

@@ -1,10 +1,10 @@
 use crate::app::KuVpnGui;
 use crate::types::{
-    Message, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_DIM, COLOR_WARNING, ICON_CLOCK_SVG,
-    ICON_INFO_SVG, ICON_PHONE_SVG, ICON_REFRESH_SVG, ICON_SHIELD_CHECK_SVG, ICON_SHIELD_SVG,
-    ICON_SHIELD_X_SVG,
+    Message, COLOR_SUCCESS, COLOR_SURFACE, COLOR_TEXT, COLOR_TEXT_DIM, COLOR_WARNING,
+    ICON_CLOCK_SVG, ICON_INFO_SVG, ICON_PHONE_SVG, ICON_REFRESH_SVG, ICON_SHIELD_CHECK_SVG,
+    ICON_SHIELD_SVG, ICON_SHIELD_X_SVG,
 };
-use iced::widget::{column, container, row, svg, text};
+use iced::widget::{column, container, row, stack, svg, text, Space};
 use iced::{Alignment, Border, Color, Element, Font, Length, Shadow, Vector};
 use kuvpn::ConnectionStatus;
 
@@ -86,6 +86,61 @@ impl KuVpnGui {
             _ => "Koc University Access Restricted".to_string(),
         };
 
+        // For connecting/disconnecting states the status_message can be arbitrarily
+        // long (raw OpenConnect log lines). Truncate to a safe char count, then
+        // render with a right-edge gradient fade so the cutoff looks intentional.
+        let subtitle_element: Element<'_, Message> = if matches!(
+            self.status,
+            ConnectionStatus::Connecting | ConnectionStatus::Disconnecting
+        ) {
+            use iced::gradient;
+
+            // Unicode-safe truncation with an ellipsis character.
+            let msg: String = if subtitle.chars().count() > 58 {
+                let truncated: String = subtitle.chars().take(55).collect();
+                format!("{}…", truncated)
+            } else {
+                subtitle
+            };
+
+            stack![
+                // Text layer — centered, no wrapping, clipped at the container edge.
+                container(
+                    text(msg)
+                        .size(12)
+                        .color(COLOR_TEXT_DIM)
+                        .wrapping(iced::widget::text::Wrapping::None),
+                )
+                .width(Length::Fill)
+                .center_x(Length::Fill)
+                .clip(true),
+                // Gradient overlay — transparent for most of the width, then
+                // fades into the card surface colour at the right edge.
+                container(Space::new())
+                    .width(Length::Fill)
+                    .height(Length::Fixed(18.0))
+                    .style(|_| container::Style {
+                        background: Some(iced::Background::Gradient(iced::Gradient::Linear(
+                            gradient::Linear::new(std::f32::consts::FRAC_PI_2)
+                                .add_stop(0.0, Color::TRANSPARENT)
+                                .add_stop(0.68, Color::TRANSPARENT)
+                                .add_stop(1.0, COLOR_SURFACE),
+                        ))),
+                        ..Default::default()
+                    }),
+            ]
+            .width(Length::Fill)
+            .into()
+        } else {
+            text(subtitle)
+                .size(12)
+                .color(COLOR_TEXT_DIM)
+                .align_x(iced::alignment::Horizontal::Center)
+                .wrapping(iced::widget::text::Wrapping::Word)
+                .width(Length::Fill)
+                .into()
+        };
+
         column![
             container(
                 container(icon_display)
@@ -110,12 +165,7 @@ impl KuVpnGui {
                 .color(color)
                 .align_x(iced::alignment::Horizontal::Center)
                 .width(Length::Fill),
-            text(subtitle)
-                .size(12)
-                .color(COLOR_TEXT_DIM)
-                .align_x(iced::alignment::Horizontal::Center)
-                .wrapping(iced::widget::text::Wrapping::Word)
-                .width(Length::Fill),
+            subtitle_element,
         ]
         .spacing(8)
         .align_x(Alignment::Center)

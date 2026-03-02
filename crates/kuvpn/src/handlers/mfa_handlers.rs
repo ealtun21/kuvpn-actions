@@ -36,7 +36,7 @@ impl AuthTab {
             let new_url = self.get_url();
             if !still_showing || new_url != prev_url {
                 provider.on_mfa_complete();
-                log::info!("[*] Push page finished, moving on...");
+                log::info!("Push page finished, moving on...");
                 break;
             }
         }
@@ -123,7 +123,7 @@ impl AuthTab {
             self.eval(
                 r#"var el=document.getElementById('idA_PWD_SwitchToRemoteNGC'); if(el){el.click();}"#,
             )?;
-            log::info!("[*] Clicked 'Use an app instead'");
+            log::info!("Clicked 'Use an app instead'");
             sleep(Duration::from_millis(400));
             return Ok(true);
         }
@@ -200,7 +200,7 @@ impl AuthTab {
                 .map(|s| format!("{}: ", s))
                 .unwrap_or_else(|| "Enter verification code: ".to_string());
 
-            log::info!("[*] OTP entry page detected, requesting code from user");
+            log::info!("OTP entry page detected, requesting code from user");
 
             // Inject a watcher that flags when the OTP input disappears
             self.inject_input_watcher(r#"input[name="otc"]"#);
@@ -280,7 +280,7 @@ impl AuthTab {
                 .unwrap_or_default();
 
             if !clicked.is_empty() {
-                log::info!("[*] NGC error page, switching to password via {}", clicked);
+                log::info!("NGC error page, switching to password via {}", clicked);
                 handled.insert("use_app_instead");
                 sleep(Duration::from_millis(400));
                 return Ok(true);

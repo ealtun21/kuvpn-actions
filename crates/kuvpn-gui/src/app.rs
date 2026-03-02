@@ -663,19 +663,19 @@ impl KuVpnGui {
                         if dir.exists() {
                             if let Err(e) = std::fs::remove_dir_all(&dir) {
                                 self.logs
-                                    .push(format!("[!] Failed to clear session: {}", e));
+                                    .push(format!("Failed to clear session: {}", e));
                                 self.session_wipe_result = Some(false);
                             } else {
-                                self.logs.push("[✓] Saved session data wiped.".to_string());
+                                self.logs.push("Saved session data wiped.".to_string());
                                 self.session_wipe_result = Some(true);
                             }
                         } else {
-                            self.logs.push("[*] No active session found.".to_string());
+                            self.logs.push("No active session found.".to_string());
                             self.session_wipe_result = Some(true);
                         }
                     }
                     Err(e) => {
-                        self.logs.push(format!("[!] System error: {}", e));
+                        self.logs.push(format!("System error: {}", e));
                         self.session_wipe_result = Some(false);
                     }
                 }
