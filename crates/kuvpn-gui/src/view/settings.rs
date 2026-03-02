@@ -321,36 +321,6 @@ impl KuVpnGui {
                     "System: native OS titlebar and window borders | Custom: frameless with custom titlebar"
                 ),
                 divider(),
-                // --- Reconnect Section ---
-                section_label("RECONNECT"),
-                self.view_unified_control(
-                    "Auto-reconnect:",
-                    self.view_segmented_control(
-                        &["On", "Off"],
-                        &[1.0, 0.0],
-                        if self.settings.auto_reconnect { 1.0 } else { 0.0 },
-                        false,
-                        |val| Message::AutoReconnectToggled(val > 0.5),
-                    ),
-                    "On: automatically reconnect when OpenConnect exits unexpectedly (not on user Disconnect)",
-                ),
-                self.view_unified_field(
-                    "Max retries:",
-                    "3",
-                    &self.settings.reconnect_max_retries,
-                    "Number of reconnect attempts before giving up (0 = unlimited)",
-                    false,
-                    Message::ReconnectMaxRetriesChanged,
-                ),
-                self.view_unified_field(
-                    "Cooldown (s):",
-                    "10",
-                    &self.settings.reconnect_cooldown_secs,
-                    "Seconds to wait between reconnect attempts",
-                    false,
-                    Message::ReconnectCooldownChanged,
-                ),
-                divider(),
                 // --- Actions Section ---
                 section_label("ACTIONS"),
                 {

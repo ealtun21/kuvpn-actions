@@ -288,17 +288,6 @@ impl KuVpnGui {
             },
             escalation_tool: Some(self.settings.escalation_tool.clone()),
             interface_name: "kuvpn0".to_string(),
-            auto_reconnect: self.settings.auto_reconnect,
-            reconnect_max_retries: self
-                .settings
-                .reconnect_max_retries
-                .parse()
-                .unwrap_or(3),
-            reconnect_cooldown_secs: self
-                .settings
-                .reconnect_cooldown_secs
-                .parse()
-                .unwrap_or(10),
         };
 
         let session = Arc::new(VpnSession::new(config));
@@ -742,21 +731,6 @@ impl KuVpnGui {
                     self.oc_path_notification = None;
                 }
                 self.oc_startup_tested = true;
-                Task::none()
-            }
-            Message::AutoReconnectToggled(v) => {
-                self.settings.auto_reconnect = v;
-                self.save_settings();
-                Task::none()
-            }
-            Message::ReconnectMaxRetriesChanged(s) => {
-                self.settings.reconnect_max_retries = s;
-                self.save_settings();
-                Task::none()
-            }
-            Message::ReconnectCooldownChanged(s) => {
-                self.settings.reconnect_cooldown_secs = s;
-                self.save_settings();
                 Task::none()
             }
             Message::ActionNotifTick => {

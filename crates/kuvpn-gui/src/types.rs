@@ -108,9 +108,6 @@ pub enum Message {
     AutoHideWindow,
     ShowPasswordHeld(bool),
     ActionNotifTick,
-    AutoReconnectToggled(bool),
-    ReconnectMaxRetriesChanged(String),
-    ReconnectCooldownChanged(String),
 }
 
 #[derive(Debug)]

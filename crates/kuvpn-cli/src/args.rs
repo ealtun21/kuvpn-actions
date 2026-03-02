@@ -78,15 +78,4 @@ pub struct Args {
     #[arg(long, default_value = "kuvpn0")]
     pub interface_name: String,
 
-    /// Automatically reconnect when OpenConnect exits unexpectedly
-    #[arg(long, default_value_t = false)]
-    pub auto_reconnect: bool,
-
-    /// Maximum number of reconnect attempts (0 = unlimited, default 3)
-    #[arg(long, default_value_t = 3)]
-    pub reconnect_max_retries: u32,
-
-    /// Seconds to wait between reconnect attempts (default 10)
-    #[arg(long, default_value_t = 10)]
-    pub reconnect_cooldown_secs: u64,
 }

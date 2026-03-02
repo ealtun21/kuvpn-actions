@@ -67,12 +67,6 @@ pub struct SessionConfig {
     pub openconnect_path: String,
     pub escalation_tool: Option<String>,
     pub interface_name: String,
-    /// Automatically reconnect when OpenConnect exits unexpectedly.
-    pub auto_reconnect: bool,
-    /// Maximum number of reconnect attempts (0 = unlimited).
-    pub reconnect_max_retries: u32,
-    /// Seconds to wait between reconnect attempts.
-    pub reconnect_cooldown_secs: u64,
 }
 
 /// Prompts for the sudo/pkexec password if the chosen escalation tool requires
@@ -207,8 +201,7 @@ impl SessionThread {
     }
 
     fn run(self, provider: Arc<dyn CredentialsProvider>) {
-        let max = self.config.reconnect_max_retries;
-        let cooldown = Duration::from_secs(self.config.reconnect_cooldown_secs);
+        const MAX_RETRIES: u32 = 3;
         let mut attempt = 0u32;
 
         loop {
@@ -224,23 +217,19 @@ impl SessionThread {
                 }
             };
 
-            // Retry only when: auto-reconnect on, not user-cancelled, unexpected disconnect,
-            // and retries remain (max == 0 means unlimited).
-            if self.config.auto_reconnect
-                && !self.cancel_token.is_cancelled()
+            // Retry on unexpected disconnect unless user cancelled or retries exhausted.
+            if !self.cancel_token.is_cancelled()
                 && unexpected_disconnect
-                && (max == 0 || attempt < max)
+                && attempt < MAX_RETRIES
             {
                 attempt += 1;
                 self.set_status(ConnectionStatus::Connecting);
                 *self.last_error.lock().unwrap() = None;
                 *self.error_category.lock().unwrap() = None;
                 self.send_log(format!(
-                    "Info|Reconnecting ({}/{})...",
-                    attempt,
-                    if max == 0 { "∞".to_string() } else { max.to_string() }
+                    "Info|Reconnecting... (attempt {}/{})",
+                    attempt, MAX_RETRIES
                 ));
-                thread::sleep(cooldown);
                 continue;
             }
             break;
@@ -500,7 +489,10 @@ impl VpnSession {
             {
                 use nix::sys::signal::{self, Signal};
                 use nix::unistd::Pid;
-                let _ = signal::kill(Pid::from_raw(pid as i32), Signal::SIGTERM);
+                // Use SIGKILL so the OS closes Chrome's socket immediately,
+                // unblocking any pending CDP calls (e.g. poll_dsid / evaluate)
+                // without waiting for Chrome's graceful shutdown (up to 30 s).
+                let _ = signal::kill(Pid::from_raw(pid as i32), Signal::SIGKILL);
             }
             #[cfg(windows)]
             {
