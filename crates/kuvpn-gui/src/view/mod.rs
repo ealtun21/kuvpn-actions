@@ -1,5 +1,6 @@
 pub mod actions;
 pub mod console;
+pub mod history;
 pub mod modal;
 pub mod settings;
 pub mod status;
@@ -7,8 +8,8 @@ pub mod status;
 use crate::app::KuVpnGui;
 use crate::types::{
     btn_segment_selected, btn_segment_unselected, Message, SegmentPosition, Tab, COLOR_BG,
-    COLOR_SUCCESS, COLOR_SURFACE, COLOR_TEXT, COLOR_TEXT_DIM, COLOR_WARNING, ICON_SETTINGS_SVG,
-    ICON_SHIELD_SVG, ICON_TERMINAL_SVG,
+    COLOR_SUCCESS, COLOR_SURFACE, COLOR_TEXT, COLOR_TEXT_DIM, COLOR_WARNING, ICON_CLOCK_SVG,
+    ICON_SETTINGS_SVG, ICON_SHIELD_SVG, ICON_TERMINAL_SVG,
 };
 use iced::widget::{button, column, container, mouse_area, row, stack, svg, text, Column, Space};
 use iced::{Alignment, Border, Color, Element, Length, Shadow};
@@ -164,6 +165,7 @@ impl KuVpnGui {
         let tab_content = match self.current_tab {
             Tab::Connection => self.view_connection_tab(),
             Tab::Settings => self.view_settings_tab(),
+            Tab::History => self.view_history_tab(),
             Tab::Console => self.view_console_tab(),
         };
 
@@ -276,6 +278,13 @@ impl KuVpnGui {
                 self.current_tab == Tab::Settings
             ),
             tab_button(
+                ICON_CLOCK_SVG,
+                "History",
+                Tab::History,
+                SegmentPosition::Middle,
+                self.current_tab == Tab::History
+            ),
+            tab_button(
                 ICON_TERMINAL_SVG,
                 "Console",
                 Tab::Console,
@@ -336,6 +345,10 @@ impl KuVpnGui {
 
     fn view_settings_tab(&self) -> Element<'_, Message> {
         self.view_advanced_settings()
+    }
+
+    fn view_history_tab(&self) -> Element<'_, Message> {
+        self.view_history()
     }
 
     fn view_console_tab(&self) -> Element<'_, Message> {

@@ -2861,6 +2861,8 @@ dependencies = [
  "nix",
  "once_cell",
  "runas",
+ "serde",
+ "serde_json",
  "sysinfo",
  "which 8.0.0",
  "windows 0.62.2",

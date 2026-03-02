@@ -148,6 +148,8 @@ struct SessionThread {
     error_category: Arc<Mutex<Option<crate::error::ErrorCategory>>>,
     logs_tx: Arc<Mutex<Option<crossbeam_channel::Sender<String>>>>,
     browser_pid: Arc<Mutex<Option<u32>>>,
+    /// Tracks when the VPN connected so we can record session duration.
+    connected_at: Option<Instant>,
 }
 
 impl SessionThread {
@@ -160,6 +162,7 @@ impl SessionThread {
             error_category: Arc::clone(&s.error_category),
             logs_tx: Arc::clone(&s.logs_tx),
             browser_pid: Arc::clone(&s.browser_pid),
+            connected_at: None,
         }
     }
 
@@ -200,7 +203,7 @@ impl SessionThread {
         }
     }
 
-    fn run(self, provider: Arc<dyn CredentialsProvider>) {
+    fn run(mut self, provider: Arc<dyn CredentialsProvider>) {
         const MAX_RETRIES: u32 = 3;
         let mut attempt = 0u32;
 
@@ -344,7 +347,7 @@ impl SessionThread {
     /// Returns `true` when the tunnel was successfully established and then died
     /// unexpectedly (a candidate for auto-reconnect).  Returns `false` for
     /// user-initiated cancellations and launch-phase errors.
-    fn run_watchdog(&self, mut process: Option<VpnProcess>) -> bool {
+    fn run_watchdog(&mut self, mut process: Option<VpnProcess>) -> bool {
         let start_time = Instant::now();
         let mut connected_detected = process.is_none();
         let timeout = Duration::from_secs(30);
@@ -362,8 +365,12 @@ impl SessionThread {
             if self.is_vpn_connected() {
                 if !connected_detected {
                     connected_detected = true;
+                    self.connected_at = Some(Instant::now());
                     self.set_status(ConnectionStatus::Connected);
                     self.send_log("Info|Connected.");
+                    let _ = crate::history::append_event(&crate::history::ConnectionEvent::now(
+                        crate::history::EventKind::Connected,
+                    ));
                 }
             } else if connected_detected {
                 // Tunnel was up and just went down unexpectedly.
@@ -394,11 +401,24 @@ impl SessionThread {
             thread::sleep(Duration::from_millis(500));
         }
 
+        let duration_secs = self
+            .connected_at
+            .map(|t| t.elapsed().as_secs());
+
         if is_openconnect_running() {
-            self.set_conn_error("Failed to stop OpenConnect. Please close it manually.");
+            let err_msg = "Failed to stop OpenConnect. Please close it manually.";
+            self.set_conn_error(err_msg);
+            let mut event = crate::history::ConnectionEvent::now(crate::history::EventKind::Error);
+            event.duration_secs = duration_secs;
+            event.message = Some(err_msg.to_string());
+            let _ = crate::history::append_event(&event);
         } else {
             self.set_status(ConnectionStatus::Disconnected);
             self.send_log("Info|Disconnected.");
+            let mut event =
+                crate::history::ConnectionEvent::now(crate::history::EventKind::Disconnected);
+            event.duration_secs = duration_secs;
+            let _ = crate::history::append_event(&event);
         }
     }
 }

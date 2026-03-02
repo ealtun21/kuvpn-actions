@@ -61,6 +61,9 @@ pub struct KuVpnGui {
     /// Drives the fade animation for action notifications (1.0 = fully visible → 0.0 = gone).
     pub notif_fade: f32,
 
+    // Connection history
+    pub history: Vec<kuvpn::ConnectionEvent>,
+
     // VPN Session
     pub session: Option<Arc<VpnSession>>,
 
@@ -348,7 +351,13 @@ impl KuVpnGui {
                 self.error_message = Some(e);
             }
         }
-        Task::none()
+
+        // Reload history — the session thread just appended a disconnect/error
+        // event to disk, so refresh the in-memory list to reflect it.
+        Task::perform(
+            async { kuvpn::load_events().unwrap_or_default() },
+            Message::HistoryLoaded,
+        )
     }
 
     fn handle_status_changed(&mut self, status: ConnectionStatus) -> Task<Message> {
@@ -364,6 +373,12 @@ impl KuVpnGui {
             {
                 self.active_interface = kuvpn::get_vpn_interface_name("kuvpn0");
             }
+            // Reload history — the session thread just appended a connect event
+            // to disk; pull it into the in-memory list immediately.
+            return Task::perform(
+                async { kuvpn::load_events().unwrap_or_default() },
+                Message::HistoryLoaded,
+            );
         } else if matches!(
             status,
             ConnectionStatus::Disconnected | ConnectionStatus::Error
@@ -733,6 +748,15 @@ impl KuVpnGui {
                 self.oc_startup_tested = true;
                 Task::none()
             }
+            Message::HistoryLoaded(events) => {
+                self.history = events;
+                Task::none()
+            }
+            Message::ClearHistory => {
+                let _ = kuvpn::clear_events();
+                self.history.clear();
+                Task::none()
+            }
             Message::ActionNotifTick => {
                 // Decrement fade: 1.0 → 0.0 over 3 seconds (60 ticks × 50ms)
                 self.notif_fade -= 1.0 / 60.0;
@@ -758,6 +782,13 @@ impl KuVpnGui {
             }
             Message::TabChanged(tab) => {
                 self.current_tab = tab;
+                // Hot-reload history whenever the tab is opened so it's always current.
+                if tab == Tab::History {
+                    return Task::perform(
+                        async { kuvpn::load_events().unwrap_or_default() },
+                        Message::HistoryLoaded,
+                    );
+                }
                 Task::none()
             }
             Message::DragWindow => {
@@ -941,6 +972,7 @@ impl Default for KuVpnGui {
             session_wipe_result: None,
             reset_notification: false,
             notif_fade: 0.0,
+            history: Vec::new(),
             session: None,
             tray_icon: None,
             status_item: None,
