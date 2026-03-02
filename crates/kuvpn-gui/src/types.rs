@@ -112,6 +112,7 @@ pub enum Message {
     ActionNotifTick,
     HistoryLoaded(Vec<kuvpn::ConnectionEvent>),
     ClearHistory,
+    OpenDiagnosticsFolder,
 }
 
 #[derive(Debug)]

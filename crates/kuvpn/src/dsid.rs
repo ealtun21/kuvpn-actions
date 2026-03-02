@@ -252,6 +252,23 @@ impl BrowserSession {
         Ok((false, false))
     }
 
+    /// Captures a diagnostic snapshot and saves it to disk, then stores the
+    /// saved path in the thread-local slot for the session thread to pick up.
+    fn capture_and_save_diagnostics(&self, error: &str) {
+        let bundle = self.tab.capture_diagnostics(error);
+        match bundle.save() {
+            Ok(path) => {
+                log::warn!("Diagnostic bundle saved to: {:?}", path);
+                crate::diagnostics::PENDING_DIAG_PATH.with(|cell| {
+                    *cell.borrow_mut() = Some(path);
+                });
+            }
+            Err(e) => {
+                log::warn!("Failed to save diagnostic bundle: {}", e);
+            }
+        }
+    }
+
     fn run_login(
         &self,
         config: &LoginConfig,
@@ -334,6 +351,7 @@ impl BrowserSession {
                     }
                     Err(e) => {
                         log::warn!("Handler error: {}", e);
+                        self.capture_and_save_diagnostics(&e.to_string());
                         return Err(e);
                     }
                 };
@@ -345,12 +363,14 @@ impl BrowserSession {
                     reset_count += 1;
 
                     if reset_count > MAX_RESETS {
+                        let reason = format!(
+                            "Full Auto mode unable to complete login after {} page resets. \
+                            The authentication flow may have changed or network issues occurred.",
+                            MAX_RESETS
+                        );
+                        self.capture_and_save_diagnostics(&reason);
                         return Err(AuthError::AuthenticationFailed {
-                            reason: format!(
-                                "Full Auto mode unable to complete login after {} page resets. \
-                                The authentication flow may have changed or network issues occurred.",
-                                MAX_RESETS
-                            ),
+                            reason,
                             suggest_manual_mode: true,
                             suggest_clear_cache: true,
                         }

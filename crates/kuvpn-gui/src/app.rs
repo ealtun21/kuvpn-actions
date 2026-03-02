@@ -90,6 +90,9 @@ pub struct KuVpnGui {
     /// True when the window was auto-shown from a hidden state for a prompt.
     /// Used to auto-hide the window again after the prompt resolves.
     pub was_shown_for_prompt: bool,
+    /// Path to the most recently saved automation diagnostic bundle, if any.
+    /// Shown as an "Open folder" button inside the automation warning card.
+    pub last_diagnostic_path: Option<String>,
 }
 
 impl KuVpnGui {
@@ -261,6 +264,7 @@ impl KuVpnGui {
         }
 
         self.automation_warning = None;
+        self.last_diagnostic_path = None;
         self.error_message = None;
         self.error_category = None;
         self.status_message = "Initializing...".to_string();
@@ -584,6 +588,11 @@ impl KuVpnGui {
                 Task::none()
             }
             Message::LogAppended(raw_log) => {
+                if let Some(path) = raw_log.strip_prefix("Diagnostic|") {
+                    self.last_diagnostic_path = Some(path.to_string());
+                    return Task::none();
+                }
+
                 if let Some(parsed) = kuvpn::ParsedLog::parse(&raw_log) {
                     // Update status message for info/warn (errors come via ConnectionFinished).
                     if matches!(parsed.level, log::Level::Info | log::Level::Warn) {
@@ -769,6 +778,16 @@ impl KuVpnGui {
                     self.notif_fade = 0.0;
                     self.session_wipe_result = None;
                     self.reset_notification = false;
+                }
+                Task::none()
+            }
+            Message::OpenDiagnosticsFolder => {
+                if let Some(ref path_str) = self.last_diagnostic_path {
+                    let parent = std::path::Path::new(path_str)
+                        .parent()
+                        .map(|p| p.to_path_buf())
+                        .unwrap_or_else(|| std::path::PathBuf::from(path_str));
+                    let _ = open::that(parent);
                 }
                 Task::none()
             }
@@ -994,6 +1013,7 @@ impl Default for KuVpnGui {
             active_interface: None,
             available_escalation_tools,
             was_shown_for_prompt: false,
+            last_diagnostic_path: None,
         }
     }
 }

@@ -57,6 +57,31 @@ impl AuthTab {
         self.0.get_url()
     }
 
+    /// Captures a diagnostic snapshot of the current browser state.
+    ///
+    /// Collects URL, page title, full HTML, and the triggering error message.
+    /// The result can be saved to disk with [`crate::diagnostics::DiagnosticBundle::save`].
+    pub(crate) fn capture_diagnostics(&self, error: &str) -> crate::diagnostics::DiagnosticBundle {
+        let url = self.get_url();
+        let page_title = self
+            .eval_string("document.title")
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+        let page_html = self
+            .eval_string("document.documentElement.outerHTML")
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+        crate::diagnostics::DiagnosticBundle {
+            timestamp: crate::diagnostics::now_iso(),
+            url,
+            page_title,
+            page_html,
+            error: error.to_string(),
+        }
+    }
+
     /// Checks for a DSID cookie in the tab's current cookie jar.
     pub(crate) fn poll_dsid(&self, domain: &str) -> anyhow::Result<Option<String>> {
         let cookies = self
