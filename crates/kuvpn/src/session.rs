@@ -206,27 +206,32 @@ impl SessionThread {
     fn run(mut self, provider: Arc<dyn CredentialsProvider>) {
         const MAX_RETRIES: u32 = 3;
         let mut attempt = 0u32;
+        // Duration (secs) of the session that just ended unexpectedly; attached
+        // to the next Reconnected history event so history shows how long each
+        // segment lasted before dropping.
+        let mut prev_duration: Option<u64> = None;
 
         loop {
             let is_reconnect = attempt > 0;
-            let unexpected_disconnect = if self.is_vpn_connected() {
+            let dropped_after = if self.is_vpn_connected() {
                 self.send_log("Info|VPN interface already active, monitoring...");
                 self.set_status(ConnectionStatus::Connected);
-                self.run_watchdog(None, is_reconnect)
+                self.run_watchdog(None, is_reconnect, prev_duration)
             } else {
                 match self.launch_vpn(&provider) {
-                    Ok(Some(proc)) => self.run_watchdog(Some(proc), is_reconnect),
-                    Ok(None) => false, // user cancelled
-                    Err(_) => false,   // auth/launch error
+                    Ok(Some(proc)) => self.run_watchdog(Some(proc), is_reconnect, prev_duration),
+                    Ok(None) => None, // user cancelled
+                    Err(_) => None,   // auth/launch error
                 }
             };
 
             // Retry on unexpected disconnect unless user cancelled or retries exhausted.
             if !self.cancel_token.is_cancelled()
-                && unexpected_disconnect
+                && dropped_after.is_some()
                 && attempt < MAX_RETRIES
             {
                 attempt += 1;
+                prev_duration = dropped_after;
                 self.set_status(ConnectionStatus::Connecting);
                 *self.last_error.lock().unwrap() = None;
                 *self.error_category.lock().unwrap() = None;
@@ -345,10 +350,16 @@ impl SessionThread {
 
     /// Watches the VPN tunnel until it stops.
     ///
-    /// Returns `true` when the tunnel was successfully established and then died
-    /// unexpectedly (a candidate for auto-reconnect).  Returns `false` for
-    /// user-initiated cancellations and launch-phase errors.
-    fn run_watchdog(&mut self, mut process: Option<VpnProcess>, is_reconnect: bool) -> bool {
+    /// Returns `Some(duration_secs)` when the tunnel was successfully established
+    /// and then died unexpectedly (eligible for reconnect; duration = how long it
+    /// was connected this cycle).  Returns `None` for user-initiated cancellations
+    /// and launch-phase errors.
+    fn run_watchdog(
+        &mut self,
+        mut process: Option<VpnProcess>,
+        is_reconnect: bool,
+        prev_duration: Option<u64>,
+    ) -> Option<u64> {
         let start_time = Instant::now();
         let mut connected_detected = process.is_none();
         let timeout = Duration::from_secs(30);
@@ -360,7 +371,7 @@ impl SessionThread {
                     let _ = p.kill();
                     let _ = p.wait();
                 }
-                return false; // user-cancelled
+                return None; // user-cancelled
             }
 
             if self.is_vpn_connected() {
@@ -374,9 +385,11 @@ impl SessionThread {
                     } else {
                         crate::history::EventKind::Connected
                     };
-                    let _ = crate::history::append_event(
-                        &crate::history::ConnectionEvent::now(kind),
-                    );
+                    let mut event = crate::history::ConnectionEvent::now(kind);
+                    // For reconnects, record how long the previous segment lasted
+                    // before it dropped so history shows meaningful durations.
+                    event.duration_secs = prev_duration;
+                    let _ = crate::history::append_event(&event);
                 }
             } else if connected_detected {
                 // Tunnel was up and just went down unexpectedly.
@@ -384,17 +397,18 @@ impl SessionThread {
                     let _ = p.kill();
                     let _ = p.wait();
                 }
-                return true; // unexpected disconnect — eligible for reconnect
+                let duration = self.connected_at.map(|t| t.elapsed().as_secs()).unwrap_or(0);
+                return Some(duration); // unexpected disconnect — eligible for reconnect
             } else if start_time.elapsed() > timeout {
                 self.set_conn_error("VPN tunnel failed to establish within timeout");
                 if let Some(ref mut p) = process {
                     let _ = p.kill();
                 }
-                return false;
+                return None;
             } else if let Some(ref mut p) = process {
                 if !p.is_process_alive() {
                     self.set_conn_error("OpenConnect process exited before tunnel was established");
-                    return false;
+                    return None;
                 }
             }
             thread::sleep(Duration::from_millis(1000));
