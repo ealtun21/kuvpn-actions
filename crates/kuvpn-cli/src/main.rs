@@ -244,6 +244,7 @@ fn print_history(styles: &CliStyles) -> ExitCode {
             for event in events.iter().rev() {
                 let kind = match event.kind {
                     kuvpn::EventKind::Connected => styles.green.apply_to("Connected   ").to_string(),
+                    kuvpn::EventKind::Reconnected => styles.yellow.apply_to("Reconnected ").to_string(),
                     kuvpn::EventKind::Disconnected => {
                         styles.dim.apply_to("Disconnected").to_string()
                     }

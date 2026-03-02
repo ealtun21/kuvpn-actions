@@ -208,13 +208,14 @@ impl SessionThread {
         let mut attempt = 0u32;
 
         loop {
+            let is_reconnect = attempt > 0;
             let unexpected_disconnect = if self.is_vpn_connected() {
                 self.send_log("Info|VPN interface already active, monitoring...");
                 self.set_status(ConnectionStatus::Connected);
-                self.run_watchdog(None)
+                self.run_watchdog(None, is_reconnect)
             } else {
                 match self.launch_vpn(&provider) {
-                    Ok(Some(proc)) => self.run_watchdog(Some(proc)),
+                    Ok(Some(proc)) => self.run_watchdog(Some(proc), is_reconnect),
                     Ok(None) => false, // user cancelled
                     Err(_) => false,   // auth/launch error
                 }
@@ -347,7 +348,7 @@ impl SessionThread {
     /// Returns `true` when the tunnel was successfully established and then died
     /// unexpectedly (a candidate for auto-reconnect).  Returns `false` for
     /// user-initiated cancellations and launch-phase errors.
-    fn run_watchdog(&mut self, mut process: Option<VpnProcess>) -> bool {
+    fn run_watchdog(&mut self, mut process: Option<VpnProcess>, is_reconnect: bool) -> bool {
         let start_time = Instant::now();
         let mut connected_detected = process.is_none();
         let timeout = Duration::from_secs(30);
@@ -368,9 +369,14 @@ impl SessionThread {
                     self.connected_at = Some(Instant::now());
                     self.set_status(ConnectionStatus::Connected);
                     self.send_log("Info|Connected.");
-                    let _ = crate::history::append_event(&crate::history::ConnectionEvent::now(
-                        crate::history::EventKind::Connected,
-                    ));
+                    let kind = if is_reconnect {
+                        crate::history::EventKind::Reconnected
+                    } else {
+                        crate::history::EventKind::Connected
+                    };
+                    let _ = crate::history::append_event(
+                        &crate::history::ConnectionEvent::now(kind),
+                    );
                 }
             } else if connected_detected {
                 // Tunnel was up and just went down unexpectedly.
