@@ -21,6 +21,8 @@ impl Styler {
         let p = self.p;
         let rounding = self.rounding;
         let shadow = self.shadow;
+        // Light themes: softer shadow so it doesn't look like a dark smear on a pale bg.
+        let shadow_alpha = if p.bg.r > 0.5 { 0.10 } else { 0.45 };
         move |_| container::Style {
             background: Some(p.surface.into()),
             border: Border {
@@ -29,7 +31,7 @@ impl Styler {
                 radius: rounding.radius().into(),
             },
             shadow: Shadow {
-                color: Color::from_rgba(0.0, 0.0, 0.0, 0.5),
+                color: Color::from_rgba(0.0, 0.0, 0.0, shadow_alpha),
                 offset: Vector::new(0.0, shadow.offset()),
                 blur_radius: shadow.blur(),
             },
@@ -306,6 +308,9 @@ impl Styler {
     pub fn btn_secondary(self) -> impl Fn(&iced::Theme, button::Status) -> button::Style + 'static {
         let p = self.p;
         let rounding = self.rounding;
+        let s_base = if p.bg.r > 0.5 { 0.06 } else { 0.20 };
+        let s_hover = if p.bg.r > 0.5 { 0.10 } else { 0.30 };
+        let s_press = if p.bg.r > 0.5 { 0.04 } else { 0.15 };
         move |_, status| {
             let base = button::Style {
                 background: Some(Color::TRANSPARENT.into()),
@@ -316,7 +321,7 @@ impl Styler {
                     radius: rounding.radius().into(),
                 },
                 shadow: Shadow {
-                    color: Color::from_rgba(0.0, 0.0, 0.0, 0.2),
+                    color: Color::from_rgba(0.0, 0.0, 0.0, s_base),
                     offset: Vector::new(0.0, 1.0),
                     blur_radius: 4.0,
                 },
@@ -331,7 +336,7 @@ impl Styler {
                         radius: rounding.radius().into(),
                     },
                     shadow: Shadow {
-                        color: Color::from_rgba(0.0, 0.0, 0.0, 0.3),
+                        color: Color::from_rgba(0.0, 0.0, 0.0, s_hover),
                         offset: Vector::new(0.0, 2.0),
                         blur_radius: 8.0,
                     },
@@ -340,7 +345,7 @@ impl Styler {
                 button::Status::Pressed => button::Style {
                     background: Some(p.surface_raised.into()),
                     shadow: Shadow {
-                        color: Color::from_rgba(0.0, 0.0, 0.0, 0.15),
+                        color: Color::from_rgba(0.0, 0.0, 0.0, s_press),
                         offset: Vector::new(0.0, 1.0),
                         blur_radius: 2.0,
                     },

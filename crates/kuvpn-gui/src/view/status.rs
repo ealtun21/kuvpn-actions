@@ -32,6 +32,8 @@ impl KuVpnGui {
         // Glow derived from the same `color` as the circle border so all active
         // states (connected, connecting, disconnecting, error) stay in sync with
         // the current theme accent / danger colour automatically.
+        // Light themes: halved alpha so the glow doesn't look harsh on a pale background.
+        let light = p.bg.r > 0.5;
         let glow = match self.status {
             ConnectionStatus::Disconnected => Shadow {
                 color: Color::TRANSPARENT,
@@ -39,17 +41,17 @@ impl KuVpnGui {
                 blur_radius: 0.0,
             },
             ConnectionStatus::Connected => Shadow {
-                color: Color::from_rgba(color.r, color.g, color.b, 0.4),
+                color: Color::from_rgba(color.r, color.g, color.b, if light { 0.20 } else { 0.40 }),
                 offset: Vector::ZERO,
                 blur_radius: 25.0,
             },
             ConnectionStatus::Connecting | ConnectionStatus::Disconnecting => Shadow {
-                color: Color::from_rgba(color.r, color.g, color.b, 0.35),
+                color: Color::from_rgba(color.r, color.g, color.b, if light { 0.18 } else { 0.35 }),
                 offset: Vector::ZERO,
                 blur_radius: 20.0,
             },
             ConnectionStatus::Error => Shadow {
-                color: Color::from_rgba(color.r, color.g, color.b, 0.35),
+                color: Color::from_rgba(color.r, color.g, color.b, if light { 0.18 } else { 0.35 }),
                 offset: Vector::ZERO,
                 blur_radius: 20.0,
             },

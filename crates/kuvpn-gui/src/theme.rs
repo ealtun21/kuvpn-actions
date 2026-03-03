@@ -130,19 +130,19 @@ fn crimson_dark() -> Palette {
 
 fn crimson_light() -> Palette {
     Palette {
-        bg: Color::from_rgb(0.95, 0.95, 0.95),
-        surface: Color::from_rgb(1.0, 1.0, 1.0),
-        surface_raised: Color::from_rgb(0.97, 0.97, 0.97),
-        border: Color::from_rgb(0.70, 0.70, 0.70),
-        border_subtle: Color::from_rgb(0.82, 0.82, 0.82),
+        bg: Color::from_rgb(0.97, 0.97, 0.97),
+        surface: Color::from_rgb(0.94, 0.94, 0.94),
+        surface_raised: Color::from_rgb(0.89, 0.89, 0.89),
+        border: Color::from_rgb(0.75, 0.75, 0.75),
+        border_subtle: Color::from_rgb(0.84, 0.84, 0.84),
         accent: Color::from_rgb(0.50, 0.0, 0.125),
         accent_hover: Color::from_rgb(0.60, 0.06, 0.19),
         success: Color::from_rgb(0.22, 0.52, 0.18),
         warning: Color::from_rgb(0.70, 0.50, 0.06),
         danger: Color::from_rgb(0.72, 0.12, 0.12),
         text: Color::from_rgb(0.10, 0.10, 0.10),
-        text_muted: Color::from_rgb(0.45, 0.45, 0.45),
-        text_disabled: Color::from_rgb(0.65, 0.65, 0.65),
+        text_muted: Color::from_rgb(0.42, 0.42, 0.42),
+        text_disabled: Color::from_rgb(0.62, 0.62, 0.62),
         overlay: Color::from_rgba(0.0, 0.0, 0.0, 0.60),
     }
 }
@@ -169,19 +169,19 @@ fn frost_dark() -> Palette {
 
 fn frost_light() -> Palette {
     Palette {
-        bg: Color::from_rgb(0.92, 0.94, 0.97),
-        surface: Color::from_rgb(1.0, 1.0, 1.0),
-        surface_raised: Color::from_rgb(0.95, 0.97, 1.0),
-        border: Color::from_rgb(0.62, 0.72, 0.82),
-        border_subtle: Color::from_rgb(0.78, 0.85, 0.92),
+        bg: Color::from_rgb(0.96, 0.97, 0.99),
+        surface: Color::from_rgb(0.92, 0.94, 0.97),
+        surface_raised: Color::from_rgb(0.87, 0.90, 0.94),
+        border: Color::from_rgb(0.70, 0.77, 0.87),
+        border_subtle: Color::from_rgb(0.82, 0.87, 0.93),
         accent: Color::from_rgb(0.18, 0.48, 0.72),
         accent_hover: Color::from_rgb(0.12, 0.38, 0.60),
         success: Color::from_rgb(0.12, 0.52, 0.34),
         warning: Color::from_rgb(0.55, 0.58, 0.06),
         danger: Color::from_rgb(0.72, 0.12, 0.12),
         text: Color::from_rgb(0.08, 0.12, 0.18),
-        text_muted: Color::from_rgb(0.38, 0.48, 0.58),
-        text_disabled: Color::from_rgb(0.60, 0.68, 0.75),
+        text_muted: Color::from_rgb(0.36, 0.46, 0.56),
+        text_disabled: Color::from_rgb(0.58, 0.65, 0.72),
         overlay: Color::from_rgba(0.0, 0.0, 0.0, 0.60),
     }
 }
@@ -208,19 +208,19 @@ fn pebble_dark() -> Palette {
 
 fn pebble_light() -> Palette {
     Palette {
-        bg: Color::from_rgb(0.94, 0.94, 0.94),
-        surface: Color::from_rgb(1.0, 1.0, 1.0),
-        surface_raised: Color::from_rgb(0.97, 0.97, 0.97),
-        border: Color::from_rgb(0.70, 0.70, 0.70),
-        border_subtle: Color::from_rgb(0.82, 0.82, 0.82),
+        bg: Color::from_rgb(0.96, 0.96, 0.96),
+        surface: Color::from_rgb(0.93, 0.93, 0.93),
+        surface_raised: Color::from_rgb(0.88, 0.88, 0.88),
+        border: Color::from_rgb(0.73, 0.73, 0.73),
+        border_subtle: Color::from_rgb(0.83, 0.83, 0.83),
         accent: Color::from_rgb(0.25, 0.45, 0.75),
         accent_hover: Color::from_rgb(0.18, 0.35, 0.62),
         success: Color::from_rgb(0.18, 0.54, 0.24),
         warning: Color::from_rgb(0.66, 0.50, 0.06),
         danger: Color::from_rgb(0.72, 0.15, 0.15),
         text: Color::from_rgb(0.10, 0.10, 0.10),
-        text_muted: Color::from_rgb(0.45, 0.45, 0.45),
-        text_disabled: Color::from_rgb(0.65, 0.65, 0.65),
+        text_muted: Color::from_rgb(0.42, 0.42, 0.42),
+        text_disabled: Color::from_rgb(0.62, 0.62, 0.62),
         overlay: Color::from_rgba(0.0, 0.0, 0.0, 0.60),
     }
 }
@@ -247,19 +247,19 @@ fn slate_dark() -> Palette {
 
 fn slate_light() -> Palette {
     Palette {
-        bg: Color::from_rgb(0.90, 0.92, 0.95),
-        surface: Color::from_rgb(0.98, 0.99, 1.0),
-        surface_raised: Color::from_rgb(0.94, 0.96, 0.99),
-        border: Color::from_rgb(0.62, 0.70, 0.78),
-        border_subtle: Color::from_rgb(0.78, 0.84, 0.90),
+        bg: Color::from_rgb(0.95, 0.96, 0.98),
+        surface: Color::from_rgb(0.91, 0.93, 0.96),
+        surface_raised: Color::from_rgb(0.86, 0.88, 0.92),
+        border: Color::from_rgb(0.70, 0.76, 0.85),
+        border_subtle: Color::from_rgb(0.82, 0.86, 0.92),
         accent: Color::from_rgb(0.18, 0.42, 0.68),
         accent_hover: Color::from_rgb(0.12, 0.32, 0.55),
         success: Color::from_rgb(0.10, 0.50, 0.36),
         warning: Color::from_rgb(0.58, 0.54, 0.06),
         danger: Color::from_rgb(0.70, 0.12, 0.12),
         text: Color::from_rgb(0.08, 0.10, 0.14),
-        text_muted: Color::from_rgb(0.38, 0.45, 0.52),
-        text_disabled: Color::from_rgb(0.60, 0.66, 0.72),
+        text_muted: Color::from_rgb(0.36, 0.43, 0.52),
+        text_disabled: Color::from_rgb(0.58, 0.64, 0.72),
         overlay: Color::from_rgba(0.0, 0.0, 0.0, 0.60),
     }
 }
@@ -286,19 +286,19 @@ fn sand_dark() -> Palette {
 
 fn sand_light() -> Palette {
     Palette {
-        bg: Color::from_rgb(0.96, 0.94, 0.92),
-        surface: Color::from_rgb(1.0, 0.99, 0.97),
-        surface_raised: Color::from_rgb(0.98, 0.96, 0.93),
-        border: Color::from_rgb(0.72, 0.68, 0.62),
-        border_subtle: Color::from_rgb(0.84, 0.80, 0.75),
+        bg: Color::from_rgb(0.98, 0.97, 0.94),
+        surface: Color::from_rgb(0.95, 0.93, 0.90),
+        surface_raised: Color::from_rgb(0.90, 0.88, 0.84),
+        border: Color::from_rgb(0.77, 0.73, 0.66),
+        border_subtle: Color::from_rgb(0.87, 0.83, 0.78),
         accent: Color::from_rgb(0.48, 0.35, 0.20),
         accent_hover: Color::from_rgb(0.38, 0.26, 0.14),
         success: Color::from_rgb(0.28, 0.50, 0.13),
         warning: Color::from_rgb(0.72, 0.52, 0.04),
         danger: Color::from_rgb(0.72, 0.14, 0.14),
         text: Color::from_rgb(0.12, 0.10, 0.08),
-        text_muted: Color::from_rgb(0.45, 0.42, 0.38),
-        text_disabled: Color::from_rgb(0.65, 0.62, 0.58),
+        text_muted: Color::from_rgb(0.44, 0.40, 0.36),
+        text_disabled: Color::from_rgb(0.64, 0.60, 0.55),
         overlay: Color::from_rgba(0.0, 0.0, 0.0, 0.60),
     }
 }
@@ -325,19 +325,19 @@ fn forest_dark() -> Palette {
 
 fn forest_light() -> Palette {
     Palette {
-        bg: Color::from_rgb(0.91, 0.95, 0.92),
-        surface: Color::from_rgb(0.98, 1.0, 0.98),
-        surface_raised: Color::from_rgb(0.93, 0.97, 0.94),
-        border: Color::from_rgb(0.55, 0.72, 0.60),
-        border_subtle: Color::from_rgb(0.75, 0.87, 0.78),
+        bg: Color::from_rgb(0.95, 0.97, 0.95),
+        surface: Color::from_rgb(0.91, 0.94, 0.91),
+        surface_raised: Color::from_rgb(0.86, 0.90, 0.86),
+        border: Color::from_rgb(0.66, 0.78, 0.68),
+        border_subtle: Color::from_rgb(0.80, 0.88, 0.81),
         accent: Color::from_rgb(0.10, 0.52, 0.28),
         accent_hover: Color::from_rgb(0.07, 0.40, 0.20),
         success: Color::from_rgb(0.06, 0.56, 0.22),
         warning: Color::from_rgb(0.60, 0.58, 0.03),
         danger: Color::from_rgb(0.70, 0.12, 0.12),
         text: Color::from_rgb(0.07, 0.14, 0.09),
-        text_muted: Color::from_rgb(0.32, 0.48, 0.36),
-        text_disabled: Color::from_rgb(0.58, 0.70, 0.62),
+        text_muted: Color::from_rgb(0.30, 0.46, 0.34),
+        text_disabled: Color::from_rgb(0.56, 0.68, 0.59),
         overlay: Color::from_rgba(0.0, 0.0, 0.0, 0.60),
     }
 }
@@ -364,19 +364,19 @@ fn ocean_dark() -> Palette {
 
 fn ocean_light() -> Palette {
     Palette {
-        bg: Color::from_rgb(0.90, 0.95, 0.97),
-        surface: Color::from_rgb(0.97, 1.0, 1.0),
-        surface_raised: Color::from_rgb(0.92, 0.97, 0.99),
-        border: Color::from_rgb(0.50, 0.72, 0.80),
-        border_subtle: Color::from_rgb(0.72, 0.87, 0.92),
+        bg: Color::from_rgb(0.94, 0.97, 0.98),
+        surface: Color::from_rgb(0.91, 0.94, 0.97),
+        surface_raised: Color::from_rgb(0.85, 0.90, 0.93),
+        border: Color::from_rgb(0.64, 0.78, 0.86),
+        border_subtle: Color::from_rgb(0.79, 0.88, 0.93),
         accent: Color::from_rgb(0.05, 0.52, 0.60),
         accent_hover: Color::from_rgb(0.03, 0.40, 0.48),
         success: Color::from_rgb(0.06, 0.52, 0.40),
         warning: Color::from_rgb(0.50, 0.58, 0.05),
         danger: Color::from_rgb(0.68, 0.12, 0.16),
         text: Color::from_rgb(0.05, 0.12, 0.18),
-        text_muted: Color::from_rgb(0.28, 0.48, 0.58),
-        text_disabled: Color::from_rgb(0.55, 0.70, 0.78),
+        text_muted: Color::from_rgb(0.26, 0.46, 0.56),
+        text_disabled: Color::from_rgb(0.53, 0.68, 0.76),
         overlay: Color::from_rgba(0.0, 0.0, 0.0, 0.60),
     }
 }
@@ -403,19 +403,19 @@ fn violet_dark() -> Palette {
 
 fn violet_light() -> Palette {
     Palette {
-        bg: Color::from_rgb(0.94, 0.92, 0.98),
-        surface: Color::from_rgb(1.0, 0.99, 1.0),
-        surface_raised: Color::from_rgb(0.96, 0.94, 0.99),
-        border: Color::from_rgb(0.65, 0.55, 0.82),
-        border_subtle: Color::from_rgb(0.82, 0.76, 0.92),
+        bg: Color::from_rgb(0.97, 0.96, 0.99),
+        surface: Color::from_rgb(0.94, 0.92, 0.97),
+        surface_raised: Color::from_rgb(0.89, 0.87, 0.94),
+        border: Color::from_rgb(0.76, 0.70, 0.88),
+        border_subtle: Color::from_rgb(0.87, 0.83, 0.94),
         accent: Color::from_rgb(0.52, 0.22, 0.80),
         accent_hover: Color::from_rgb(0.40, 0.15, 0.65),
         success: Color::from_rgb(0.12, 0.58, 0.26),
         warning: Color::from_rgb(0.72, 0.56, 0.04),
         danger: Color::from_rgb(0.70, 0.12, 0.18),
         text: Color::from_rgb(0.10, 0.06, 0.18),
-        text_muted: Color::from_rgb(0.42, 0.32, 0.58),
-        text_disabled: Color::from_rgb(0.65, 0.58, 0.75),
+        text_muted: Color::from_rgb(0.40, 0.30, 0.56),
+        text_disabled: Color::from_rgb(0.63, 0.56, 0.73),
         overlay: Color::from_rgba(0.0, 0.0, 0.0, 0.60),
     }
 }
@@ -442,19 +442,19 @@ fn ember_dark() -> Palette {
 
 fn ember_light() -> Palette {
     Palette {
-        bg: Color::from_rgb(0.98, 0.95, 0.90),
-        surface: Color::from_rgb(1.0, 0.99, 0.96),
-        surface_raised: Color::from_rgb(0.99, 0.96, 0.91),
-        border: Color::from_rgb(0.78, 0.62, 0.38),
-        border_subtle: Color::from_rgb(0.90, 0.80, 0.62),
+        bg: Color::from_rgb(0.99, 0.97, 0.93),
+        surface: Color::from_rgb(0.96, 0.93, 0.88),
+        surface_raised: Color::from_rgb(0.91, 0.88, 0.82),
+        border: Color::from_rgb(0.81, 0.73, 0.61),
+        border_subtle: Color::from_rgb(0.90, 0.84, 0.73),
         accent: Color::from_rgb(0.72, 0.38, 0.02),
         accent_hover: Color::from_rgb(0.58, 0.28, 0.01),
         success: Color::from_rgb(0.20, 0.48, 0.14),
         warning: Color::from_rgb(0.74, 0.52, 0.03),
         danger: Color::from_rgb(0.70, 0.14, 0.10),
         text: Color::from_rgb(0.15, 0.10, 0.04),
-        text_muted: Color::from_rgb(0.48, 0.36, 0.18),
-        text_disabled: Color::from_rgb(0.68, 0.58, 0.42),
+        text_muted: Color::from_rgb(0.46, 0.34, 0.16),
+        text_disabled: Color::from_rgb(0.66, 0.56, 0.40),
         overlay: Color::from_rgba(0.0, 0.0, 0.0, 0.60),
     }
 }
@@ -481,19 +481,19 @@ fn rose_dark() -> Palette {
 
 fn rose_light() -> Palette {
     Palette {
-        bg: Color::from_rgb(0.98, 0.93, 0.95),
-        surface: Color::from_rgb(1.0, 0.98, 0.99),
-        surface_raised: Color::from_rgb(0.99, 0.95, 0.97),
-        border: Color::from_rgb(0.80, 0.55, 0.68),
-        border_subtle: Color::from_rgb(0.90, 0.76, 0.83),
+        bg: Color::from_rgb(0.99, 0.96, 0.98),
+        surface: Color::from_rgb(0.96, 0.92, 0.95),
+        surface_raised: Color::from_rgb(0.91, 0.87, 0.90),
+        border: Color::from_rgb(0.81, 0.70, 0.78),
+        border_subtle: Color::from_rgb(0.90, 0.82, 0.88),
         accent: Color::from_rgb(0.75, 0.18, 0.40),
         accent_hover: Color::from_rgb(0.60, 0.12, 0.30),
         success: Color::from_rgb(0.12, 0.52, 0.26),
         warning: Color::from_rgb(0.70, 0.50, 0.07),
         danger: Color::from_rgb(0.70, 0.10, 0.14),
         text: Color::from_rgb(0.16, 0.06, 0.10),
-        text_muted: Color::from_rgb(0.48, 0.28, 0.38),
-        text_disabled: Color::from_rgb(0.68, 0.54, 0.60),
+        text_muted: Color::from_rgb(0.46, 0.26, 0.36),
+        text_disabled: Color::from_rgb(0.66, 0.52, 0.58),
         overlay: Color::from_rgba(0.0, 0.0, 0.0, 0.60),
     }
 }
