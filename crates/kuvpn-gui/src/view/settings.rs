@@ -176,11 +176,7 @@ impl KuVpnGui {
                 Rounding::Smooth,
                 Rounding::Pill,
             ];
-            let current_rounding = self
-                .settings
-                .theme
-                .rounding
-                .unwrap_or_else(|| self.settings.theme.family.default_rounding());
+            let current_rounding = self.settings.theme.rounding.unwrap_or_default();
             let rounding_buttons: Vec<Element<'_, Message>> = roundings
                 .iter()
                 .enumerate()
@@ -213,11 +209,7 @@ impl KuVpnGui {
                 ShadowDepth::Medium,
                 ShadowDepth::Elevated,
             ];
-            let current_shadow = self
-                .settings
-                .theme
-                .shadow
-                .unwrap_or_else(|| self.settings.theme.family.default_shadow());
+            let current_shadow = self.settings.theme.shadow.unwrap_or_default();
             let shadow_buttons: Vec<Element<'_, Message>> = shadows
                 .iter()
                 .enumerate()

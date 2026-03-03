@@ -795,17 +795,7 @@ impl KuVpnGui {
                 Task::none()
             }
             Message::ThemeFamilyChanged(family) => {
-                // Pin rounding/shadow to their current effective values before
-                // changing the family, so the family switch doesn't silently
-                // pull in the new family's defaults for those settings.
-                let t = &mut self.settings.theme;
-                if t.rounding.is_none() {
-                    t.rounding = Some(t.family.default_rounding());
-                }
-                if t.shadow.is_none() {
-                    t.shadow = Some(t.family.default_shadow());
-                }
-                t.family = family;
+                self.settings.theme.family = family;
                 self.save_settings();
                 Task::none()
             }

@@ -90,36 +90,6 @@ impl PaletteFamily {
         }
     }
 
-    pub fn default_rounding(self) -> Rounding {
-        match self {
-            PaletteFamily::Crimson => Rounding::Rounded,
-            PaletteFamily::Frost => Rounding::Rounded,
-            PaletteFamily::Pebble => Rounding::Smooth,
-            PaletteFamily::Slate => Rounding::Sharp,
-            PaletteFamily::Sand => Rounding::Rounded,
-            PaletteFamily::Forest => Rounding::Smooth,
-            PaletteFamily::Ocean => Rounding::Rounded,
-            PaletteFamily::Violet => Rounding::Smooth,
-            PaletteFamily::Ember => Rounding::Rounded,
-            PaletteFamily::Rose => Rounding::Pill,
-        }
-    }
-
-    pub fn default_shadow(self) -> ShadowDepth {
-        match self {
-            PaletteFamily::Crimson => ShadowDepth::Medium,
-            PaletteFamily::Frost => ShadowDepth::Subtle,
-            PaletteFamily::Pebble => ShadowDepth::Medium,
-            PaletteFamily::Slate => ShadowDepth::Subtle,
-            PaletteFamily::Sand => ShadowDepth::Subtle,
-            PaletteFamily::Forest => ShadowDepth::Medium,
-            PaletteFamily::Ocean => ShadowDepth::Medium,
-            PaletteFamily::Violet => ShadowDepth::Elevated,
-            PaletteFamily::Ember => ShadowDepth::Medium,
-            PaletteFamily::Rose => ShadowDepth::Subtle,
-        }
-    }
-
     pub fn label(self) -> &'static str {
         match self {
             PaletteFamily::Crimson => "Crimson",
@@ -648,10 +618,10 @@ impl ShadowDepth {
 pub struct ThemeConfig {
     pub family: PaletteFamily,
     pub dark: bool,
-    /// `None` → use `family.default_rounding()`; `Some` → explicit user override.
+    /// `None` → use `Rounding::default()` (Rounded); `Some` → explicit user override.
     #[serde(default)]
     pub rounding: Option<Rounding>,
-    /// `None` → use `family.default_shadow()`; `Some` → explicit user override.
+    /// `None` → use `ShadowDepth::default()` (Subtle); `Some` → explicit user override.
     #[serde(default)]
     pub shadow: Option<ShadowDepth>,
 }
@@ -671,12 +641,8 @@ impl ThemeConfig {
     /// Resolve into a concrete `AppTheme` ready for rendering.
     pub fn resolve(self) -> AppTheme {
         let palette = self.family.palette(self.dark);
-        let rounding = self
-            .rounding
-            .unwrap_or_else(|| self.family.default_rounding());
-        let shadow = self
-            .shadow
-            .unwrap_or_else(|| self.family.default_shadow());
+        let rounding = self.rounding.unwrap_or_default();
+        let shadow = self.shadow.unwrap_or_default();
         AppTheme {
             palette,
             rounding,
