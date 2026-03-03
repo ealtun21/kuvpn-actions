@@ -1,12 +1,10 @@
-use iced::widget::button;
-use iced::widget::container;
-use iced::widget::scrollable;
-use iced::{Border, Color, Shadow, Vector};
 use std::sync::{Arc, Mutex};
 use tokio::sync::oneshot;
 use tray_icon::{menu::MenuEvent, TrayIconEvent};
 
-// --- Constants & Styling ---
+use crate::theme::{PaletteFamily, Rounding, ShadowDepth};
+
+// --- Asset constants ---
 pub const KU_LOGO_BYTES: &[u8] = include_bytes!("../assets/ku.svg");
 pub const WINDOW_ICON: &[u8] = include_bytes!("../assets/icon-512.png");
 
@@ -15,15 +13,6 @@ pub const TRAY_ICON_NORMAL: &[u8] = include_bytes!("../assets/vpn-normal.svg");
 pub const TRAY_ICON_CONNECTED: &[u8] = include_bytes!("../assets/vpn-connected.svg");
 pub const TRAY_ICON_DISCONNECTED: &[u8] = include_bytes!("../assets/vpn-disconnected.svg");
 pub const TRAY_ICON_CONNECTING: &[u8] = include_bytes!("../assets/vpn-connecting.svg");
-
-// Colors (Refined Koç University Palette)
-pub const COLOR_BG: Color = Color::from_rgb(0.07, 0.07, 0.07);
-pub const COLOR_SURFACE: Color = Color::from_rgb(0.12, 0.12, 0.12);
-pub const COLOR_ACCENT: Color = Color::from_rgb(0.50, 0.0, 0.125); // #800020 Burgundy
-pub const COLOR_SUCCESS: Color = Color::from_rgb(0.42, 0.55, 0.35);
-pub const COLOR_WARNING: Color = Color::from_rgb(0.80, 0.60, 0.30);
-pub const COLOR_TEXT: Color = Color::from_rgb(0.85, 0.85, 0.85);
-pub const COLOR_TEXT_DIM: Color = Color::from_rgb(0.50, 0.50, 0.50);
 
 // Icons (SVG Paths - using simple geometries)
 pub const ICON_SETTINGS_SVG: &[u8] = r#"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>"#.as_bytes();
@@ -113,6 +102,11 @@ pub enum Message {
     HistoryLoaded(Vec<kuvpn::ConnectionEvent>),
     ClearHistory,
     OpenDiagnosticsFolder,
+    // Theme
+    ThemeFamilyChanged(PaletteFamily),
+    ThemeToneChanged(bool),
+    ThemeRoundingChanged(Rounding),
+    ThemeShadowChanged(ShadowDepth),
 }
 
 #[derive(Debug)]
@@ -142,306 +136,5 @@ pub fn login_mode_flags(val: f32) -> (bool, bool) {
         0 => (true, false),  // Full Automatic
         1 => (false, false), // Visual Automatic
         _ => (false, true),  // Manual
-    }
-}
-
-// --- Container Styles ---
-
-pub fn card(_theme: &iced::Theme) -> container::Style {
-    container::Style {
-        background: Some(COLOR_SURFACE.into()),
-        border: Border {
-            color: Color::from_rgb(0.18, 0.18, 0.18),
-            width: 1.0,
-            radius: 12.0.into(),
-        },
-        shadow: Shadow {
-            color: Color::from_rgba(0.0, 0.0, 0.0, 0.5),
-            offset: Vector::new(0.0, 4.0),
-            blur_radius: 12.0,
-        },
-        ..Default::default()
-    }
-}
-
-// --- Scrollbar Style ---
-
-pub fn custom_scrollbar(_theme: &iced::Theme, status: scrollable::Status) -> scrollable::Style {
-    let scroller_color = if matches!(status, scrollable::Status::Hovered { .. }) {
-        Color::from_rgb(0.40, 0.40, 0.40)
-    } else {
-        Color::from_rgb(0.30, 0.30, 0.30)
-    };
-
-    scrollable::Style {
-        container: container::Style::default(),
-        vertical_rail: scrollable::Rail {
-            background: Some(Color::from_rgb(0.10, 0.10, 0.10).into()),
-            border: Border {
-                radius: 4.0.into(),
-                width: 0.0,
-                color: Color::TRANSPARENT,
-            },
-            scroller: scrollable::Scroller {
-                background: scroller_color.into(),
-                border: Border {
-                    radius: 4.0.into(),
-                    width: 0.0,
-                    color: Color::TRANSPARENT,
-                },
-            },
-        },
-        horizontal_rail: scrollable::Rail {
-            background: Some(Color::from_rgb(0.10, 0.10, 0.10).into()),
-            border: Border {
-                radius: 4.0.into(),
-                width: 0.0,
-                color: Color::TRANSPARENT,
-            },
-            scroller: scrollable::Scroller {
-                background: scroller_color.into(),
-                border: Border {
-                    radius: 4.0.into(),
-                    width: 0.0,
-                    color: Color::TRANSPARENT,
-                },
-            },
-        },
-        gap: None,
-        auto_scroll: scrollable::AutoScroll {
-            background: iced::Background::Color(Color::TRANSPARENT),
-            border: Border::default(),
-            shadow: Shadow::default(),
-            icon: Color::TRANSPARENT,
-        },
-    }
-}
-
-// --- Custom Button Styles ---
-
-pub fn btn_primary(_theme: &iced::Theme, status: button::Status) -> button::Style {
-    let base = button::Style {
-        background: Some(COLOR_ACCENT.into()),
-        text_color: Color::WHITE,
-        border: Border {
-            radius: 10.0.into(),
-            ..Default::default()
-        },
-        shadow: Shadow {
-            color: Color::from_rgba(0.50, 0.0, 0.125, 0.3),
-            offset: Vector::new(0.0, 2.0),
-            blur_radius: 8.0,
-        },
-        ..Default::default()
-    };
-    match status {
-        button::Status::Hovered => button::Style {
-            background: Some(Color::from_rgb(0.60, 0.06, 0.19).into()),
-            shadow: Shadow {
-                color: Color::from_rgba(0.50, 0.0, 0.125, 0.5),
-                offset: Vector::new(0.0, 4.0),
-                blur_radius: 16.0,
-            },
-            ..base
-        },
-        button::Status::Pressed => button::Style {
-            background: Some(Color::from_rgb(0.40, 0.0, 0.10).into()),
-            shadow: Shadow {
-                color: Color::from_rgba(0.50, 0.0, 0.125, 0.2),
-                offset: Vector::new(0.0, 1.0),
-                blur_radius: 4.0,
-            },
-            ..base
-        },
-        _ => base,
-    }
-}
-
-pub fn btn_secondary(_theme: &iced::Theme, status: button::Status) -> button::Style {
-    let base = button::Style {
-        background: Some(Color::TRANSPARENT.into()),
-        text_color: COLOR_TEXT,
-        border: Border {
-            color: Color::from_rgb(0.25, 0.25, 0.25),
-            width: 1.0,
-            radius: 10.0.into(),
-        },
-        shadow: Shadow {
-            color: Color::from_rgba(0.0, 0.0, 0.0, 0.2),
-            offset: Vector::new(0.0, 1.0),
-            blur_radius: 4.0,
-        },
-        ..Default::default()
-    };
-    match status {
-        button::Status::Hovered => button::Style {
-            background: Some(COLOR_SURFACE.into()),
-            border: Border {
-                color: Color::from_rgb(0.35, 0.35, 0.35),
-                width: 1.0,
-                radius: 10.0.into(),
-            },
-            shadow: Shadow {
-                color: Color::from_rgba(0.0, 0.0, 0.0, 0.3),
-                offset: Vector::new(0.0, 2.0),
-                blur_radius: 8.0,
-            },
-            ..base
-        },
-        button::Status::Pressed => button::Style {
-            background: Some(Color::from_rgb(0.08, 0.08, 0.08).into()),
-            shadow: Shadow {
-                color: Color::from_rgba(0.0, 0.0, 0.0, 0.15),
-                offset: Vector::new(0.0, 1.0),
-                blur_radius: 2.0,
-            },
-            ..base
-        },
-        _ => base,
-    }
-}
-
-pub fn btn_danger(_theme: &iced::Theme, status: button::Status) -> button::Style {
-    let base_color = Color::from_rgb(0.8, 0.2, 0.2);
-    let base = button::Style {
-        background: Some(base_color.into()),
-        text_color: Color::WHITE,
-        border: Border {
-            radius: 10.0.into(),
-            ..Default::default()
-        },
-        shadow: Shadow {
-            color: Color::from_rgba(0.8, 0.2, 0.2, 0.3),
-            offset: Vector::new(0.0, 2.0),
-            blur_radius: 8.0,
-        },
-        ..Default::default()
-    };
-    match status {
-        button::Status::Hovered => button::Style {
-            background: Some(Color::from_rgb(0.9, 0.25, 0.25).into()),
-            shadow: Shadow {
-                color: Color::from_rgba(0.8, 0.2, 0.2, 0.5),
-                offset: Vector::new(0.0, 4.0),
-                blur_radius: 16.0,
-            },
-            ..base
-        },
-        button::Status::Pressed => button::Style {
-            background: Some(Color::from_rgb(0.65, 0.15, 0.15).into()),
-            shadow: Shadow {
-                color: Color::from_rgba(0.8, 0.2, 0.2, 0.2),
-                offset: Vector::new(0.0, 1.0),
-                blur_radius: 4.0,
-            },
-            ..base
-        },
-        _ => base,
-    }
-}
-
-pub fn btn_segment_selected(
-    _theme: &iced::Theme,
-    _status: button::Status,
-    position: SegmentPosition,
-) -> button::Style {
-    let radius = match position {
-        SegmentPosition::Left => iced::border::Radius {
-            top_left: 8.0,
-            top_right: 0.0,
-            bottom_right: 0.0,
-            bottom_left: 8.0,
-        },
-        SegmentPosition::Middle => iced::border::Radius {
-            top_left: 0.0,
-            top_right: 0.0,
-            bottom_right: 0.0,
-            bottom_left: 0.0,
-        },
-        SegmentPosition::Right => iced::border::Radius {
-            top_left: 0.0,
-            top_right: 8.0,
-            bottom_right: 8.0,
-            bottom_left: 0.0,
-        },
-        SegmentPosition::Single => iced::border::Radius {
-            top_left: 8.0,
-            top_right: 8.0,
-            bottom_right: 8.0,
-            bottom_left: 8.0,
-        },
-    };
-
-    button::Style {
-        background: Some(COLOR_ACCENT.into()),
-        text_color: Color::WHITE,
-        border: Border {
-            radius,
-            ..Default::default()
-        },
-        shadow: Shadow::default(),
-        ..Default::default()
-    }
-}
-
-pub fn btn_segment_unselected(
-    _theme: &iced::Theme,
-    status: button::Status,
-    position: SegmentPosition,
-) -> button::Style {
-    let radius = match position {
-        SegmentPosition::Left => iced::border::Radius {
-            top_left: 8.0,
-            top_right: 0.0,
-            bottom_right: 0.0,
-            bottom_left: 8.0,
-        },
-        SegmentPosition::Middle => iced::border::Radius {
-            top_left: 0.0,
-            top_right: 0.0,
-            bottom_right: 0.0,
-            bottom_left: 0.0,
-        },
-        SegmentPosition::Right => iced::border::Radius {
-            top_left: 0.0,
-            top_right: 8.0,
-            bottom_right: 8.0,
-            bottom_left: 0.0,
-        },
-        SegmentPosition::Single => iced::border::Radius {
-            top_left: 8.0,
-            top_right: 8.0,
-            bottom_right: 8.0,
-            bottom_left: 8.0,
-        },
-    };
-
-    let base = button::Style {
-        background: Some(Color::TRANSPARENT.into()),
-        text_color: COLOR_TEXT,
-        border: Border {
-            color: Color::from_rgb(0.25, 0.25, 0.25),
-            width: 1.0,
-            radius,
-        },
-        shadow: Shadow::default(),
-        ..Default::default()
-    };
-
-    match status {
-        button::Status::Hovered => button::Style {
-            background: Some(Color::from_rgb(0.15, 0.15, 0.15).into()),
-            border: Border {
-                color: Color::from_rgb(0.35, 0.35, 0.35),
-                width: 1.0,
-                radius,
-            },
-            ..base
-        },
-        button::Status::Pressed => button::Style {
-            background: Some(Color::from_rgb(0.10, 0.10, 0.10).into()),
-            ..base
-        },
-        _ => base,
     }
 }

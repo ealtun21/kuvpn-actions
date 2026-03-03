@@ -4,6 +4,8 @@ mod app;
 mod config;
 mod logger;
 mod provider;
+mod styles;
+mod theme;
 mod tray;
 mod types;
 mod view;

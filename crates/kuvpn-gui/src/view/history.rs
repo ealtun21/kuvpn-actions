@@ -1,34 +1,35 @@
 use crate::app::KuVpnGui;
-use crate::types::{
-    btn_secondary, card, custom_scrollbar, Message, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_DIM,
-    COLOR_WARNING, ICON_CLOCK_SVG, ICON_TRASH_SVG,
-};
+use crate::styles::Styler;
+use crate::types::{Message, ICON_CLOCK_SVG, ICON_TRASH_SVG};
 use iced::widget::{button, column, container, row, scrollable, svg, text, Space};
-use iced::{Alignment, Color, Element, Length, Padding};
+use iced::{Alignment, Element, Length, Padding};
 
 impl KuVpnGui {
     pub fn view_history(&self) -> Element<'_, Message> {
+        let s = self.styler();
+        let p = s.p;
+
         let heading = row![
             text("Connection History")
                 .size(14)
-                .color(COLOR_TEXT)
+                .color(p.text)
                 .width(Length::Fill),
             button(
                 row![
                     svg(svg::Handle::from_memory(ICON_TRASH_SVG))
                         .width(13)
                         .height(13)
-                        .style(|_, _| svg::Style {
-                            color: Some(COLOR_TEXT)
+                        .style(move |_, _| svg::Style {
+                            color: Some(p.text)
                         }),
-                    text("Clear").size(11).color(COLOR_TEXT),
+                    text("Clear").size(11).color(p.text),
                 ]
                 .spacing(6)
                 .align_y(Alignment::Center),
             )
             .padding([8, 12])
             .on_press(Message::ClearHistory)
-            .style(btn_secondary),
+            .style(s.btn_secondary()),
         ]
         .align_y(Alignment::Center);
 
@@ -40,15 +41,15 @@ impl KuVpnGui {
                         svg(svg::Handle::from_memory(ICON_CLOCK_SVG))
                             .width(32)
                             .height(32)
-                            .style(|_, _| svg::Style {
-                                color: Some(COLOR_TEXT_DIM)
+                            .style(move |_, _| svg::Style {
+                                color: Some(p.text_muted)
                             }),
                         text("No connection history yet.")
                             .size(13)
-                            .color(COLOR_TEXT_DIM),
+                            .color(p.text_muted),
                         text("Events are recorded when you connect or disconnect.")
                             .size(11)
-                            .color(COLOR_TEXT_DIM),
+                            .color(p.text_muted),
                     ]
                     .spacing(8)
                     .align_x(Alignment::Center),
@@ -62,7 +63,7 @@ impl KuVpnGui {
             let mut col = column![].spacing(6).width(Length::Fill);
             // Show newest first
             for event in self.history.iter().rev() {
-                col = col.push(view_event_row(event));
+                col = col.push(view_event_row(event, s));
             }
             col
         };
@@ -80,7 +81,7 @@ impl KuVpnGui {
             heading,
             scrollable(scrollable_content)
                 .height(Length::Fill)
-                .style(custom_scrollbar)
+                .style(s.scrollbar())
         ]
         .spacing(12)
         .width(Length::Fill)
@@ -95,20 +96,22 @@ impl KuVpnGui {
             })
             .width(Length::Fill)
             .height(Length::Fill)
-            .style(card)
+            .style(s.card())
             .into()
     }
 }
 
-fn view_event_row<'a>(event: &'a kuvpn::ConnectionEvent) -> Element<'a, Message> {
+fn view_event_row<'a>(event: &'a kuvpn::ConnectionEvent, s: Styler) -> Element<'a, Message> {
     use kuvpn::EventKind;
 
+    let p = s.p;
+
     let (dot_color, kind_label) = match event.kind {
-        EventKind::Connected => (COLOR_SUCCESS, "Connected"),
-        EventKind::Reconnected => (COLOR_WARNING, "Reconnected"),
-        EventKind::Disconnected => (COLOR_TEXT_DIM, "Disconnected"),
-        EventKind::Cancelled => (COLOR_TEXT_DIM, "Cancelled"),
-        EventKind::Error => (Color::from_rgb(0.8, 0.2, 0.2), "Error"),
+        EventKind::Connected => (p.success, "Connected"),
+        EventKind::Reconnected => (p.warning, "Reconnected"),
+        EventKind::Disconnected => (p.text_muted, "Disconnected"),
+        EventKind::Cancelled => (p.text_muted, "Cancelled"),
+        EventKind::Error => (p.danger, "Error"),
     };
 
     let ts = format_timestamp(event.timestamp_unix);
@@ -137,7 +140,7 @@ fn view_event_row<'a>(event: &'a kuvpn::ConnectionEvent) -> Element<'a, Message>
             .width(Length::Fixed(88.0)),
         text(format!("{}{}", ts, duration_str))
             .size(11)
-            .color(COLOR_TEXT_DIM),
+            .color(p.text_muted),
     ]
     .spacing(10)
     .align_y(Alignment::Center);
@@ -146,7 +149,7 @@ fn view_event_row<'a>(event: &'a kuvpn::ConnectionEvent) -> Element<'a, Message>
         row_content = row_content.push(
             text(msg.as_str())
                 .size(10)
-                .color(COLOR_WARNING)
+                .color(p.warning)
                 .width(Length::Fill),
         );
     }
@@ -154,15 +157,7 @@ fn view_event_row<'a>(event: &'a kuvpn::ConnectionEvent) -> Element<'a, Message>
     container(row_content)
         .padding([6, 10])
         .width(Length::Fill)
-        .style(|_| iced::widget::container::Style {
-            background: Some(Color::from_rgb(0.10, 0.10, 0.10).into()),
-            border: iced::Border {
-                radius: 6.0.into(),
-                color: Color::from_rgb(0.20, 0.20, 0.20),
-                width: 1.0,
-            },
-            ..Default::default()
-        })
+        .style(s.history_row())
         .into()
 }
 

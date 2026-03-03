@@ -1,13 +1,13 @@
 use crate::app::KuVpnGui;
-use crate::types::{
-    btn_primary, InputRequest, Message, COLOR_ACCENT, COLOR_SURFACE, COLOR_TEXT, COLOR_TEXT_DIM,
-    ICON_EYE_OFF_SVG, ICON_EYE_SVG, ICON_LOCK_SVG,
-};
+use crate::types::{InputRequest, Message, ICON_EYE_OFF_SVG, ICON_EYE_SVG, ICON_LOCK_SVG};
 use iced::widget::{button, column, container, stack, svg, text, text_input};
 use iced::{Alignment, Border, Color, Element, Length, Padding, Shadow};
 
 impl KuVpnGui {
     pub fn view_modal<'a>(&self, req: &'a InputRequest) -> Element<'a, Message> {
+        let s = self.styler();
+        let p = s.p;
+
         // Determine context-aware title
         let title = if req.is_password {
             if req.msg.contains("password to start the VPN tunnel") {
@@ -23,13 +23,14 @@ impl KuVpnGui {
 
         let input_field: Element<'_, Message> = if req.is_password {
             let icon_bytes = if show { ICON_EYE_SVG } else { ICON_EYE_OFF_SVG };
+            let icon_color = if show { p.text } else { p.text_muted };
 
             let eye_btn = button(
                 svg(svg::Handle::from_memory(icon_bytes))
                     .width(18)
                     .height(18)
                     .style(move |_, _| svg::Style {
-                        color: Some(if show { COLOR_TEXT } else { COLOR_TEXT_DIM }),
+                        color: Some(icon_color),
                     }),
             )
             .padding(Padding {
@@ -80,44 +81,33 @@ impl KuVpnGui {
                     svg(svg::Handle::from_memory(ICON_LOCK_SVG))
                         .width(26)
                         .height(26)
-                        .style(|_, _| svg::Style {
-                            color: Some(COLOR_ACCENT)
+                        .style(move |_, _| svg::Style {
+                            color: Some(p.accent)
                         }),
                     text(title).size(20),
                 ]
                 .spacing(12)
                 .align_y(Alignment::Center),
-                text(&req.msg).size(14).color(COLOR_TEXT),
+                text(&req.msg).size(14).color(p.text),
                 input_field,
                 button(text("VERIFY").size(14).color(Color::WHITE))
                     .width(Length::Fill)
                     .padding([12, 16])
                     .on_press(Message::SubmitInput)
-                    .style(btn_primary)
+                    .style(s.btn_primary())
             ]
             .spacing(20)
             .padding(32),
         )
         .width(Length::Fixed(400.0))
-        .style(|_| container::Style {
-            background: Some(COLOR_SURFACE.into()),
-            border: Border {
-                radius: 10.0.into(),
-                color: COLOR_ACCENT,
-                width: 1.0,
-            },
-            ..Default::default()
-        });
+        .style(s.modal_card());
 
         container(modal_content)
             .width(Length::Fill)
             .height(Length::Fill)
             .center_x(Length::Fill)
             .center_y(Length::Fill)
-            .style(|_| container::Style {
-                background: Some(Color::from_rgba(0.0, 0.0, 0.0, 0.85).into()),
-                ..Default::default()
-            })
+            .style(s.modal_overlay())
             .into()
     }
 }

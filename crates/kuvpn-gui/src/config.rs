@@ -1,3 +1,4 @@
+use crate::theme::ThemeConfig;
 use serde::{Deserialize, Serialize};
 use std::fs;
 
@@ -16,6 +17,8 @@ pub struct GuiSettings {
     pub auto_hide_after_prompt: bool,
     #[serde(default)]
     pub advanced_mode: bool,
+    #[serde(default)]
+    pub theme: ThemeConfig,
 }
 
 fn default_auto_hide() -> bool {
@@ -36,6 +39,7 @@ impl Default for GuiSettings {
             use_client_decorations: true,
             auto_hide_after_prompt: true,
             advanced_mode: false,
+            theme: ThemeConfig::default(),
         }
     }
 }

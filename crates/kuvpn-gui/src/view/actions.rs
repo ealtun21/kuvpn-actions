@@ -1,12 +1,12 @@
 use crate::app::KuVpnGui;
-use crate::types::{
-    btn_danger, btn_primary, ConnectionStatus, Message, ICON_POWER_SVG, KU_LOGO_BYTES,
-};
+use crate::types::{ConnectionStatus, Message, ICON_POWER_SVG, KU_LOGO_BYTES};
 use iced::widget::{button, container, row, svg, text};
 use iced::{Alignment, Element, Length};
 
 impl KuVpnGui {
     pub fn view_actions(&self) -> Element<'_, Message> {
+        let s = self.styler();
+
         match self.status {
             ConnectionStatus::Disconnected | ConnectionStatus::Error => button(
                 container(
@@ -28,18 +28,19 @@ impl KuVpnGui {
             .padding([14, 20])
             .width(Length::Fill)
             .on_press(Message::ConnectPressed)
-            .style(btn_primary)
+            .style(s.btn_primary())
             .into(),
             _ => {
                 let disconnecting = self.status == ConnectionStatus::Disconnecting;
+                let accent = s.p.accent;
                 button(
                     container(
                         row![
                             svg(svg::Handle::from_memory(ICON_POWER_SVG))
                                 .width(16)
                                 .height(16)
-                                .style(|_, _| svg::Style {
-                                    color: Some(iced::Color::WHITE)
+                                .style(move |_, _| svg::Style {
+                                    color: Some(accent)
                                 }),
                             text(if self.status == ConnectionStatus::Connecting {
                                 "CANCEL"
@@ -47,7 +48,7 @@ impl KuVpnGui {
                                 "DISCONNECT"
                             })
                             .size(15)
-                            .color(iced::Color::WHITE),
+                            .color(accent),
                         ]
                         .spacing(10)
                         .align_y(Alignment::Center),
@@ -62,7 +63,7 @@ impl KuVpnGui {
                 } else {
                     Some(Message::DisconnectPressed)
                 })
-                .style(btn_danger)
+                .style(s.btn_cancel())
                 .into()
             }
         }

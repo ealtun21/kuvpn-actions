@@ -1,39 +1,28 @@
 use crate::app::KuVpnGui;
-#[cfg_attr(windows, allow(unused_imports))]
-use crate::types::COLOR_WARNING;
-use crate::types::{
-    btn_secondary, btn_segment_selected, btn_segment_unselected, card, custom_scrollbar, Message,
-    SegmentPosition, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_DIM, ICON_INFO_SVG, ICON_REFRESH_SVG,
-    ICON_TRASH_SVG,
-};
-use iced::widget::{button, container, row, scrollable, svg, text, text_input, Column};
+use crate::styles::Styler;
+use crate::theme::{PaletteFamily, Rounding, ShadowDepth};
+use crate::types::{Message, SegmentPosition, ICON_INFO_SVG, ICON_REFRESH_SVG, ICON_TRASH_SVG};
+use iced::widget::{button, container, pick_list, row, scrollable, svg, text, text_input, Column};
 use iced::{Alignment, Border, Color, Element, Length, Padding, Shadow, Vector};
 
 // ── Tooltip helper ────────────────────────────────────────────────────────────
 
 /// Renders a small (i) icon that shows `tip` as a tooltip on hover.
-fn info_tip<'a>(tip: &'a str) -> Element<'a, Message> {
+fn info_tip<'a>(tip: &'a str, s: Styler) -> Element<'a, Message> {
     use iced::widget::tooltip;
 
+    let p = s.p;
     let icon = svg(svg::Handle::from_memory(ICON_INFO_SVG))
         .width(14)
         .height(14)
-        .style(|_, _| svg::Style {
-            color: Some(COLOR_TEXT_DIM),
+        .style(move |_, _| svg::Style {
+            color: Some(p.text_muted),
         });
 
-    let tip_body = container(text(tip).size(11).color(COLOR_TEXT))
+    let tip_body = container(text(tip).size(11).color(p.text))
         .padding([7, 10])
         .max_width(260.0)
-        .style(|_| container::Style {
-            background: Some(Color::from_rgb(0.09, 0.09, 0.09).into()),
-            border: Border {
-                radius: 6.0.into(),
-                color: Color::from_rgb(0.28, 0.28, 0.28),
-                width: 1.0,
-            },
-            ..Default::default()
-        });
+        .style(s.tooltip_container());
 
     tooltip(icon, tip_body, tooltip::Position::Left)
         .gap(6)
@@ -44,6 +33,8 @@ fn info_tip<'a>(tip: &'a str) -> Element<'a, Message> {
 
 impl KuVpnGui {
     pub fn view_advanced_settings(&self) -> Element<'_, Message> {
+        let s = self.styler();
+        let p = s.p;
         let is_locked = false;
 
         let locked_hint = if is_locked {
@@ -52,12 +43,12 @@ impl KuVpnGui {
                     svg(svg::Handle::from_memory(ICON_INFO_SVG))
                         .width(14)
                         .height(14)
-                        .style(|_, _| svg::Style {
-                            color: Some(COLOR_TEXT_DIM)
+                        .style(move |_, _| svg::Style {
+                            color: Some(p.text_muted)
                         }),
                     text("Settings locked during active session.")
                         .size(11)
-                        .color(COLOR_TEXT_DIM),
+                        .color(p.text_muted),
                 ]
                 .spacing(8)
                 .align_y(Alignment::Center),
@@ -68,23 +59,16 @@ impl KuVpnGui {
         };
 
         let section_label = |label: &'static str| -> Element<'_, Message> {
-            container(
-                text(label)
-                    .size(10)
-                    .color(Color::from_rgb(0.45, 0.45, 0.45)),
-            )
-            .padding([8, 0])
-            .into()
+            container(text(label).size(10).color(p.text_muted))
+                .padding([8, 0])
+                .into()
         };
 
         let divider = || -> Element<'_, Message> {
             container(iced::widget::Space::new().height(0))
                 .width(Length::Fill)
                 .height(Length::Fixed(1.0))
-                .style(|_| container::Style {
-                    background: Some(Color::from_rgb(0.20, 0.20, 0.20).into()),
-                    ..Default::default()
-                })
+                .style(s.divider())
                 .into()
         };
 
@@ -95,21 +79,23 @@ impl KuVpnGui {
                     svg(svg::Handle::from_memory(ICON_INFO_SVG))
                         .width(13)
                         .height(13)
-                        .style(|_, _| svg::Style {
-                            color: Some(COLOR_SUCCESS)
+                        .style(move |_, _| svg::Style {
+                            color: Some(p.success)
                         }),
-                    text(msg.as_str()).size(10).color(COLOR_SUCCESS),
+                    text(msg.as_str()).size(10).color(p.success),
                 ]
                 .spacing(6)
                 .align_y(Alignment::Center),
             )
             .width(Length::Fill)
             .padding([6, 110])
-            .style(|_| container::Style {
-                background: Some(Color::from_rgba(0.42, 0.55, 0.35, 0.07).into()),
+            .style(move |_| container::Style {
+                background: Some(
+                    Color::from_rgba(p.success.r, p.success.g, p.success.b, 0.07).into(),
+                ),
                 border: Border {
                     radius: 6.0.into(),
-                    color: Color::from_rgba(0.42, 0.55, 0.35, 0.25),
+                    color: Color::from_rgba(p.success.r, p.success.g, p.success.b, 0.25),
                     width: 1.0,
                 },
                 ..Default::default()
@@ -123,7 +109,7 @@ impl KuVpnGui {
         let header = row![
             text("Settings")
                 .size(14)
-                .color(COLOR_TEXT)
+                .color(p.text)
                 .width(Length::Fill),
             self.view_segmented_control(
                 &["Basic", "Advanced"],
@@ -147,7 +133,120 @@ impl KuVpnGui {
 
         col = col.push(header);
 
+        // ── APPEARANCE section ────────────────────────────────────────────────
+        col = col.push(section_label("APPEARANCE"));
+
+        // Family dropdown
+        {
+            let current_family = self.settings.theme.family;
+            col = col.push(self.view_unified_control(
+                "Family:",
+                pick_list(
+                    PaletteFamily::ALL.to_vec(),
+                    Some(current_family),
+                    Message::ThemeFamilyChanged,
+                )
+                .style(s.pick_list_style())
+                .menu_style(s.pick_list_menu_style())
+                .width(Length::Fill)
+                .into(),
+                "Color palette family for the application theme.",
+            ));
+        }
+
+        // Tone row
+        col = col.push(self.view_unified_control(
+            "Tone:",
+            self.view_segmented_control(
+                &["Dark", "Light"],
+                &[1.0, 0.0],
+                if self.settings.theme.dark { 1.0 } else { 0.0 },
+                false,
+                |val| Message::ThemeToneChanged(val > 0.5),
+            ),
+            "Dark or Light variant of the selected color family.",
+        ));
+
+        // Rounding + Shadow rows — advanced only
+        if adv {
+            let roundings = [
+                Rounding::Square,
+                Rounding::Sharp,
+                Rounding::Rounded,
+                Rounding::Smooth,
+                Rounding::Pill,
+            ];
+            let current_rounding = self
+                .settings
+                .theme
+                .rounding
+                .unwrap_or_else(|| self.settings.theme.family.default_rounding());
+            let rounding_buttons: Vec<Element<'_, Message>> = roundings
+                .iter()
+                .enumerate()
+                .map(|(idx, &r)| {
+                    let is_selected = current_rounding == r;
+                    let position = if idx == 0 {
+                        SegmentPosition::Left
+                    } else if idx == roundings.len() - 1 {
+                        SegmentPosition::Right
+                    } else {
+                        SegmentPosition::Middle
+                    };
+                    button(text(r.label()).size(11))
+                        .padding([9, 12])
+                        .height(Length::Fixed(34.0))
+                        .on_press(Message::ThemeRoundingChanged(r))
+                        .style(s.btn_segment(position, is_selected))
+                        .into()
+                })
+                .collect();
+            col = col.push(self.view_unified_control(
+                "Rounding:",
+                row(rounding_buttons).spacing(-1.0).into(),
+                "Corner radius for buttons, cards, and inputs. Square is fully flat; Pill is heavily rounded.",
+            ));
+
+            let shadows = [
+                ShadowDepth::None,
+                ShadowDepth::Subtle,
+                ShadowDepth::Medium,
+                ShadowDepth::Elevated,
+            ];
+            let current_shadow = self
+                .settings
+                .theme
+                .shadow
+                .unwrap_or_else(|| self.settings.theme.family.default_shadow());
+            let shadow_buttons: Vec<Element<'_, Message>> = shadows
+                .iter()
+                .enumerate()
+                .map(|(idx, &sd)| {
+                    let is_selected = current_shadow == sd;
+                    let position = if idx == 0 {
+                        SegmentPosition::Left
+                    } else if idx == shadows.len() - 1 {
+                        SegmentPosition::Right
+                    } else {
+                        SegmentPosition::Middle
+                    };
+                    button(text(sd.label()).size(11))
+                        .padding([9, 12])
+                        .height(Length::Fixed(34.0))
+                        .on_press(Message::ThemeShadowChanged(sd))
+                        .style(s.btn_segment(position, is_selected))
+                        .into()
+                })
+                .collect();
+            col = col.push(self.view_unified_control(
+                "Shadow:",
+                row(shadow_buttons).spacing(-1.0).into(),
+                "Drop-shadow depth for cards and buttons. None is flat; Elevated adds a strong floating shadow.",
+            ));
+        }
+
         // BROWSER section
+        col = col.push(divider());
         col = col.push(section_label("BROWSER"));
         col = col.push(self.view_unified_field(
             "KU Email:",
@@ -212,56 +311,67 @@ impl KuVpnGui {
                         })
                         .padding(10)
                         .width(Length::Fill)
-                        .style(move |_theme, status| {
-                            let mut style = text_input::default(_theme, status);
-                            style.background =
-                                iced::Background::Color(Color::from_rgb(0.08, 0.08, 0.08));
-                            style.border = Border {
-                                color: match status {
-                                    text_input::Status::Active => Color::from_rgb(0.20, 0.20, 0.20),
-                                    text_input::Status::Focused { is_hovered } => {
-                                        if is_hovered {
-                                            Color::from_rgb(0.35, 0.35, 0.35)
-                                        } else {
-                                            Color::from_rgb(0.30, 0.30, 0.30)
-                                        }
-                                    }
-                                    text_input::Status::Hovered => {
-                                        Color::from_rgb(0.25, 0.25, 0.25)
-                                    }
-                                    text_input::Status::Disabled => {
-                                        Color::from_rgb(0.15, 0.15, 0.15)
-                                    }
-                                },
-                                width: 1.0,
-                                radius: 6.0.into(),
-                            };
-                            style
-                        }),
-                    button(
-                        text(if self.oc_test_result == Some(true) {
-                            "✓"
-                        } else if self.oc_test_result == Some(false) {
-                            "✗"
+                        .style(s.text_input()),
+                    {
+                        let test = self.oc_test_result;
+                        let rounding = s.rounding;
+                        button(
+                            text(if test == Some(true) {
+                                "✓"
+                            } else if test == Some(false) {
+                                "✗"
+                            } else {
+                                "Test"
+                            })
+                            .size(11),
+                        )
+                        .padding([8, 12])
+                        .on_press(if is_locked {
+                            Message::Tick
                         } else {
-                            "Test"
+                            Message::TestOpenConnect
                         })
-                        .size(11),
-                    )
-                    .padding([8, 12])
-                    .on_press(if is_locked {
-                        Message::Tick
-                    } else {
-                        Message::TestOpenConnect
-                    })
-                    .style(if self.oc_test_result == Some(true) {
-                        button::success
-                    } else if self.oc_test_result == Some(false) {
-                        button::danger
-                    } else {
-                        button::secondary
-                    }),
-                    info_tip(oc_tip),
+                        .style(move |_, status: button::Status| match test {
+                            Some(true) => button::Style {
+                                background: Some(p.success.into()),
+                                text_color: Color::WHITE,
+                                border: Border {
+                                    radius: rounding.small_radius().into(),
+                                    ..Default::default()
+                                },
+                                ..Default::default()
+                            },
+                            Some(false) => button::Style {
+                                background: Some(p.danger.into()),
+                                text_color: Color::WHITE,
+                                border: Border {
+                                    radius: rounding.small_radius().into(),
+                                    ..Default::default()
+                                },
+                                ..Default::default()
+                            },
+                            None => {
+                                let base = button::Style {
+                                    background: Some(Color::TRANSPARENT.into()),
+                                    text_color: p.text,
+                                    border: Border {
+                                        color: p.border,
+                                        width: rounding.border_width(),
+                                        radius: rounding.small_radius().into(),
+                                    },
+                                    ..Default::default()
+                                };
+                                match status {
+                                    button::Status::Hovered => button::Style {
+                                        background: Some(p.surface.into()),
+                                        ..base
+                                    },
+                                    _ => base,
+                                }
+                            }
+                        })
+                    },
+                    info_tip(oc_tip, s),
                 ]
                 .spacing(10)
                 .align_y(Alignment::Center);
@@ -299,12 +409,12 @@ impl KuVpnGui {
                                 svg(svg::Handle::from_memory(ICON_INFO_SVG))
                                     .width(13)
                                     .height(13)
-                                    .style(|_, _| svg::Style {
-                                        color: Some(COLOR_WARNING)
+                                    .style(move |_, _| svg::Style {
+                                        color: Some(p.warning)
                                     }),
                                 text("No privilege tool found! Install sudo or pkexec.")
                                     .size(11)
-                                    .color(COLOR_WARNING),
+                                    .color(p.warning),
                             ]
                             .spacing(6)
                             .align_y(Alignment::Center),
@@ -368,11 +478,12 @@ impl KuVpnGui {
             let fade = self.notif_fade;
 
             let wipe_btn: Element<'_, Message> = if let Some(success) = self.session_wipe_result {
-                let (label, r, g, b) = if success {
-                    ("✓  WIPED", 0.42f32, 0.55f32, 0.35f32)
+                let (label, fb_color) = if success {
+                    ("✓  WIPED", p.success)
                 } else {
-                    ("✗  FAILED", 0.8f32, 0.2f32, 0.2f32)
+                    ("✗  FAILED", p.danger)
                 };
+                let (r, g, b) = (fb_color.r, fb_color.g, fb_color.b);
                 button(
                     text(label)
                         .size(11)
@@ -401,21 +512,22 @@ impl KuVpnGui {
                         svg(svg::Handle::from_memory(ICON_TRASH_SVG))
                             .width(13)
                             .height(13)
-                            .style(|_, _| svg::Style {
-                                color: Some(COLOR_TEXT)
+                            .style(move |_, _| svg::Style {
+                                color: Some(p.text)
                             }),
-                        text("WIPE SESSION").size(11).color(COLOR_TEXT),
+                        text("WIPE SESSION").size(11).color(p.text),
                     ]
                     .spacing(7)
                     .align_y(Alignment::Center),
                 )
                 .padding([10, 14])
                 .on_press(Message::ClearSessionPressed)
-                .style(btn_secondary)
+                .style(s.btn_secondary())
                 .into()
             };
 
             let reset_btn: Element<'_, Message> = if self.reset_notification {
+                let sc = p.success;
                 button(
                     text("✓  RESTORED")
                         .size(11)
@@ -428,14 +540,14 @@ impl KuVpnGui {
                     Message::ResetSettings
                 })
                 .style(move |_, _| button::Style {
-                    background: Some(Color::from_rgba(0.42, 0.55, 0.35, 0.55 * fade).into()),
+                    background: Some(Color::from_rgba(sc.r, sc.g, sc.b, 0.55 * fade).into()),
                     border: Border {
                         radius: 10.0.into(),
-                        color: Color::from_rgba(0.42, 0.55, 0.35, 0.75 * fade),
+                        color: Color::from_rgba(sc.r, sc.g, sc.b, 0.75 * fade),
                         width: 1.5,
                     },
                     shadow: Shadow {
-                        color: Color::from_rgba(0.42, 0.55, 0.35, 0.45 * fade),
+                        color: Color::from_rgba(sc.r, sc.g, sc.b, 0.45 * fade),
                         offset: Vector::new(0.0, 0.0),
                         blur_radius: 12.0,
                     },
@@ -448,10 +560,10 @@ impl KuVpnGui {
                         svg(svg::Handle::from_memory(ICON_REFRESH_SVG))
                             .width(13)
                             .height(13)
-                            .style(|_, _| svg::Style {
-                                color: Some(COLOR_TEXT)
+                            .style(move |_, _| svg::Style {
+                                color: Some(p.text)
                             }),
-                        text("RESET DEFAULTS").size(11).color(COLOR_TEXT),
+                        text("RESET DEFAULTS").size(11).color(p.text),
                     ]
                     .spacing(7)
                     .align_y(Alignment::Center),
@@ -462,7 +574,7 @@ impl KuVpnGui {
                 } else {
                     Message::ResetSettings
                 })
-                .style(btn_secondary)
+                .style(s.btn_secondary())
                 .into()
             };
 
@@ -477,11 +589,11 @@ impl KuVpnGui {
                 left: 0.0,
             }))
             .height(Length::Fill)
-            .style(custom_scrollbar),
+            .style(s.scrollbar()),
         )
         .padding(24)
         .width(Length::Fill)
-        .style(card)
+        .style(s.card())
         .into()
     }
 
@@ -496,34 +608,16 @@ impl KuVpnGui {
         locked: bool,
         on_change: fn(String) -> Message,
     ) -> Element<'a, Message> {
+        let s = self.styler();
+        let p = s.p;
         row![
-            text(label).size(11).width(Length::Fixed(100.0)),
+            text(label).size(11).width(Length::Fixed(100.0)).color(p.text),
             text_input(placeholder, value)
                 .on_input(if locked { |_| Message::Tick } else { on_change })
                 .padding(10)
                 .width(Length::Fill)
-                .style(move |_theme, status| {
-                    let mut style = text_input::default(_theme, status);
-                    style.background = iced::Background::Color(Color::from_rgb(0.08, 0.08, 0.08));
-                    style.border = Border {
-                        color: match status {
-                            text_input::Status::Active => Color::from_rgb(0.20, 0.20, 0.20),
-                            text_input::Status::Focused { is_hovered } => {
-                                if is_hovered {
-                                    Color::from_rgb(0.35, 0.35, 0.35)
-                                } else {
-                                    Color::from_rgb(0.30, 0.30, 0.30)
-                                }
-                            }
-                            text_input::Status::Hovered => Color::from_rgb(0.25, 0.25, 0.25),
-                            text_input::Status::Disabled => Color::from_rgb(0.15, 0.15, 0.15),
-                        },
-                        width: 1.0,
-                        radius: 6.0.into(),
-                    };
-                    style
-                }),
-            info_tip(tooltip_text),
+                .style(s.text_input()),
+            info_tip(tooltip_text, s),
         ]
         .spacing(10)
         .align_y(Alignment::Center)
@@ -536,10 +630,12 @@ impl KuVpnGui {
         control: Element<'a, Message>,
         tooltip_text: &'a str,
     ) -> Element<'a, Message> {
+        let s = self.styler();
+        let p = s.p;
         row![
-            text(label).size(11).width(Length::Fixed(100.0)),
+            text(label).size(11).width(Length::Fixed(100.0)).color(p.text),
             control,
-            info_tip(tooltip_text),
+            info_tip(tooltip_text, s),
         ]
         .spacing(10)
         .align_y(Alignment::Center)
@@ -556,6 +652,7 @@ impl KuVpnGui {
         locked: bool,
         on_change: fn(f32) -> Message,
     ) -> Element<'a, Message> {
+        let s = self.styler();
         let buttons: Vec<Element<'a, Message>> = options
             .iter()
             .zip(values.iter())
@@ -581,13 +678,7 @@ impl KuVpnGui {
                     } else {
                         on_change(value)
                     })
-                    .style(move |theme, status| {
-                        if is_selected {
-                            btn_segment_selected(theme, status, position)
-                        } else {
-                            btn_segment_unselected(theme, status, position)
-                        }
-                    })
+                    .style(s.btn_segment(position, is_selected))
                     .into()
             })
             .collect();
@@ -603,6 +694,7 @@ impl KuVpnGui {
         locked: bool,
         on_change: fn(String) -> Message,
     ) -> Element<'a, Message> {
+        let s = self.styler();
         let buttons: Vec<Element<'a, Message>> = options
             .iter()
             .enumerate()
@@ -627,13 +719,7 @@ impl KuVpnGui {
                     } else {
                         on_change(label.to_string())
                     })
-                    .style(move |theme, status| {
-                        if is_selected {
-                            btn_segment_selected(theme, status, position)
-                        } else {
-                            btn_segment_unselected(theme, status, position)
-                        }
-                    })
+                    .style(s.btn_segment(position, is_selected))
                     .into()
             })
             .collect();

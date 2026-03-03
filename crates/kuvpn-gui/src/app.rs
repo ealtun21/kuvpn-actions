@@ -97,7 +97,21 @@ pub struct KuVpnGui {
 
 impl KuVpnGui {
     pub fn theme(&self, _id: iced::window::Id) -> iced::Theme {
-        iced::Theme::Dark
+        if self.settings.theme.dark {
+            iced::Theme::Dark
+        } else {
+            iced::Theme::Light
+        }
+    }
+
+    /// Resolve the current theme settings into a ready-to-use `Styler`.
+    pub fn styler(&self) -> crate::styles::Styler {
+        let app_theme = self.settings.theme.resolve();
+        crate::styles::Styler {
+            p: app_theme.palette,
+            rounding: app_theme.rounding,
+            shadow: app_theme.shadow,
+        }
     }
 
     fn save_settings(&self) {
@@ -778,6 +792,36 @@ impl KuVpnGui {
                     self.session_wipe_result = None;
                     self.reset_notification = false;
                 }
+                Task::none()
+            }
+            Message::ThemeFamilyChanged(family) => {
+                // Pin rounding/shadow to their current effective values before
+                // changing the family, so the family switch doesn't silently
+                // pull in the new family's defaults for those settings.
+                let t = &mut self.settings.theme;
+                if t.rounding.is_none() {
+                    t.rounding = Some(t.family.default_rounding());
+                }
+                if t.shadow.is_none() {
+                    t.shadow = Some(t.family.default_shadow());
+                }
+                t.family = family;
+                self.save_settings();
+                Task::none()
+            }
+            Message::ThemeToneChanged(dark) => {
+                self.settings.theme.dark = dark;
+                self.save_settings();
+                Task::none()
+            }
+            Message::ThemeRoundingChanged(rounding) => {
+                self.settings.theme.rounding = Some(rounding);
+                self.save_settings();
+                Task::none()
+            }
+            Message::ThemeShadowChanged(shadow) => {
+                self.settings.theme.shadow = Some(shadow);
+                self.save_settings();
                 Task::none()
             }
             Message::OpenDiagnosticsFolder => {

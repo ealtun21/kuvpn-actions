@@ -1,26 +1,28 @@
 use crate::app::KuVpnGui;
-use crate::types::{
-    btn_secondary, card, custom_scrollbar, Message, COLOR_TEXT, COLOR_TEXT_DIM, COLOR_WARNING,
-};
+use crate::theme::Palette;
+use crate::types::Message;
 use iced::widget::{button, column, container, row, scrollable, text};
 use iced::{Alignment, Color, Element, Font, Length, Padding};
 
-fn log_line_color(line: &str) -> Color {
+fn log_line_color(line: &str, p: Palette) -> Color {
     if line.starts_with("[ERR]") || line.starts_with("[!]") {
-        Color::from_rgb(0.85, 0.25, 0.25)
+        p.danger
     } else if line.starts_with("[WRN]") {
-        COLOR_WARNING
+        p.warning
     } else if line.starts_with("[INF]") || line.starts_with("[*]") {
-        COLOR_TEXT_DIM
+        p.text_muted
     } else if line.starts_with("[DBG]") || line.starts_with("[TRC]") {
-        Color::from_rgb(0.35, 0.35, 0.35)
+        p.text_disabled
     } else {
-        COLOR_TEXT_DIM
+        p.text_muted
     }
 }
 
 impl KuVpnGui {
     pub fn view_console(&self) -> Element<'_, Message> {
+        let s = self.styler();
+        let p = s.p;
+
         let log_lines: Vec<Element<'_, Message>> = self
             .logs
             .iter()
@@ -28,7 +30,7 @@ impl KuVpnGui {
                 text(line.as_str())
                     .font(Font::MONOSPACE)
                     .size(12)
-                    .color(log_line_color(line))
+                    .color(log_line_color(line, p))
                     .into()
             })
             .collect();
@@ -38,12 +40,12 @@ impl KuVpnGui {
                 row![
                     text("Session Logs")
                         .size(14)
-                        .color(COLOR_TEXT)
+                        .color(p.text)
                         .width(Length::Fill),
-                    button(text("Copy All").size(11).color(COLOR_TEXT))
+                    button(text("Copy All").size(11).color(p.text))
                         .padding([8, 14])
                         .on_press(Message::CopyLogs)
-                        .style(btn_secondary),
+                        .style(s.btn_secondary()),
                 ]
                 .spacing(10)
                 .align_y(Alignment::Center),
@@ -62,14 +64,14 @@ impl KuVpnGui {
                     vertical: scrollable::Scrollbar::default(),
                     horizontal: scrollable::Scrollbar::default(),
                 })
-                .style(custom_scrollbar),
+                .style(s.scrollbar()),
             ]
             .spacing(12),
         )
         .padding(24)
         .width(Length::Fill)
         .height(Length::Fill)
-        .style(card)
+        .style(s.card())
         .into()
     }
 }
