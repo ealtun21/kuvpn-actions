@@ -1,7 +1,7 @@
 use crate::app::KuVpnGui;
 use crate::types::{
-    Message, ICON_CLOCK_SVG, ICON_INFO_SVG, ICON_PHONE_SVG, ICON_REFRESH_SVG, ICON_SHIELD_CHECK_SVG,
-    ICON_SHIELD_SVG, ICON_SHIELD_X_SVG,
+    Message, ICON_CLOCK_SVG, ICON_INFO_SVG, ICON_PHONE_SVG, ICON_REFRESH_SVG,
+    ICON_SHIELD_CHECK_SVG, ICON_SHIELD_SVG, ICON_SHIELD_X_SVG,
 };
 use iced::widget::{button, column, container, row, stack, svg, text, Space};
 use iced::{Alignment, Border, Color, Element, Font, Length, Shadow, Vector};
@@ -257,14 +257,9 @@ impl KuVpnGui {
                 container(
                     row![
                         text("Enter ").size(12).color(p.text_muted),
-                        container(
-                            text(code)
-                                .size(20)
-                                .color(p.warning)
-                                .font(Font::MONOSPACE)
-                        )
-                        .padding([2, 10])
-                        .style(s.code_badge(p.warning)),
+                        container(text(code).size(20).color(p.warning).font(Font::MONOSPACE))
+                            .padding([2, 10])
+                            .style(s.code_badge(p.warning)),
                         text(" in Authenticator").size(12).color(p.text_muted),
                     ]
                     .spacing(4)
@@ -307,22 +302,18 @@ impl KuVpnGui {
 
         if self.last_diagnostic_path.is_some() {
             inner = inner.push(
-                button(
-                    text("Open diagnostics folder")
-                        .size(11)
-                        .color(p.warning),
-                )
-                .on_press(Message::OpenDiagnosticsFolder)
-                .padding([4, 8])
-                .style(move |_, _| iced::widget::button::Style {
-                    background: None,
-                    border: Border {
-                        color: Color::from_rgba(p.warning.r, p.warning.g, p.warning.b, 0.5),
-                        width: 1.0,
-                        radius: 4.0.into(),
-                    },
-                    ..Default::default()
-                }),
+                button(text("Open diagnostics folder").size(11).color(p.warning))
+                    .on_press(Message::OpenDiagnosticsFolder)
+                    .padding([4, 8])
+                    .style(move |_, _| iced::widget::button::Style {
+                        background: None,
+                        border: Border {
+                            color: Color::from_rgba(p.warning.r, p.warning.g, p.warning.b, 0.5),
+                            width: 1.0,
+                            radius: 4.0.into(),
+                        },
+                        ..Default::default()
+                    }),
             );
         }
 

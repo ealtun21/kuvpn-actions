@@ -7,7 +7,10 @@ pub mod status;
 
 use crate::app::KuVpnGui;
 use crate::styles::Styler;
-use crate::types::{Message, SegmentPosition, Tab, ICON_CLOCK_SVG, ICON_SETTINGS_SVG, ICON_SHIELD_SVG, ICON_TERMINAL_SVG};
+use crate::types::{
+    Message, SegmentPosition, Tab, ICON_CLOCK_SVG, ICON_SETTINGS_SVG, ICON_SHIELD_SVG,
+    ICON_TERMINAL_SVG,
+};
 use iced::widget::{button, column, container, mouse_area, row, stack, svg, text, Column, Space};
 use iced::{Alignment, Border, Color, Element, Length};
 use kuvpn::ConnectionStatus;
@@ -86,8 +89,7 @@ impl KuVpnGui {
         .align_y(Alignment::Center);
 
         if let Some(code) = &self.mfa_info {
-            title_row =
-                title_row.push(text(format!("MFA: {}", code)).size(11).color(p.warning));
+            title_row = title_row.push(text(format!("MFA: {}", code)).size(11).color(p.warning));
         }
 
         let title_bar_content = title_row

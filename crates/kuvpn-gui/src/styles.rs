@@ -105,9 +105,7 @@ impl Styler {
         let p = self.p;
         let rounding = self.rounding;
         move |_| container::Style {
-            background: Some(
-                Color::from_rgba(p.warning.r, p.warning.g, p.warning.b, 0.06).into(),
-            ),
+            background: Some(Color::from_rgba(p.warning.r, p.warning.g, p.warning.b, 0.06).into()),
             border: Border {
                 color: Color::from_rgba(p.warning.r, p.warning.g, p.warning.b, 0.3),
                 width: 1.0,
@@ -122,9 +120,7 @@ impl Styler {
         let p = self.p;
         let rounding = self.rounding;
         move |_| container::Style {
-            background: Some(
-                Color::from_rgba(p.warning.r, p.warning.g, p.warning.b, 0.06).into(),
-            ),
+            background: Some(Color::from_rgba(p.warning.r, p.warning.g, p.warning.b, 0.06).into()),
             border: Border {
                 color: Color::from_rgba(p.warning.r, p.warning.g, p.warning.b, 0.3),
                 width: 1.0,
@@ -255,9 +251,7 @@ impl Styler {
     // ── Button styles ─────────────────────────────────────────────────────────
 
     /// Filled accent-coloured primary button.
-    pub fn btn_primary(
-        self,
-    ) -> impl Fn(&iced::Theme, button::Status) -> button::Style + 'static {
+    pub fn btn_primary(self) -> impl Fn(&iced::Theme, button::Status) -> button::Style + 'static {
         let p = self.p;
         let rounding = self.rounding;
         let shadow = self.shadow;
@@ -309,9 +303,7 @@ impl Styler {
     }
 
     /// Ghost / outlined secondary button.
-    pub fn btn_secondary(
-        self,
-    ) -> impl Fn(&iced::Theme, button::Status) -> button::Style + 'static {
+    pub fn btn_secondary(self) -> impl Fn(&iced::Theme, button::Status) -> button::Style + 'static {
         let p = self.p;
         let rounding = self.rounding;
         move |_, status| {
@@ -465,17 +457,13 @@ impl Styler {
 
     /// Outlined accent button — used for Cancel / Disconnect so the action
     /// button changes colour with the theme instead of being a fixed danger red.
-    pub fn btn_cancel(
-        self,
-    ) -> impl Fn(&iced::Theme, button::Status) -> button::Style + 'static {
+    pub fn btn_cancel(self) -> impl Fn(&iced::Theme, button::Status) -> button::Style + 'static {
         let p = self.p;
         let rounding = self.rounding;
         let shadow = self.shadow;
         move |_, status| {
             let base = button::Style {
-                background: Some(
-                    Color::from_rgba(p.accent.r, p.accent.g, p.accent.b, 0.10).into(),
-                ),
+                background: Some(Color::from_rgba(p.accent.r, p.accent.g, p.accent.b, 0.10).into()),
                 text_color: p.accent,
                 border: Border {
                     color: p.accent,
@@ -557,9 +545,7 @@ impl Styler {
 
     // ── CSD title-bar buttons ─────────────────────────────────────────────────
 
-    pub fn minimize_btn(
-        self,
-    ) -> impl Fn(&iced::Theme, button::Status) -> button::Style + 'static {
+    pub fn minimize_btn(self) -> impl Fn(&iced::Theme, button::Status) -> button::Style + 'static {
         let p = self.p;
         move |_, status| {
             let hover_bg = Color::from_rgba(p.text.r, p.text.g, p.text.b, 0.10);

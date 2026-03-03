@@ -107,10 +107,7 @@ impl KuVpnGui {
 
         // ── Header row ────────────────────────────────────────────────────────
         let header = row![
-            text("Settings")
-                .size(14)
-                .color(p.text)
-                .width(Length::Fill),
+            text("Settings").size(14).color(p.text).width(Length::Fill),
             self.view_segmented_control(
                 &["Basic", "Advanced"],
                 &[0.0, 1.0],
@@ -139,19 +136,21 @@ impl KuVpnGui {
         // Family dropdown
         {
             let current_family = self.settings.theme.family;
-            col = col.push(self.view_unified_control(
-                "Family:",
-                pick_list(
-                    PaletteFamily::ALL.to_vec(),
-                    Some(current_family),
-                    Message::ThemeFamilyChanged,
-                )
-                .style(s.pick_list_style())
-                .menu_style(s.pick_list_menu_style())
-                .width(Length::Fill)
-                .into(),
-                "Color palette family for the application theme.",
-            ));
+            col = col.push(
+                self.view_unified_control(
+                    "Family:",
+                    pick_list(
+                        PaletteFamily::ALL.to_vec(),
+                        Some(current_family),
+                        Message::ThemeFamilyChanged,
+                    )
+                    .style(s.pick_list_style())
+                    .menu_style(s.pick_list_menu_style())
+                    .width(Length::Fill)
+                    .into(),
+                    "Color palette family for the application theme.",
+                ),
+            );
         }
 
         // Tone row
@@ -603,7 +602,10 @@ impl KuVpnGui {
         let s = self.styler();
         let p = s.p;
         row![
-            text(label).size(11).width(Length::Fixed(100.0)).color(p.text),
+            text(label)
+                .size(11)
+                .width(Length::Fixed(100.0))
+                .color(p.text),
             text_input(placeholder, value)
                 .on_input(if locked { |_| Message::Tick } else { on_change })
                 .padding(10)
@@ -625,7 +627,10 @@ impl KuVpnGui {
         let s = self.styler();
         let p = s.p;
         row![
-            text(label).size(11).width(Length::Fixed(100.0)).color(p.text),
+            text(label)
+                .size(11)
+                .width(Length::Fixed(100.0))
+                .color(p.text),
             control,
             info_tip(tooltip_text, s),
         ]
