@@ -44,6 +44,16 @@ impl BrowserSession {
 
         let raw_tab = get_initial_tab(&browser)?;
 
+        // Force English Accept-Language at the protocol level, overriding OS locale.
+        // Azure AD uses this header to pick the UI language; if it's Turkish the
+        // English text checks in the automation handlers will all fail.
+        raw_tab.call_method(headless_chrome::protocol::cdp::Emulation::SetUserAgentOverride {
+            user_agent: config.user_agent.clone(),
+            accept_language: Some("en-US,en".to_string()),
+            platform: None,
+            user_agent_metadata: None,
+        })?;
+
         raw_tab.set_default_timeout(Duration::from_secs(30));
         Ok(Self {
             browser,
