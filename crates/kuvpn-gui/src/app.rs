@@ -386,6 +386,10 @@ impl KuVpnGui {
 
         self.sync_tray_menu_items(status);
 
+        if let Some(tray) = &self.tray_icon {
+            crate::tray::update_tray_icon(tray, status);
+        }
+
         if status == ConnectionStatus::Connected {
             #[cfg(unix)]
             {
@@ -404,9 +408,6 @@ impl KuVpnGui {
             self.active_interface = None;
         }
 
-        if let Some(tray) = &self.tray_icon {
-            crate::tray::update_tray_icon(tray, status);
-        }
         Task::none()
     }
 
