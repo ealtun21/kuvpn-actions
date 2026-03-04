@@ -39,7 +39,7 @@ impl KuVpnGui {
                                 .width(16)
                                 .height(16)
                                 .style(move |_, _| svg::Style {
-                                    color: Some(s.p.text)
+                                    color: Some(iced::Color::WHITE)
                                 }),
                             text(if self.status == ConnectionStatus::Connecting {
                                 "CANCEL"
@@ -47,7 +47,7 @@ impl KuVpnGui {
                                 "DISCONNECT"
                             })
                             .size(15)
-                            .color(s.p.text),
+                            .color(iced::Color::WHITE),
                         ]
                         .spacing(10)
                         .align_y(Alignment::Center),
