@@ -460,52 +460,6 @@ impl Styler {
         }
     }
 
-    /// Outlined accent button — used for Cancel / Disconnect so the action
-    /// button changes colour with the theme instead of being a fixed danger red.
-    pub fn btn_cancel(self) -> impl Fn(&iced::Theme, button::Status) -> button::Style + 'static {
-        let p = self.p;
-        let rounding = self.rounding;
-        let shadow = self.shadow;
-        move |_, status| {
-            let base = button::Style {
-                background: Some(Color::from_rgba(p.accent.r, p.accent.g, p.accent.b, 0.10).into()),
-                text_color: p.accent,
-                border: Border {
-                    color: p.accent,
-                    width: rounding.border_width(),
-                    radius: rounding.radius().into(),
-                },
-                shadow: Shadow::default(),
-                ..Default::default()
-            };
-            match status {
-                button::Status::Hovered => button::Style {
-                    background: Some(
-                        Color::from_rgba(p.accent.r, p.accent.g, p.accent.b, 0.22).into(),
-                    ),
-                    shadow: Shadow {
-                        color: Color::from_rgba(p.accent.r, p.accent.g, p.accent.b, 0.25),
-                        offset: Vector::new(0.0, shadow.offset()),
-                        blur_radius: shadow.blur(),
-                    },
-                    ..base
-                },
-                button::Status::Pressed => button::Style {
-                    background: Some(
-                        Color::from_rgba(p.accent.r, p.accent.g, p.accent.b, 0.30).into(),
-                    ),
-                    shadow: Shadow {
-                        color: Color::from_rgba(p.accent.r, p.accent.g, p.accent.b, 0.15),
-                        offset: Vector::new(0.0, 1.0),
-                        blur_radius: 4.0,
-                    },
-                    ..base
-                },
-                _ => base,
-            }
-        }
-    }
-
     // ── Pick list (dropdown) ──────────────────────────────────────────────────
 
     pub fn pick_list_style(
