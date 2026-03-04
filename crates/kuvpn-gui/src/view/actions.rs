@@ -32,7 +32,6 @@ impl KuVpnGui {
             .into(),
             _ => {
                 let disconnecting = self.status == ConnectionStatus::Disconnecting;
-                let accent = s.p.accent;
                 button(
                     container(
                         row![
@@ -40,7 +39,7 @@ impl KuVpnGui {
                                 .width(16)
                                 .height(16)
                                 .style(move |_, _| svg::Style {
-                                    color: Some(accent)
+                                    color: Some(s.p.text)
                                 }),
                             text(if self.status == ConnectionStatus::Connecting {
                                 "CANCEL"
@@ -48,7 +47,7 @@ impl KuVpnGui {
                                 "DISCONNECT"
                             })
                             .size(15)
-                            .color(accent),
+                            .color(s.p.text),
                         ]
                         .spacing(10)
                         .align_y(Alignment::Center),
@@ -63,7 +62,7 @@ impl KuVpnGui {
                 } else {
                     Some(Message::DisconnectPressed)
                 })
-                .style(s.btn_cancel())
+                .style(s.btn_primary())
                 .into()
             }
         }
