@@ -251,6 +251,91 @@ pub fn vpn_interface_name(configured_name: &str) -> Option<String> {
     }
 }
 
+/// Adds 0.0.0.0/1 and 128.0.0.0/1 routes through the VPN tunnel interface,
+/// forcing all traffic through the VPN (full tunnel mode).
+///
+/// These more-specific routes silently win over any existing default route while
+/// active, and are automatically removed by the kernel when the interface goes down.
+pub fn apply_full_tunnel_routes(
+    interface_name: &str,
+    escalation_tool: &Option<String>,
+    password: Option<&str>,
+) -> anyhow::Result<()> {
+    let tool = resolve_escalation_tool(escalation_tool)
+        .ok_or_else(|| anyhow::anyhow!("No escalation tool available for route injection"))?;
+    let iface = vpn_interface_name(interface_name).unwrap_or_else(|| interface_name.to_string());
+    do_apply_routes(&iface, &tool, password)
+}
+
+/// Runs `tool` with `args`, optionally piping `password` via stdin.
+/// Returns `true` if the command exits successfully.
+fn run_elevated_command_with_password(tool: &str, args: &[&str], password: Option<&str>) -> bool {
+    let Ok(tool_path) = which(tool) else {
+        return false;
+    };
+    let use_stdin = password.is_some() && needs_password_prompt(tool_base_name(tool));
+
+    let mut cmd = Command::new(&tool_path);
+    if use_stdin {
+        if matches!(tool_base_name(tool), "sudo" | "sudo-rs") {
+            cmd.arg("-S");
+        }
+        cmd.stdin(Stdio::piped());
+    }
+    cmd.args(args).stdout(Stdio::null()).stderr(Stdio::null());
+
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    if use_stdin {
+        if let (Some(pw), Some(mut stdin)) = (password, child.stdin.take()) {
+            let _ = writeln!(stdin, "{}", pw);
+        }
+    }
+    child.wait().map(|s| s.success()).unwrap_or(false)
+}
+
+#[cfg(target_os = "macos")]
+fn do_apply_routes(iface: &str, tool: &str, password: Option<&str>) -> anyhow::Result<()> {
+    for prefix in ["0.0.0.0/1", "128.0.0.0/1"] {
+        run_elevated_command_with_password(
+            tool,
+            &["route", "add", "-net", prefix, "-interface", iface],
+            password,
+        );
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn do_apply_routes(iface: &str, tool: &str, password: Option<&str>) -> anyhow::Result<()> {
+    let prefixes = ["0.0.0.0/1", "128.0.0.0/1"];
+    if which("ip").is_ok() {
+        for prefix in prefixes {
+            run_elevated_command_with_password(
+                tool,
+                &["ip", "route", "add", prefix, "dev", iface],
+                password,
+            );
+        }
+        return Ok(());
+    }
+    if which("route").is_ok() {
+        for prefix in prefixes {
+            run_elevated_command_with_password(
+                tool,
+                &["route", "add", "-net", prefix, "dev", iface],
+                password,
+            );
+        }
+        return Ok(());
+    }
+    Err(anyhow::anyhow!(
+        "Neither 'ip' nor 'route' found; cannot configure full tunnel routes"
+    ))
+}
+
 /// Executes openconnect on Unix (via sudo/pkexec/etc).
 #[allow(clippy::too_many_arguments)]
 pub(super) fn execute(
@@ -263,6 +348,7 @@ pub(super) fn execute(
     // On macOS openconnect auto-assigns a utun%d interface; the name is ignored.
     #[cfg_attr(target_os = "macos", allow(unused_variables))] interface_name: &str,
     sudo_password: Option<String>,
+    custom_script: Option<&str>,
 ) -> anyhow::Result<VpnProcess> {
     let command_to_run = resolve_escalation_tool(run_command).ok_or_else(|| {
         anyhow::anyhow!(
@@ -303,6 +389,10 @@ pub(super) fn execute(
     // macOS does not support custom TUN interface names; openconnect auto-assigns utun%d.
     #[cfg(not(target_os = "macos"))]
     cmd.arg("--interface").arg(interface_name);
+
+    if let Some(script) = custom_script {
+        cmd.arg("--script").arg(script);
+    }
 
     cmd.arg("-C")
         .arg(format!("DSID={}", cookie_value))

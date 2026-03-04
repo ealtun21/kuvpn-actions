@@ -57,6 +57,7 @@ pub(super) fn execute(
     cookie_value: String,
     url: String,
     openconnect_path: &Path,
+    full_tunnel: bool,
 ) -> anyhow::Result<VpnProcess> {
     // Path to this binary — used as the helper executable.
     let helper_exe = std::env::current_exe()
@@ -78,6 +79,10 @@ pub(super) fn execute(
         .arg(oc_path_str)
         .arg(&url)
         .arg(&cookie_value);
+
+    if full_tunnel {
+        cmd.arg("--full-tunnel");
+    }
 
     // `runas` blocks until the helper exits, so we run it on a background thread.
     let thread_finished = Arc::new(AtomicBool::new(false));

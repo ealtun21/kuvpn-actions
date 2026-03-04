@@ -102,4 +102,15 @@ pub struct Args {
     /// Print connection history and exit
     #[arg(long, default_value_t = false)]
     pub history: bool,
+
+    /// Use split tunnel mode: only VPN-bound traffic goes through the tunnel.
+    /// By default all traffic is routed through the VPN (full tunnel).
+    /// Ignored when --vpnc-script is set.
+    #[arg(long, default_value_t = false)]
+    pub split_tunnel: bool,
+
+    /// Path to a custom vpnc-script to pass to openconnect via --script (advanced).
+    /// When set, openconnect uses this script for routing/DNS instead of its default.
+    #[arg(long)]
+    pub vpnc_script: Option<String>,
 }

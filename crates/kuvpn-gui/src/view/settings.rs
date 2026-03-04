@@ -258,7 +258,6 @@ impl KuVpnGui {
             ),
             "Full Auto: fully hands-free login via browser automation — no interaction needed.\n\nVisual Auto: same automation but shows the browser window, useful for debugging.\n\nManual: the browser opens and you complete the login yourself.",
         ));
-
         // NETWORK section (advanced only)
         if adv {
             col = col.push(divider());
@@ -370,6 +369,26 @@ impl KuVpnGui {
                 col = col.push(oc_row);
                 col = col.push(oc_path_notif);
             }
+
+            col = col.push(self.view_unified_field(
+                "VPN Script:",
+                "/usr/share/vpnc-scripts/vpnc-script",
+                &self.settings.vpnc_script,
+                "Path to a custom vpnc-script passed to openconnect via --script. When set, openconnect uses this script for routing and DNS instead of its built-in defaults. Tunnel Mode is ignored when a script is provided.",
+                is_locked,
+                Message::VpncScriptChanged,
+            ));
+            col = col.push(self.view_unified_control(
+                "Tunnel Mode:",
+                self.view_segmented_control(
+                    &["Split", "Full"],
+                    &[0.0, 1.0],
+                    if self.settings.full_tunnel { 1.0 } else { 0.0 },
+                    is_locked,
+                    |val| Message::FullTunnelToggled(val > 0.5),
+                ),
+                "Split: only traffic destined for KU network resources goes through the VPN — your regular internet traffic uses your normal connection.\n\nFull: all traffic is routed through the VPN tunnel.",
+            ));
         }
 
         // SYSTEM section

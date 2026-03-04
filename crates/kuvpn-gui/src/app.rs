@@ -309,6 +309,12 @@ impl KuVpnGui {
             },
             escalation_tool: Some(self.settings.escalation_tool.clone()),
             interface_name: "kuvpn0".to_string(),
+            full_tunnel: self.settings.full_tunnel,
+            custom_script: if self.settings.vpnc_script.is_empty() {
+                None
+            } else {
+                Some(self.settings.vpnc_script.clone())
+            },
         };
 
         let session = Arc::new(VpnSession::new(config));
@@ -481,6 +487,16 @@ impl KuVpnGui {
             }
             Message::AutoHideAfterPromptToggled(v) => {
                 self.settings.auto_hide_after_prompt = v;
+                self.save_settings();
+                Task::none()
+            }
+            Message::FullTunnelToggled(v) => {
+                self.settings.full_tunnel = v;
+                self.save_settings();
+                Task::none()
+            }
+            Message::VpncScriptChanged(v) => {
+                self.settings.vpnc_script = v;
                 self.save_settings();
                 Task::none()
             }

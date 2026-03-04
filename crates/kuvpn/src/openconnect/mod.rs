@@ -19,9 +19,9 @@ pub(crate) mod windows;
 
 #[cfg(unix)]
 pub use unix::{
-    find_askpass, get_openconnect_pid, is_openconnect_running, is_vpn_interface_up, kill_process,
-    list_available_escalation_tools, needs_password_prompt, resolve_escalation_tool,
-    tool_requires_password, verify_escalation_password,
+    apply_full_tunnel_routes, find_askpass, get_openconnect_pid, is_openconnect_running,
+    is_vpn_interface_up, kill_process, list_available_escalation_tools, needs_password_prompt,
+    resolve_escalation_tool, tool_requires_password, verify_escalation_password,
 };
 
 #[cfg(windows)]
@@ -185,6 +185,8 @@ pub struct OpenConnectRunner {
     pub path: PathBuf,
     pub interface_name: String,
     pub escalation_tool: Option<String>,
+    /// Optional path to a vpnc-script passed via `--script` to openconnect (Unix only).
+    pub custom_script: Option<String>,
 }
 
 impl OpenConnectRunner {
@@ -194,11 +196,13 @@ impl OpenConnectRunner {
         openconnect_path: &str,
         interface_name: String,
         escalation_tool: Option<String>,
+        custom_script: Option<String>,
     ) -> Option<Self> {
         locate_openconnect(openconnect_path).map(|path| Self {
             path,
             interface_name,
             escalation_tool,
+            custom_script,
         })
     }
 
@@ -210,6 +214,7 @@ impl OpenConnectRunner {
         stdout: Stdio,
         stderr: Stdio,
         sudo_password: Option<String>,
+        full_tunnel: bool,
     ) -> anyhow::Result<VpnProcess> {
         execute_openconnect(
             cookie_value,
@@ -220,6 +225,8 @@ impl OpenConnectRunner {
             stderr,
             &self.interface_name,
             sudo_password,
+            self.custom_script.as_deref(),
+            full_tunnel,
         )
     }
 }
@@ -238,22 +245,30 @@ pub fn execute_openconnect(
     stderr: Stdio,
     interface_name: &str,
     sudo_password: Option<String>,
+    custom_script: Option<&str>,
+    full_tunnel: bool,
 ) -> anyhow::Result<VpnProcess> {
     #[cfg(unix)]
-    return unix::execute(
-        cookie_value,
-        url,
-        run_command,
-        openconnect_path,
-        stdout,
-        stderr,
-        interface_name,
-        sudo_password,
-    );
+    {
+        // full_tunnel is acted upon in the session watchdog after the interface
+        // comes up; the openconnect invocation itself does not need it.
+        let _ = full_tunnel;
+        return unix::execute(
+            cookie_value,
+            url,
+            run_command,
+            openconnect_path,
+            stdout,
+            stderr,
+            interface_name,
+            sudo_password,
+            custom_script,
+        );
+    }
 
     #[cfg(windows)]
     {
-        let _ = (run_command, stdout, stderr, interface_name, sudo_password);
-        return windows::execute(cookie_value, url, openconnect_path);
+        let _ = (run_command, stdout, stderr, interface_name, sudo_password, custom_script);
+        return windows::execute(cookie_value, url, openconnect_path, full_tunnel);
     }
 }

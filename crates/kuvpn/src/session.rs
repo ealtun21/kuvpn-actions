@@ -67,6 +67,13 @@ pub struct SessionConfig {
     pub openconnect_path: String,
     pub escalation_tool: Option<String>,
     pub interface_name: String,
+    /// Route all traffic through the VPN (full tunnel mode).
+    /// On Unix: injects 0.0.0.0/1 + 128.0.0.0/1 routes after the tunnel comes up.
+    /// On Windows: handled inside the elevated helper process.
+    pub full_tunnel: bool,
+    /// Path to a custom vpnc-script passed via `--script` to openconnect (Unix only).
+    /// When set, takes precedence over the default script; `full_tunnel` is ignored.
+    pub custom_script: Option<String>,
 }
 
 /// Prompts for the sudo/pkexec password if the chosen escalation tool requires
@@ -150,6 +157,10 @@ struct SessionThread {
     browser_pid: Arc<Mutex<Option<u32>>>,
     /// Tracks when the VPN connected so we can record session duration.
     connected_at: Option<Instant>,
+    /// Cached sudo/pkexec password resolved during `start_openconnect`.
+    /// Reused for post-connect route injection so a second prompt is never shown.
+    #[cfg(unix)]
+    sudo_password: Option<String>,
 }
 
 impl SessionThread {
@@ -163,6 +174,8 @@ impl SessionThread {
             logs_tx: Arc::clone(&s.logs_tx),
             browser_pid: Arc::clone(&s.browser_pid),
             connected_at: None,
+            #[cfg(unix)]
+            sudo_password: None,
         }
     }
 
@@ -218,7 +231,7 @@ impl SessionThread {
                 self.set_status(ConnectionStatus::Connected);
                 self.run_watchdog(None, is_reconnect, prev_duration)
             } else {
-                match self.launch_vpn(&provider) {
+                match self.launch_vpn(&provider.clone()) {
                     Ok(Some(proc)) => self.run_watchdog(Some(proc), is_reconnect, prev_duration),
                     Ok(None) => None, // user cancelled
                     Err(_) => None,   // auth/launch error
@@ -249,7 +262,7 @@ impl SessionThread {
     }
 
     fn launch_vpn(
-        &self,
+        &mut self,
         provider: &Arc<dyn CredentialsProvider>,
     ) -> Result<Option<VpnProcess>, ()> {
         self.send_log("Info|Accessing campus gateway...");
@@ -298,7 +311,7 @@ impl SessionThread {
     }
 
     fn start_openconnect(
-        &self,
+        &mut self,
         dsid: String,
         #[cfg_attr(not(unix), allow(unused_variables))] provider: &Arc<dyn CredentialsProvider>,
     ) -> Result<VpnProcess, ()> {
@@ -306,6 +319,7 @@ impl SessionThread {
             &self.config.openconnect_path,
             self.config.interface_name.to_string(),
             self.config.escalation_tool.clone(),
+            self.config.custom_script.clone(),
         )
         .ok_or_else(|| {
             self.set_conn_error(&format!(
@@ -318,13 +332,15 @@ impl SessionThread {
             #[cfg(unix)]
             {
                 let log_fn = |m| self.send_log(m);
-                resolve_sudo_password(
+                let pw = resolve_sudo_password(
                     &self.config.escalation_tool,
                     provider.as_ref(),
                     &self.cancel_token,
                     &log_fn,
                 )
-                .map_err(|_| self.set_status(ConnectionStatus::Disconnected))?
+                .map_err(|_| self.set_status(ConnectionStatus::Disconnected))?;
+                self.sudo_password = pw.clone();
+                pw
             }
             #[cfg(not(unix))]
             {
@@ -339,6 +355,7 @@ impl SessionThread {
                 Stdio::piped(),
                 Stdio::piped(),
                 sudo_password,
+                self.config.full_tunnel,
             )
             .map_err(|e| self.set_conn_error(&e.to_string()))
     }
@@ -386,6 +403,22 @@ impl SessionThread {
                     self.connected_at = Some(Instant::now());
                     self.set_status(ConnectionStatus::Connected);
                     self.send_log("Info|Connected.");
+
+                    // On Unix, inject full tunnel routes when requested and no custom
+                    // script is in use (the custom script manages routing itself).
+                    #[cfg(unix)]
+                    if self.config.full_tunnel && self.config.custom_script.is_none() {
+                        use crate::openconnect::apply_full_tunnel_routes;
+                        match apply_full_tunnel_routes(
+                            &self.config.interface_name,
+                            &self.config.escalation_tool,
+                            self.sudo_password.as_deref(),
+                        ) {
+                            Ok(()) => self.send_log("Info|Full tunnel routes applied.".to_string()),
+                            Err(e) => self.send_log(format!("Warn|Full tunnel routing failed: {}", e)),
+                        }
+                    }
+
                     let kind = if is_reconnect {
                         crate::history::EventKind::Reconnected
                     } else {
