@@ -331,16 +331,17 @@ install_gui_binary() {
         # The quarantine attribute is what triggers the "app is damaged" / "unidentified developer"
         # error. Removing it with xattr allows the app to open normally.
         #
-        # xattr -r (recursive) is not supported on all macOS versions — older releases reject the
-        # flag but still remove the attribute from the top-level bundle. We try recursive first
-        # (silencing stderr), then fall back to non-recursive if the recursive form fails.
+        # xattr -r (recursive) is supported on newer macOS versions. We test for support first,
+        # then use the appropriate command without showing stderr if the flag isn't supported.
         echo ""
         log_warn "Sudo required: removing macOS quarantine attribute from KUVPN.app."
         log_info "macOS blocks unsigned apps by default. This one command allows KUVPN to run."
         log_info "You may be prompted for your password."
-        sudo xattr -r -d com.apple.quarantine "/Applications/KUVPN.app" 2>/dev/null \
-            || sudo xattr -d com.apple.quarantine "/Applications/KUVPN.app" 2>/dev/null \
-            || true
+        if xattr -h 2>&1 | grep -q -- '-r'; then
+            sudo xattr -r -d com.apple.quarantine "/Applications/KUVPN.app" 2>/dev/null || true
+        else
+            sudo xattr -d com.apple.quarantine "/Applications/KUVPN.app" 2>/dev/null || true
+        fi
 
         log_success "KUVPN.app installed to /Applications."
         echo "  Open KUVPN from your Applications folder or Launchpad."
