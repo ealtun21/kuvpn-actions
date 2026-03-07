@@ -372,17 +372,25 @@ setup_routes() {
             ip route add 128.0.0.0/1 dev "$TUNDEV" 2>/dev/null || true
         fi
     else
-        # Split tunnel on macOS: replace the default route via the tunnel endpoint.
-        # This routes only traffic the VPN gateway accepts (KU internal) through the
-        # tunnel; other traffic falls back to the WiFi path at the gateway level.
+        # Split tunnel: keep the existing default route (WiFi) intact.
+        # Only route the VPN-assigned subnet and its DNS servers through the tunnel
+        # so that KU-internal resources are reachable while internet traffic stays
+        # on WiFi/Ethernet — without touching IPv6 at all.
         if [ "$OS" = "Darwin" ]; then
-            real_gw=$(route -n get default 2>/dev/null | awk '/gateway:/{print $2}')
-            [ -n "$real_gw" ] && [ -n "$VPNGATEWAY" ] && \
-                route add -host "$VPNGATEWAY" "$real_gw" 2>/dev/null || true
-            GW_FILE="/tmp/kuvpn-gw-${TUNDEV}.saved"
-            [ -n "$real_gw" ] && echo "$real_gw" > "$GW_FILE"
-            route delete default 2>/dev/null || true
-            route add default "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
+            # Derive the network address from the assigned IP + server netmask.
+            IFS=. read -r _a _b _c _d << _IPEOF_
+$INTERNAL_IP4_ADDRESS
+_IPEOF_
+            IFS=. read -r _ma _mb _mc _md << _IPEOF_
+$INTERNAL_IP4_NETMASK
+_IPEOF_
+            NET_ADDR="$((_a & _ma)).$((_b & _mb)).$((_c & _mc)).$((_d & _md))"
+            route add -net "$NET_ADDR" -netmask "$INTERNAL_IP4_NETMASK" \
+                -interface "$TUNDEV" 2>/dev/null || true
+            # Route each VPN DNS server through the tunnel.
+            for _dns in $INTERNAL_IP4_DNS; do
+                route add -host "$_dns" -interface "$TUNDEV" 2>/dev/null || true
+            done
         else
             # Linux — add only the specific subnets the server advertises.
             i=0
@@ -426,15 +434,18 @@ teardown_routes() {
         fi
     else
         if [ "$OS" = "Darwin" ]; then
-            # Restore the original default route that split tunnel replaced.
-            GW_FILE="/tmp/kuvpn-gw-${TUNDEV}.saved"
-            route delete default 2>/dev/null || true
-            if [ -f "$GW_FILE" ]; then
-                OLD_GW=$(cat "$GW_FILE")
-                [ -n "$OLD_GW" ] && route add default "$OLD_GW" 2>/dev/null || true
-                rm -f "$GW_FILE"
-            fi
-            [ -n "$VPNGATEWAY" ] && route delete -host "$VPNGATEWAY" 2>/dev/null || true
+            # Remove only the routes we added; default route was never touched.
+            IFS=. read -r _a _b _c _d << _IPEOF_
+$INTERNAL_IP4_ADDRESS
+_IPEOF_
+            IFS=. read -r _ma _mb _mc _md << _IPEOF_
+$INTERNAL_IP4_NETMASK
+_IPEOF_
+            NET_ADDR="$((_a & _ma)).$((_b & _mb)).$((_c & _mc)).$((_d & _md))"
+            route delete -net "$NET_ADDR" -netmask "$INTERNAL_IP4_NETMASK" 2>/dev/null || true
+            for _dns in $INTERNAL_IP4_DNS; do
+                route delete -host "$_dns" 2>/dev/null || true
+            done
         else
             i=0
             while [ "$i" -lt "${CISCO_SPLIT_INC:-0}" ]; do
