@@ -433,8 +433,24 @@ fn detect_active_utun() -> Option<String> {
                 iface.starts_with("utun").then(|| iface.to_string())
             });
         } else if current_utun.is_some() && line.trim_start().starts_with("inet ") {
-            found = current_utun.clone();
+            // Extract the IP address (second token on the line)
+            let ip = line.split_whitespace().nth(1).unwrap_or("");
+            // Skip CGNAT range 100.64.0.0/10 (100.64–100.127) used by Tailscale/WireGuard
+            if !is_cgnat_address(ip) {
+                found = current_utun.clone();
+            }
         }
     }
     found
+}
+
+/// Returns `true` for addresses in the CGNAT range 100.64.0.0/10
+/// (100.64.0.0 – 100.127.255.255), which is used by Tailscale and similar
+/// mesh VPNs and should never be assigned by an openconnect VPN.
+#[cfg(target_os = "macos")]
+fn is_cgnat_address(addr: &str) -> bool {
+    let mut parts = addr.split('.');
+    let a: u8 = parts.next().and_then(|p| p.parse().ok()).unwrap_or(0);
+    let b: u8 = parts.next().and_then(|p| p.parse().ok()).unwrap_or(0);
+    a == 100 && (64..=127).contains(&b)
 }
