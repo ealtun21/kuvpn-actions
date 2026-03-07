@@ -346,12 +346,11 @@ setup_routes() {
             # Protect the VPN server itself so it stays reachable via WiFi.
             [ -n "$real_gw" ] && [ -n "$VPNGATEWAY" ] && \
                 route add -host "$VPNGATEWAY" "$real_gw" 2>/dev/null || true
-            # Save old default gateway for teardown restoration.
-            GW_FILE="/tmp/kuvpn-gw-${TUNDEV}.saved"
-            [ -n "$real_gw" ] && echo "$real_gw" > "$GW_FILE"
-            # Replace default route so all traffic goes through the VPN.
-            route delete default 2>/dev/null || true
-            route add default "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
+            # Add two more-specific routes covering all of IPv4 (0/1 + 128/1).
+            # These take precedence over the existing /0 default route without
+            # deleting it, so teardown just removes these two entries.
+            route add -net 0.0.0.0   -netmask 128.0.0.0 -interface "$TUNDEV" 2>/dev/null || true
+            route add -net 128.0.0.0 -netmask 128.0.0.0 -interface "$TUNDEV" 2>/dev/null || true
         else
             real_gw=$(ip route show default 2>/dev/null | awk '/default/{print $3; exit}')
             [ -n "$real_gw" ] && [ -n "$VPNGATEWAY" ] && \
@@ -360,11 +359,19 @@ setup_routes() {
             ip route add 128.0.0.0/1 dev "$TUNDEV" 2>/dev/null || true
         fi
     else
-        # Split tunnel:
-        # macOS — the NC protocol's built-in ESP forwarding handles traffic selection;
-        # we do not add any routes here so the existing default route (WiFi) is kept.
-        # Linux — add only the specific subnets the server advertises.
-        if [ "$OS" != "Darwin" ]; then
+        # Split tunnel on macOS: replace the default route via the tunnel endpoint.
+        # This routes only traffic the VPN gateway accepts (KU internal) through the
+        # tunnel; other traffic falls back to the WiFi path at the gateway level.
+        if [ "$OS" = "Darwin" ]; then
+            real_gw=$(route -n get default 2>/dev/null | awk '/gateway:/{print $2}')
+            [ -n "$real_gw" ] && [ -n "$VPNGATEWAY" ] && \
+                route add -host "$VPNGATEWAY" "$real_gw" 2>/dev/null || true
+            GW_FILE="/tmp/kuvpn-gw-${TUNDEV}.saved"
+            [ -n "$real_gw" ] && echo "$real_gw" > "$GW_FILE"
+            route delete default 2>/dev/null || true
+            route add default "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
+        else
+            # Linux — add only the specific subnets the server advertises.
             i=0
             while [ "$i" -lt "${CISCO_SPLIT_INC:-0}" ]; do
                 eval "addr=\$CISCO_SPLIT_INC_${i}_ADDR"
@@ -389,7 +396,17 @@ setup_routes() {
 teardown_routes() {
     if [ "$TUNNEL_MODE" = "full" ]; then
         if [ "$OS" = "Darwin" ]; then
-            # Restore original default route.
+            route delete -net 0.0.0.0   -netmask 128.0.0.0 2>/dev/null || true
+            route delete -net 128.0.0.0 -netmask 128.0.0.0 2>/dev/null || true
+            [ -n "$VPNGATEWAY" ] && route delete -host "$VPNGATEWAY" 2>/dev/null || true
+        else
+            ip route del 0.0.0.0/1   dev "$TUNDEV" 2>/dev/null || true
+            ip route del 128.0.0.0/1 dev "$TUNDEV" 2>/dev/null || true
+            [ -n "$VPNGATEWAY" ] && ip route del "$VPNGATEWAY/32" 2>/dev/null || true
+        fi
+    else
+        if [ "$OS" = "Darwin" ]; then
+            # Restore the original default route that split tunnel replaced.
             GW_FILE="/tmp/kuvpn-gw-${TUNDEV}.saved"
             route delete default 2>/dev/null || true
             if [ -f "$GW_FILE" ]; then
@@ -399,14 +416,6 @@ teardown_routes() {
             fi
             [ -n "$VPNGATEWAY" ] && route delete -host "$VPNGATEWAY" 2>/dev/null || true
         else
-            ip route del 0.0.0.0/1   dev "$TUNDEV" 2>/dev/null || true
-            ip route del 128.0.0.0/1 dev "$TUNDEV" 2>/dev/null || true
-            [ -n "$VPNGATEWAY" ] && ip route del "$VPNGATEWAY/32" 2>/dev/null || true
-        fi
-    else
-        # Split tunnel: macOS added no routes, nothing to tear down.
-        # Linux: remove only the specific subnets we added.
-        if [ "$OS" != "Darwin" ]; then
             i=0
             while [ "$i" -lt "${CISCO_SPLIT_INC:-0}" ]; do
                 eval "addr=\$CISCO_SPLIT_INC_${i}_ADDR"
