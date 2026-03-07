@@ -44,33 +44,58 @@ pub(super) fn try_kill_elevated(pid: u32) -> bool {
 // ── Platform implementations (VpnProcess delegation) ─────────────────────────
 
 /// Terminates the child process (escalation wrapper + openconnect itself).
+///
+/// Strategy: send SIGTERM to the escalation wrapper first (sudo forwards it to
+/// openconnect automatically), then wait up to ~4 seconds for openconnect to
+/// finish its graceful logout before sending a direct kill. This prevents the
+/// double-SIGTERM that would otherwise interrupt openconnect's logout HTTPS
+/// connection with EINTR ("Interrupted system call" / "Logout failed").
+/// pkexec does not forward signals, so the direct kill is still sent if the
+/// process is still alive after the grace period.
 pub(super) fn kill_vpn_process(child: &mut Child) -> anyhow::Result<()> {
     use nix::sys::signal::{self, Signal};
     use nix::unistd::Pid;
 
     let pid = Pid::from_raw(child.id() as i32);
 
-    // Send SIGTERM to the escalation process (sudo forwards it; pkexec does not).
+    // Send SIGTERM to the escalation wrapper (sudo forwards it to openconnect;
+    // pkexec does not, but we handle that below after the grace period).
     let _ = signal::kill(pid, Signal::SIGTERM);
 
-    // Kill openconnect directly via the privilege tool (handles pkexec case and caches sudo).
-    if let Some(oc_pid) = get_openconnect_pid() {
-        let _ = try_kill_elevated(oc_pid);
-    }
-
-    // Wait with a 5-second timeout; fall back to SIGKILL.
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    loop {
+    // Give openconnect time to complete its graceful logout before we send any
+    // further signals. Poll every 200 ms for up to 4 seconds.
+    let grace_deadline = std::time::Instant::now() + std::time::Duration::from_secs(4);
+    let exited_gracefully = loop {
         match child.try_wait() {
-            Ok(Some(_)) => break,
-            Ok(None) if std::time::Instant::now() >= deadline => {
-                let _ = signal::kill(pid, Signal::SIGKILL);
-                break;
-            }
-            Err(_) => break,
+            Ok(Some(_)) => break true,
+            Err(_) => break true,
+            Ok(None) if std::time::Instant::now() >= grace_deadline => break false,
             _ => std::thread::sleep(std::time::Duration::from_millis(200)),
         }
+    };
+
+    if !exited_gracefully {
+        // Process still alive — either pkexec didn't forward the signal, or
+        // openconnect is hanging. Send a direct elevated SIGTERM now.
+        if let Some(oc_pid) = get_openconnect_pid() {
+            let _ = try_kill_elevated(oc_pid);
+        }
+
+        // One final second before SIGKILL.
+        let kill_deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+        loop {
+            match child.try_wait() {
+                Ok(Some(_)) => break,
+                Ok(None) if std::time::Instant::now() >= kill_deadline => {
+                    let _ = signal::kill(pid, Signal::SIGKILL);
+                    break;
+                }
+                Err(_) => break,
+                _ => std::thread::sleep(std::time::Duration::from_millis(200)),
+            }
+        }
     }
+
     let _ = child.wait();
     Ok(())
 }
