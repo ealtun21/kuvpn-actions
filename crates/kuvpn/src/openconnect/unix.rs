@@ -366,9 +366,29 @@ setup_routes() {
             eval "masklen=\$CISCO_SPLIT_INC_${i}_MASKLEN"
             if [ -n "$addr" ] && [ -n "$masklen" ]; then
                 if [ "$OS" = "Darwin" ]; then
-                    route add -net "$addr/$masklen" "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
+                    if [ "$addr" = "0.0.0.0" ] && [ "$masklen" = "0" ]; then
+                        # Server pushed 0/0 — can't 'route add' over existing default;
+                        # do the same default-route replacement as full tunnel.
+                        real_gw=$(route -n get default 2>/dev/null | awk '/gateway:/{print $2}')
+                        [ -n "$real_gw" ] && [ -n "$VPNGATEWAY" ] && \
+                            route add -host "$VPNGATEWAY" "$real_gw" 2>/dev/null || true
+                        GW_FILE="/tmp/kuvpn-gw-${TUNDEV}.saved"
+                        [ -n "$real_gw" ] && echo "$real_gw" > "$GW_FILE"
+                        route delete default 2>/dev/null || true
+                        route add default "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
+                    else
+                        route add -net "$addr/$masklen" "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
+                    fi
                 else
-                    ip route add "$addr/$masklen" dev "$TUNDEV" 2>/dev/null || true
+                    if [ "$addr" = "0.0.0.0" ] && [ "$masklen" = "0" ]; then
+                        real_gw=$(ip route show default 2>/dev/null | awk '/default/{print $3; exit}')
+                        [ -n "$real_gw" ] && [ -n "$VPNGATEWAY" ] && \
+                            ip route add "$VPNGATEWAY/32" via "$real_gw" 2>/dev/null || true
+                        ip route add 0.0.0.0/1   dev "$TUNDEV" 2>/dev/null || true
+                        ip route add 128.0.0.0/1 dev "$TUNDEV" 2>/dev/null || true
+                    else
+                        ip route add "$addr/$masklen" dev "$TUNDEV" 2>/dev/null || true
+                    fi
                 fi
             fi
             i=$((i + 1))
@@ -394,6 +414,15 @@ teardown_routes() {
             [ -n "$VPNGATEWAY" ] && ip route del "$VPNGATEWAY/32" 2>/dev/null || true
         fi
     else
+        # Split teardown: check if we did a default-route replacement (0/0 case)
+        GW_FILE="/tmp/kuvpn-gw-${TUNDEV}.saved"
+        if [ "$OS" = "Darwin" ] && [ -f "$GW_FILE" ]; then
+            route delete default 2>/dev/null || true
+            OLD_GW=$(cat "$GW_FILE")
+            [ -n "$OLD_GW" ] && route add default "$OLD_GW" 2>/dev/null || true
+            rm -f "$GW_FILE"
+            [ -n "$VPNGATEWAY" ] && route delete -host "$VPNGATEWAY" 2>/dev/null || true
+        else
         i=0
         while [ "$i" -lt "${CISCO_SPLIT_INC:-0}" ]; do
             eval "addr=\$CISCO_SPLIT_INC_${i}_ADDR"
@@ -407,6 +436,7 @@ teardown_routes() {
             fi
             i=$((i + 1))
         done
+        fi
     fi
 }
 
