@@ -48,6 +48,7 @@ pub struct KuVpnGui {
     pub error_category: Option<ErrorCategory>,
     pub rotation: f32,
     pub oc_test_result: Option<bool>,
+    pub vpnc_script_test_result: Option<bool>,
     pub automation_warning: Option<String>,
     /// Set when the Test button resolves a different path than what was entered.
     pub oc_path_notification: Option<String>,
@@ -277,6 +278,24 @@ impl KuVpnGui {
             return Task::none();
         }
 
+        // Manual mode requires a tested, valid vpnc-script path before connecting.
+        if self.settings.tunnel_mode_val.round() as i32 == 2 {
+            let empty = self.settings.vpnc_script.trim().is_empty();
+            let invalid = self.vpnc_script_test_result == Some(false);
+            let untested = self.vpnc_script_test_result.is_none();
+            if empty || invalid || untested {
+                self.error_message = Some(if empty {
+                    "Manual mode requires a vpnc-script path. Enter a path and click Test.".to_string()
+                } else if invalid {
+                    "The vpnc-script path is invalid or the file does not exist. Fix it and click Test.".to_string()
+                } else {
+                    "Please click Test to verify your vpnc-script path before connecting.".to_string()
+                });
+                self.status = ConnectionStatus::Error;
+                return Task::none();
+            }
+        }
+
         self.automation_warning = None;
         self.last_diagnostic_path = None;
         self.error_message = None;
@@ -309,11 +328,15 @@ impl KuVpnGui {
             },
             escalation_tool: Some(self.settings.escalation_tool.clone()),
             interface_name: "kuvpn0".to_string(),
-            full_tunnel: self.settings.full_tunnel,
-            custom_script: if self.settings.vpnc_script.is_empty() {
-                None
-            } else {
-                Some(self.settings.vpnc_script.clone())
+            tunnel_mode: match self.settings.tunnel_mode_val.round() as i32 {
+                2 => kuvpn::TunnelMode::Manual(
+                    if self.settings.vpnc_script.is_empty() {
+                        None
+                    } else {
+                        Some(self.settings.vpnc_script.clone())
+                    },
+                ),
+                _ => kuvpn::TunnelMode::Full,
             },
         };
 
@@ -490,13 +513,14 @@ impl KuVpnGui {
                 self.save_settings();
                 Task::none()
             }
-            Message::FullTunnelToggled(v) => {
-                self.settings.full_tunnel = v;
+            Message::TunnelModeChanged(v) => {
+                self.settings.tunnel_mode_val = v;
                 self.save_settings();
                 Task::none()
             }
             Message::VpncScriptChanged(v) => {
                 self.settings.vpnc_script = v;
+                self.vpnc_script_test_result = None;
                 self.save_settings();
                 Task::none()
             }
@@ -792,6 +816,24 @@ impl KuVpnGui {
                 self.oc_startup_tested = true;
                 Task::none()
             }
+            Message::TestVpncScript => {
+                let path = self.settings.vpnc_script.trim().to_string();
+                Task::perform(
+                    async move {
+                        let p = std::path::Path::new(&path);
+                        if !path.is_empty() && p.is_file() {
+                            Some(path)
+                        } else {
+                            None
+                        }
+                    },
+                    Message::VpncScriptTestResult,
+                )
+            }
+            Message::VpncScriptTestResult(result) => {
+                self.vpnc_script_test_result = Some(result.is_some());
+                Task::none()
+            }
             Message::HistoryLoaded(events) => {
                 self.history = events;
                 Task::none()
@@ -1040,6 +1082,7 @@ impl Default for KuVpnGui {
             error_category: None,
             rotation: 0.0,
             oc_test_result: None,
+            vpnc_script_test_result: None,
             automation_warning: None,
             oc_path_notification: None,
             oc_startup_tested: false,

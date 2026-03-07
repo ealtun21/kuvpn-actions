@@ -376,8 +376,10 @@ fn run_vpn_session(args: &Args, styles: &CliStyles) -> ExitCode {
         openconnect_path: args.openconnect_path.clone(),
         escalation_tool: args.run_command.clone(),
         interface_name: args.interface_name.clone(),
-        full_tunnel: !args.split_tunnel,
-        custom_script: args.vpnc_script.clone(),
+        tunnel_mode: match args.tunnel_mode {
+            args::CliTunnelMode::Full => kuvpn::TunnelMode::Full,
+            args::CliTunnelMode::Manual => kuvpn::TunnelMode::Manual(args.vpnc_script.clone()),
+        },
     };
 
     let spinner = Arc::new(ProgressBar::new_spinner());

@@ -19,16 +19,22 @@ pub struct GuiSettings {
     pub advanced_mode: bool,
     #[serde(default)]
     pub theme: ThemeConfig,
-    /// Route all traffic through the VPN (full tunnel mode).
-    #[serde(default)]
-    pub full_tunnel: bool,
+    /// Tunnel mode: 0.0 = Split, 1.0 = Full, 2.0 = Manual.
+    /// Manual mode uses `vpnc_script` as the script path.
+    #[serde(default = "default_tunnel_mode_val")]
+    pub tunnel_mode_val: f32,
     /// Path to a custom vpnc-script passed via --script to openconnect (advanced).
+    /// Only used when `tunnel_mode_val` == 2.0 (Manual).
     #[serde(default)]
     pub vpnc_script: String,
 }
 
 fn default_auto_hide() -> bool {
     true
+}
+
+fn default_tunnel_mode_val() -> f32 {
+    1.0 // Full tunnel
 }
 
 impl Default for GuiSettings {
@@ -46,7 +52,7 @@ impl Default for GuiSettings {
             auto_hide_after_prompt: true,
             advanced_mode: false,
             theme: ThemeConfig::default(),
-            full_tunnel: true,
+            tunnel_mode_val: 1.0, // Full tunnel
             vpnc_script: String::new(),
         }
     }

@@ -24,9 +24,9 @@ if [ "$1" != "--no-container" ] && [ ! -f /.containerenv ]; then
             export PATH=\"/usr/local/osxcross/target/bin:\${PATH}\"
             export CARGO_TARGET_DIR=\"/build/target\"
             
-            # Update toolchain inside container (is fast if already current)
-            rustup update stable > /dev/null 2>&1
-            
+            echo \"Updating toolchain...\"
+            rustup update stable 2>&1 | tail -1
+
             echo \"Checking x86_64-apple-darwin...\"
             export CC_x86_64_apple_darwin=x86_64-apple-darwin22.4-clang
             export CXX_x86_64_apple_darwin=x86_64-apple-darwin22.4-clang++
