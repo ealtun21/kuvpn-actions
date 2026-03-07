@@ -89,6 +89,8 @@ pub enum Message {
     ResetSettings,
     TestOpenConnect,
     OpenConnectTestResult(Option<String>),
+    TestVpncScript,
+    VpncScriptTestResult(Option<String>),
     CopyLogs,
     DragWindow,
     MinimizeWindow,

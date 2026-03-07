@@ -383,14 +383,138 @@ impl KuVpnGui {
             ));
             // VPN Script field — visible only in Manual mode
             if self.settings.tunnel_mode_val.round() as i32 == 2 {
-                col = col.push(self.view_unified_field(
-                    "VPN Script:",
-                    "/usr/share/vpnc-scripts/vpnc-script",
-                    &self.settings.vpnc_script,
-                    "Path to a custom vpnc-script passed to openconnect via --script. The script receives VPN configuration as environment variables and is responsible for all routing and DNS setup.",
-                    is_locked,
-                    Message::VpncScriptChanged,
-                ));
+                let script_test = self.vpnc_script_test_result;
+                let rounding = s.rounding;
+                let script_row = row![
+                    text("VPN Script:").size(11).width(Length::Fixed(100.0)),
+                    text_input(
+                        "/usr/share/vpnc-scripts/vpnc-script",
+                        &self.settings.vpnc_script,
+                    )
+                    .on_input(if is_locked {
+                        |_| Message::Tick
+                    } else {
+                        Message::VpncScriptChanged
+                    })
+                    .padding(10)
+                    .width(Length::Fill)
+                    .style(s.text_input()),
+                    button(
+                        text(if script_test == Some(true) {
+                            "✓"
+                        } else if script_test == Some(false) {
+                            "✗"
+                        } else {
+                            "Test"
+                        })
+                        .size(11),
+                    )
+                    .padding([8, 12])
+                    .on_press(if is_locked {
+                        Message::Tick
+                    } else {
+                        Message::TestVpncScript
+                    })
+                    .style(move |_, status: button::Status| match script_test {
+                        Some(true) => button::Style {
+                            background: Some(p.success.into()),
+                            text_color: Color::WHITE,
+                            border: Border {
+                                radius: rounding.small_radius().into(),
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        },
+                        Some(false) => button::Style {
+                            background: Some(p.danger.into()),
+                            text_color: Color::WHITE,
+                            border: Border {
+                                radius: rounding.small_radius().into(),
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        },
+                        None => {
+                            let base = button::Style {
+                                background: Some(Color::TRANSPARENT.into()),
+                                text_color: p.text,
+                                border: Border {
+                                    color: p.border,
+                                    width: rounding.border_width(),
+                                    radius: rounding.small_radius().into(),
+                                },
+                                ..Default::default()
+                            };
+                            match status {
+                                button::Status::Hovered => button::Style {
+                                    background: Some(p.surface.into()),
+                                    ..base
+                                },
+                                _ => base,
+                            }
+                        }
+                    }),
+                    info_tip("Path to a custom vpnc-script passed to openconnect via --script. The script receives VPN configuration as environment variables and is responsible for all routing and DNS setup. Click Test to verify the file exists.", s),
+                ]
+                .spacing(10)
+                .align_y(Alignment::Center);
+
+                col = col.push(script_row);
+
+                // Warning when path is empty or not yet tested
+                let script_warn: Element<'_, Message> = if self.settings.vpnc_script.trim().is_empty() {
+                    container(
+                        row![
+                            svg(svg::Handle::from_memory(ICON_INFO_SVG))
+                                .width(13)
+                                .height(13)
+                                .style(move |_, _| svg::Style { color: Some(p.danger) }),
+                            text("A vpnc-script path is required in Manual mode. You must enter a path and click Test before connecting.").size(10).color(p.danger),
+                        ]
+                        .spacing(6)
+                        .align_y(Alignment::Center),
+                    )
+                    .width(Length::Fill)
+                    .padding([6, 110])
+                    .style(move |_| container::Style {
+                        background: Some(Color::from_rgba(p.danger.r, p.danger.g, p.danger.b, 0.07).into()),
+                        border: Border {
+                            radius: 6.0.into(),
+                            color: Color::from_rgba(p.danger.r, p.danger.g, p.danger.b, 0.25),
+                            width: 1.0,
+                        },
+                        ..Default::default()
+                    })
+                    .into()
+                } else if self.vpnc_script_test_result.is_none() {
+                    container(
+                        row![
+                            svg(svg::Handle::from_memory(ICON_INFO_SVG))
+                                .width(13)
+                                .height(13)
+                                .style(move |_, _| svg::Style { color: Some(p.warning) }),
+                            text("Click Test to verify the script path before connecting.").size(10).color(p.warning),
+                        ]
+                        .spacing(6)
+                        .align_y(Alignment::Center),
+                    )
+                    .width(Length::Fill)
+                    .padding([6, 110])
+                    .style(move |_| container::Style {
+                        background: Some(Color::from_rgba(p.warning.r, p.warning.g, p.warning.b, 0.07).into()),
+                        border: Border {
+                            radius: 6.0.into(),
+                            color: Color::from_rgba(p.warning.r, p.warning.g, p.warning.b, 0.25),
+                            width: 1.0,
+                        },
+                        ..Default::default()
+                    })
+                    .into()
+                } else {
+                    iced::widget::Space::new().height(0).into()
+                };
+
+                col = col.push(script_warn);
             }
         }
 
