@@ -95,7 +95,7 @@ pub enum Message {
     QuitRequested,
     QuitAfterCleanup,
     AutoHideAfterPromptToggled(bool),
-    FullTunnelToggled(bool),
+    TunnelModeChanged(f32),
     VpncScriptChanged(String),
     AutoHideWindow,
     AdvancedModeToggled(bool),

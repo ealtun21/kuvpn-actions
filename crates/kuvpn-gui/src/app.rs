@@ -309,11 +309,16 @@ impl KuVpnGui {
             },
             escalation_tool: Some(self.settings.escalation_tool.clone()),
             interface_name: "kuvpn0".to_string(),
-            full_tunnel: self.settings.full_tunnel,
-            custom_script: if self.settings.vpnc_script.is_empty() {
-                None
-            } else {
-                Some(self.settings.vpnc_script.clone())
+            tunnel_mode: match self.settings.tunnel_mode_val.round() as i32 {
+                0 => kuvpn::TunnelMode::Split,
+                2 => kuvpn::TunnelMode::Manual(
+                    if self.settings.vpnc_script.is_empty() {
+                        None
+                    } else {
+                        Some(self.settings.vpnc_script.clone())
+                    },
+                ),
+                _ => kuvpn::TunnelMode::Full,
             },
         };
 
@@ -490,8 +495,8 @@ impl KuVpnGui {
                 self.save_settings();
                 Task::none()
             }
-            Message::FullTunnelToggled(v) => {
-                self.settings.full_tunnel = v;
+            Message::TunnelModeChanged(v) => {
+                self.settings.tunnel_mode_val = v;
                 self.save_settings();
                 Task::none()
             }

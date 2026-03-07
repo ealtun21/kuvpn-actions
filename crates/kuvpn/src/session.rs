@@ -56,6 +56,18 @@ impl ParsedLog {
     }
 }
 
+/// Controls how traffic is routed through the VPN tunnel.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TunnelMode {
+    /// Only traffic destined for VPN-pushed split routes goes through the tunnel.
+    Split,
+    /// All traffic (0.0.0.0/0) is routed through the tunnel.
+    Full,
+    /// User supplies their own vpnc-script. `None` passes no `--script` flag
+    /// (openconnect falls back to its built-in defaults).
+    Manual(Option<String>),
+}
+
 #[derive(Clone)]
 pub struct SessionConfig {
     pub url: String,
@@ -67,13 +79,10 @@ pub struct SessionConfig {
     pub openconnect_path: String,
     pub escalation_tool: Option<String>,
     pub interface_name: String,
-    /// Route all traffic through the VPN (full tunnel mode).
-    /// On Unix: injects 0.0.0.0/1 + 128.0.0.0/1 routes after the tunnel comes up.
-    /// On Windows: handled inside the elevated helper process.
-    pub full_tunnel: bool,
-    /// Path to a custom vpnc-script passed via `--script` to openconnect (Unix only).
-    /// When set, takes precedence over the default script; `full_tunnel` is ignored.
-    pub custom_script: Option<String>,
+    /// Controls routing and DNS setup for the VPN tunnel.
+    /// On Unix: Split/Full generate a vpnc-script at runtime; Manual passes a user path.
+    /// On Windows: only Full/Split distinction is used (no script support).
+    pub tunnel_mode: TunnelMode,
 }
 
 /// Prompts for the sudo/pkexec password if the chosen escalation tool requires
@@ -158,9 +167,12 @@ struct SessionThread {
     /// Tracks when the VPN connected so we can record session duration.
     connected_at: Option<Instant>,
     /// Cached sudo/pkexec password resolved during `start_openconnect`.
-    /// Reused for post-connect route injection so a second prompt is never shown.
     #[cfg(unix)]
     sudo_password: Option<String>,
+    /// Holds the generated vpnc-script temp file alive for the duration of the session.
+    /// Dropped (and the file deleted) when the session ends or reconnects.
+    #[cfg(unix)]
+    active_script: Option<crate::openconnect::unix::TempScript>,
 }
 
 impl SessionThread {
@@ -176,6 +188,8 @@ impl SessionThread {
             connected_at: None,
             #[cfg(unix)]
             sudo_password: None,
+            #[cfg(unix)]
+            active_script: None,
         }
     }
 
@@ -315,11 +329,34 @@ impl SessionThread {
         dsid: String,
         #[cfg_attr(not(unix), allow(unused_variables))] provider: &Arc<dyn CredentialsProvider>,
     ) -> Result<VpnProcess, ()> {
+        // Resolve the vpnc-script path. On Unix we generate one for Split/Full modes;
+        // on Windows no script is supported so this is always None.
+        let custom_script: Option<String> = {
+            #[cfg(unix)]
+            {
+                use crate::openconnect::unix::generate_vpnc_script;
+                match &self.config.tunnel_mode {
+                    TunnelMode::Manual(path) => path.clone(),
+                    TunnelMode::Split | TunnelMode::Full => {
+                        let script = generate_vpnc_script(&self.config.tunnel_mode)
+                            .map_err(|e| self.set_conn_error(&e.to_string()))?;
+                        let path = script.path_str().map(str::to_string);
+                        self.active_script = Some(script);
+                        path
+                    }
+                }
+            }
+            #[cfg(not(unix))]
+            {
+                None
+            }
+        };
+
         let runner = OpenConnectRunner::locate(
             &self.config.openconnect_path,
             self.config.interface_name.to_string(),
             self.config.escalation_tool.clone(),
-            self.config.custom_script.clone(),
+            custom_script,
         )
         .ok_or_else(|| {
             self.set_conn_error(&format!(
@@ -355,7 +392,7 @@ impl SessionThread {
                 Stdio::piped(),
                 Stdio::piped(),
                 sudo_password,
-                self.config.full_tunnel,
+                matches!(self.config.tunnel_mode, TunnelMode::Full),
             )
             .map_err(|e| self.set_conn_error(&e.to_string()))
     }
@@ -403,21 +440,6 @@ impl SessionThread {
                     self.connected_at = Some(Instant::now());
                     self.set_status(ConnectionStatus::Connected);
                     self.send_log("Info|Connected.");
-
-                    // On Unix, inject full tunnel routes when requested and no custom
-                    // script is in use (the custom script manages routing itself).
-                    #[cfg(unix)]
-                    if self.config.full_tunnel && self.config.custom_script.is_none() {
-                        use crate::openconnect::apply_full_tunnel_routes;
-                        match apply_full_tunnel_routes(
-                            &self.config.interface_name,
-                            &self.config.escalation_tool,
-                            self.sudo_password.as_deref(),
-                        ) {
-                            Ok(()) => self.send_log("Info|Full tunnel routes applied.".to_string()),
-                            Err(e) => self.send_log(format!("Warn|Full tunnel routing failed: {}", e)),
-                        }
-                    }
 
                     let kind = if is_reconnect {
                         crate::history::EventKind::Reconnected

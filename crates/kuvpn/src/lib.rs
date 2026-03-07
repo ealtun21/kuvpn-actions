@@ -31,5 +31,5 @@ pub use openconnect::{
 pub use openconnect::{
     find_askpass, list_available_escalation_tools, needs_password_prompt, resolve_escalation_tool,
 };
-pub use session::{ConnectionStatus, ParsedLog, SessionConfig, VpnSession};
+pub use session::{ConnectionStatus, ParsedLog, SessionConfig, TunnelMode, VpnSession};
 pub use utils::get_user_data_dir;

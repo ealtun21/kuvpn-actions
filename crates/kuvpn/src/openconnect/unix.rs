@@ -251,90 +251,188 @@ pub fn vpn_interface_name(configured_name: &str) -> Option<String> {
     }
 }
 
-/// Adds 0.0.0.0/1 and 128.0.0.0/1 routes through the VPN tunnel interface,
-/// forcing all traffic through the VPN (full tunnel mode).
+// ── vpnc-script generation ────────────────────────────────────────────────────
+
+/// A generated vpnc-script written to a temporary file.
+/// The file is automatically deleted when this value is dropped.
+pub struct TempScript {
+    path: PathBuf,
+}
+
+impl TempScript {
+    /// Returns the path to the script as a `&str`, or `None` on non-UTF-8 paths.
+    pub fn path_str(&self) -> Option<&str> {
+        self.path.to_str()
+    }
+}
+
+impl Drop for TempScript {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+/// Generates a vpnc-script for the given `TunnelMode` (Split or Full), writes it
+/// to a temporary file, makes it executable, and returns a [`TempScript`] handle.
 ///
-/// These more-specific routes silently win over any existing default route while
-/// active, and are automatically removed by the kernel when the interface goes down.
-pub fn apply_full_tunnel_routes(
-    interface_name: &str,
-    escalation_tool: &Option<String>,
-    password: Option<&str>,
-) -> anyhow::Result<()> {
-    let tool = resolve_escalation_tool(escalation_tool)
-        .ok_or_else(|| anyhow::anyhow!("No escalation tool available for route injection"))?;
-    let iface = vpn_interface_name(interface_name).unwrap_or_else(|| interface_name.to_string());
-    do_apply_routes(&iface, &tool, password)
-}
-
-/// Runs `tool` with `args`, optionally piping `password` via stdin.
-/// Returns `true` if the command exits successfully.
-fn run_elevated_command_with_password(tool: &str, args: &[&str], password: Option<&str>) -> bool {
-    let Ok(tool_path) = which(tool) else {
-        return false;
+/// The script handles routing and DNS setup/teardown on both macOS and Linux,
+/// fixing the macOS-specific `networksetup` failure in openconnect's built-in script.
+pub fn generate_vpnc_script(
+    mode: &crate::session::TunnelMode,
+) -> anyhow::Result<TempScript> {
+    let mode_str = match mode {
+        crate::session::TunnelMode::Full => "full",
+        _ => "split",
     };
-    let use_stdin = password.is_some() && needs_password_prompt(tool_base_name(tool));
 
-    let mut cmd = Command::new(&tool_path);
-    if use_stdin {
-        if matches!(tool_base_name(tool), "sudo" | "sudo-rs") {
-            cmd.arg("-S");
-        }
-        cmd.stdin(Stdio::piped());
-    }
-    cmd.args(args).stdout(Stdio::null()).stderr(Stdio::null());
+    // The script is baked in at compile time; only TUNNEL_MODE is substituted.
+    let script = VPNC_SCRIPT_TEMPLATE.replace("{TUNNEL_MODE}", mode_str);
 
-    let mut child = match cmd.spawn() {
-        Ok(c) => c,
-        Err(_) => return false,
-    };
-    if use_stdin {
-        if let (Some(pw), Some(mut stdin)) = (password, child.stdin.take()) {
-            let _ = writeln!(stdin, "{}", pw);
-        }
+    // Pick a unique temp path: /tmp/kuvpn-vpnc-<pid>.sh
+    let path = std::env::temp_dir()
+        .join(format!("kuvpn-vpnc-{}.sh", std::process::id()));
+
+    std::fs::write(&path, script.as_bytes())?;
+
+    // Make executable (rwxr-xr-x)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
     }
-    child.wait().map(|s| s.success()).unwrap_or(false)
+
+    Ok(TempScript { path })
 }
 
-#[cfg(target_os = "macos")]
-fn do_apply_routes(iface: &str, tool: &str, password: Option<&str>) -> anyhow::Result<()> {
-    for prefix in ["0.0.0.0/1", "128.0.0.0/1"] {
-        run_elevated_command_with_password(
-            tool,
-            &["route", "add", "-net", prefix, "-interface", iface],
-            password,
-        );
-    }
-    Ok(())
+/// Cross-platform vpnc-script template.
+/// Handles routing and DNS for both macOS (scutil) and Linux (resolvectl / resolv.conf).
+/// `{TUNNEL_MODE}` is substituted with `"full"` or `"split"` at runtime.
+const VPNC_SCRIPT_TEMPLATE: &str = r#"#!/bin/sh
+# kuvpn generated vpnc-script — do not edit manually.
+# Handles routing and DNS for openconnect VPN tunnels.
+
+TUNNEL_MODE="{TUNNEL_MODE}"
+OS="$(uname -s)"
+
+setup_routes() {
+    if [ "$TUNNEL_MODE" = "full" ]; then
+        if [ "$OS" = "Darwin" ]; then
+            real_gw=$(route -n get default 2>/dev/null | awk '/gateway:/{print $2}')
+            [ -n "$real_gw" ] && [ -n "$VPNGATEWAY" ] && \
+                route add -host "$VPNGATEWAY" "$real_gw" 2>/dev/null || true
+            route add -net 0.0.0.0/1   -interface "$TUNDEV" 2>/dev/null || true
+            route add -net 128.0.0.0/1 -interface "$TUNDEV" 2>/dev/null || true
+        else
+            real_gw=$(ip route show default 2>/dev/null | awk '/default/{print $3; exit}')
+            [ -n "$real_gw" ] && [ -n "$VPNGATEWAY" ] && \
+                ip route add "$VPNGATEWAY/32" via "$real_gw" 2>/dev/null || true
+            ip route add 0.0.0.0/1   dev "$TUNDEV" 2>/dev/null || true
+            ip route add 128.0.0.0/1 dev "$TUNDEV" 2>/dev/null || true
+        fi
+    else
+        i=0
+        while [ "$i" -lt "${CISCO_SPLIT_INC:-0}" ]; do
+            eval "addr=\$CISCO_SPLIT_INC_${i}_ADDR"
+            eval "masklen=\$CISCO_SPLIT_INC_${i}_MASKLEN"
+            if [ -n "$addr" ] && [ -n "$masklen" ]; then
+                if [ "$OS" = "Darwin" ]; then
+                    route add -net "$addr/$masklen" -interface "$TUNDEV" 2>/dev/null || true
+                else
+                    ip route add "$addr/$masklen" dev "$TUNDEV" 2>/dev/null || true
+                fi
+            fi
+            i=$((i + 1))
+        done
+    fi
 }
 
-#[cfg(not(target_os = "macos"))]
-fn do_apply_routes(iface: &str, tool: &str, password: Option<&str>) -> anyhow::Result<()> {
-    let prefixes = ["0.0.0.0/1", "128.0.0.0/1"];
-    if which("ip").is_ok() {
-        for prefix in prefixes {
-            run_elevated_command_with_password(
-                tool,
-                &["ip", "route", "add", prefix, "dev", iface],
-                password,
-            );
-        }
-        return Ok(());
-    }
-    if which("route").is_ok() {
-        for prefix in prefixes {
-            run_elevated_command_with_password(
-                tool,
-                &["route", "add", "-net", prefix, "dev", iface],
-                password,
-            );
-        }
-        return Ok(());
-    }
-    Err(anyhow::anyhow!(
-        "Neither 'ip' nor 'route' found; cannot configure full tunnel routes"
-    ))
+teardown_routes() {
+    if [ "$TUNNEL_MODE" = "full" ]; then
+        if [ "$OS" = "Darwin" ]; then
+            route delete -net 0.0.0.0/1   -interface "$TUNDEV" 2>/dev/null || true
+            route delete -net 128.0.0.0/1 -interface "$TUNDEV" 2>/dev/null || true
+            [ -n "$VPNGATEWAY" ] && route delete -host "$VPNGATEWAY" 2>/dev/null || true
+        else
+            ip route del 0.0.0.0/1   dev "$TUNDEV" 2>/dev/null || true
+            ip route del 128.0.0.0/1 dev "$TUNDEV" 2>/dev/null || true
+            [ -n "$VPNGATEWAY" ] && ip route del "$VPNGATEWAY/32" 2>/dev/null || true
+        fi
+    else
+        i=0
+        while [ "$i" -lt "${CISCO_SPLIT_INC:-0}" ]; do
+            eval "addr=\$CISCO_SPLIT_INC_${i}_ADDR"
+            eval "masklen=\$CISCO_SPLIT_INC_${i}_MASKLEN"
+            if [ -n "$addr" ] && [ -n "$masklen" ]; then
+                if [ "$OS" = "Darwin" ]; then
+                    route delete -net "$addr/$masklen" -interface "$TUNDEV" 2>/dev/null || true
+                else
+                    ip route del "$addr/$masklen" dev "$TUNDEV" 2>/dev/null || true
+                fi
+            fi
+            i=$((i + 1))
+        done
+    fi
 }
+
+setup_dns() {
+    [ -z "$INTERNAL_IP4_DNS" ] && return 0
+    if [ "$OS" = "Darwin" ]; then
+        {
+            echo "open"
+            echo "d.init"
+            echo "d.add ServerAddresses * $INTERNAL_IP4_DNS"
+            [ -n "$CISCO_DEF_DOMAIN" ] && echo "d.add SearchDomains * $CISCO_DEF_DOMAIN"
+            echo "set State:/Network/Service/${TUNDEV}/DNS"
+            echo "quit"
+        } | scutil
+    else
+        if command -v resolvectl >/dev/null 2>&1; then
+            # shellcheck disable=SC2086
+            resolvectl dns    "$TUNDEV" $INTERNAL_IP4_DNS 2>/dev/null || true
+            [ -n "$CISCO_DEF_DOMAIN" ] && \
+                resolvectl domain "$TUNDEV" "$CISCO_DEF_DOMAIN" 2>/dev/null || true
+        elif [ -w /etc/resolv.conf ]; then
+            cp /etc/resolv.conf /etc/resolv.conf.kuvpn.bak 2>/dev/null || true
+            {
+                for dns in $INTERNAL_IP4_DNS; do echo "nameserver $dns"; done
+                [ -n "$CISCO_DEF_DOMAIN" ] && echo "search $CISCO_DEF_DOMAIN"
+                cat /etc/resolv.conf.kuvpn.bak
+            } > /tmp/kuvpn-resolv.conf && mv /tmp/kuvpn-resolv.conf /etc/resolv.conf
+        fi
+    fi
+}
+
+teardown_dns() {
+    if [ "$OS" = "Darwin" ]; then
+        {
+            echo "open"
+            echo "remove State:/Network/Service/${TUNDEV}/DNS"
+            echo "quit"
+        } | scutil
+    else
+        if command -v resolvectl >/dev/null 2>&1; then
+            resolvectl revert "$TUNDEV" 2>/dev/null || true
+        elif [ -f /etc/resolv.conf.kuvpn.bak ]; then
+            mv /etc/resolv.conf.kuvpn.bak /etc/resolv.conf 2>/dev/null || true
+        fi
+    fi
+}
+
+case "$reason" in
+    pre-init)
+        ;;
+    connect|reconnect)
+        setup_routes
+        setup_dns
+        ;;
+    disconnect)
+        teardown_dns
+        teardown_routes
+        ;;
+    attempt-reconnect)
+        ;;
+esac
+"#;
 
 /// Executes openconnect on Unix (via sudo/pkexec/etc).
 #[allow(clippy::too_many_arguments)]

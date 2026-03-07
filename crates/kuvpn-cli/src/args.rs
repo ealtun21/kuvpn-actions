@@ -103,14 +103,27 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub history: bool,
 
-    /// Use split tunnel mode: only VPN-bound traffic goes through the tunnel.
-    /// By default all traffic is routed through the VPN (full tunnel).
-    /// Ignored when --vpnc-script is set.
-    #[arg(long, default_value_t = false)]
-    pub split_tunnel: bool,
+    /// Tunnel mode: how traffic is routed through the VPN.
+    /// split: only VPN-bound traffic goes through the tunnel.
+    /// full: all traffic is routed through the VPN (default).
+    /// manual: pass your own vpnc-script via --vpnc-script.
+    #[arg(long, value_enum, default_value_t = CliTunnelMode::Full)]
+    pub tunnel_mode: CliTunnelMode,
 
-    /// Path to a custom vpnc-script to pass to openconnect via --script (advanced).
-    /// When set, openconnect uses this script for routing/DNS instead of its default.
+    /// Path to a custom vpnc-script passed to openconnect via --script.
+    /// Only used when --tunnel-mode manual is set.
     #[arg(long)]
     pub vpnc_script: Option<String>,
+}
+
+/// Tunnel mode choices for the CLI (mirrors `kuvpn::TunnelMode`).
+#[derive(Debug, Clone, ValueEnum, Default)]
+pub enum CliTunnelMode {
+    /// Only VPN-pushed split routes go through the tunnel.
+    Split,
+    /// All traffic is routed through the VPN.
+    #[default]
+    Full,
+    /// Use a custom vpnc-script (supply path via --vpnc-script).
+    Manual,
 }

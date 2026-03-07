@@ -370,25 +370,28 @@ impl KuVpnGui {
                 col = col.push(oc_path_notif);
             }
 
-            col = col.push(self.view_unified_field(
-                "VPN Script:",
-                "/usr/share/vpnc-scripts/vpnc-script",
-                &self.settings.vpnc_script,
-                "Path to a custom vpnc-script passed to openconnect via --script. When set, openconnect uses this script for routing and DNS instead of its built-in defaults. Tunnel Mode is ignored when a script is provided.",
-                is_locked,
-                Message::VpncScriptChanged,
-            ));
             col = col.push(self.view_unified_control(
                 "Tunnel Mode:",
                 self.view_segmented_control(
-                    &["Split", "Full"],
-                    &[0.0, 1.0],
-                    if self.settings.full_tunnel { 1.0 } else { 0.0 },
+                    &["Split", "Full", "Manual"],
+                    &[0.0, 1.0, 2.0],
+                    self.settings.tunnel_mode_val,
                     is_locked,
-                    |val| Message::FullTunnelToggled(val > 0.5),
+                    Message::TunnelModeChanged,
                 ),
-                "Split: only traffic destined for KU network resources goes through the VPN — your regular internet traffic uses your normal connection.\n\nFull: all traffic is routed through the VPN tunnel.",
+                "Split: only KU-network traffic goes through the VPN; internet traffic uses your normal connection.\n\nFull: all traffic is routed through the VPN tunnel.\n\nManual: supply your own vpnc-script for full control over routing and DNS.",
             ));
+            // VPN Script field — visible only in Manual mode
+            if self.settings.tunnel_mode_val.round() as i32 == 2 {
+                col = col.push(self.view_unified_field(
+                    "VPN Script:",
+                    "/usr/share/vpnc-scripts/vpnc-script",
+                    &self.settings.vpnc_script,
+                    "Path to a custom vpnc-script passed to openconnect via --script. The script receives VPN configuration as environment variables and is responsible for all routing and DNS setup.",
+                    is_locked,
+                    Message::VpncScriptChanged,
+                ));
+            }
         }
 
         // SYSTEM section
