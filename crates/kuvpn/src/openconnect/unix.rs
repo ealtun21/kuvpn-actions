@@ -320,8 +320,8 @@ setup_routes() {
             real_gw=$(route -n get default 2>/dev/null | awk '/gateway:/{print $2}')
             [ -n "$real_gw" ] && [ -n "$VPNGATEWAY" ] && \
                 route add -host "$VPNGATEWAY" "$real_gw" 2>/dev/null || true
-            route add -net 0.0.0.0/1   -interface "$TUNDEV" 2>/dev/null || true
-            route add -net 128.0.0.0/1 -interface "$TUNDEV" 2>/dev/null || true
+            route add -net 0.0.0.0/1   "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
+            route add -net 128.0.0.0/1 "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
         else
             real_gw=$(ip route show default 2>/dev/null | awk '/default/{print $3; exit}')
             [ -n "$real_gw" ] && [ -n "$VPNGATEWAY" ] && \
@@ -336,7 +336,7 @@ setup_routes() {
             eval "masklen=\$CISCO_SPLIT_INC_${i}_MASKLEN"
             if [ -n "$addr" ] && [ -n "$masklen" ]; then
                 if [ "$OS" = "Darwin" ]; then
-                    route add -net "$addr/$masklen" -interface "$TUNDEV" 2>/dev/null || true
+                    route add -net "$addr/$masklen" "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
                 else
                     ip route add "$addr/$masklen" dev "$TUNDEV" 2>/dev/null || true
                 fi
@@ -349,8 +349,8 @@ setup_routes() {
 teardown_routes() {
     if [ "$TUNNEL_MODE" = "full" ]; then
         if [ "$OS" = "Darwin" ]; then
-            route delete -net 0.0.0.0/1   -interface "$TUNDEV" 2>/dev/null || true
-            route delete -net 128.0.0.0/1 -interface "$TUNDEV" 2>/dev/null || true
+            route delete -net 0.0.0.0/1   "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
+            route delete -net 128.0.0.0/1 "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
             [ -n "$VPNGATEWAY" ] && route delete -host "$VPNGATEWAY" 2>/dev/null || true
         else
             ip route del 0.0.0.0/1   dev "$TUNDEV" 2>/dev/null || true
@@ -364,7 +364,7 @@ teardown_routes() {
             eval "masklen=\$CISCO_SPLIT_INC_${i}_MASKLEN"
             if [ -n "$addr" ] && [ -n "$masklen" ]; then
                 if [ "$OS" = "Darwin" ]; then
-                    route delete -net "$addr/$masklen" -interface "$TUNDEV" 2>/dev/null || true
+                    route delete -net "$addr/$masklen" "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
                 else
                     ip route del "$addr/$masklen" dev "$TUNDEV" 2>/dev/null || true
                 fi
