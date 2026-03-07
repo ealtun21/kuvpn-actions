@@ -314,6 +314,31 @@ const VPNC_SCRIPT_TEMPLATE: &str = r#"#!/bin/sh
 TUNNEL_MODE="{TUNNEL_MODE}"
 OS="$(uname -s)"
 
+setup_interface() {
+    if [ "$OS" = "Darwin" ]; then
+        # Assign the VPN IP to the utun device (point-to-point, both ends = our address).
+        # openconnect delegates this to the script when --script is provided.
+        ifconfig "$TUNDEV" "$INTERNAL_IP4_ADDRESS" "$INTERNAL_IP4_ADDRESS" \
+            mtu "${INTERNAL_IP4_MTU:-1400}" netmask 255.255.255.255 up
+        # Host route makes the kernel aware that $INTERNAL_IP4_ADDRESS lives on this
+        # tunnel, which is required for 'route add default $INTERNAL_IP4_ADDRESS' to work.
+        route add -host "$INTERNAL_IP4_ADDRESS" -interface "$TUNDEV" 2>/dev/null || true
+    else
+        ip addr add "${INTERNAL_IP4_ADDRESS}/${INTERNAL_IP4_NETMASKLEN:-24}" dev "$TUNDEV" 2>/dev/null || true
+        ip link set "$TUNDEV" mtu "${INTERNAL_IP4_MTU:-1400}" up
+    fi
+}
+
+teardown_interface() {
+    if [ "$OS" = "Darwin" ]; then
+        route delete -host "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
+        # openconnect closes the utun fd itself; no ifconfig down needed
+    else
+        ip addr del "${INTERNAL_IP4_ADDRESS}/${INTERNAL_IP4_NETMASKLEN:-24}" dev "$TUNDEV" 2>/dev/null || true
+        ip link set "$TUNDEV" down 2>/dev/null || true
+    fi
+}
+
 setup_routes() {
     if [ "$TUNNEL_MODE" = "full" ]; then
         if [ "$OS" = "Darwin" ]; then
@@ -433,12 +458,14 @@ case "$reason" in
     pre-init)
         ;;
     connect|reconnect)
+        setup_interface
         setup_routes
         setup_dns
         ;;
     disconnect)
         teardown_dns
         teardown_routes
+        teardown_interface
         ;;
     attempt-reconnect)
         ;;
