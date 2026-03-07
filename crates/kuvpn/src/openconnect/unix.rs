@@ -318,10 +318,15 @@ setup_routes() {
     if [ "$TUNNEL_MODE" = "full" ]; then
         if [ "$OS" = "Darwin" ]; then
             real_gw=$(route -n get default 2>/dev/null | awk '/gateway:/{print $2}')
+            # Protect the VPN server itself so it stays reachable via WiFi
             [ -n "$real_gw" ] && [ -n "$VPNGATEWAY" ] && \
                 route add -host "$VPNGATEWAY" "$real_gw" 2>/dev/null || true
-            route add -net 0.0.0.0/1   "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
-            route add -net 128.0.0.0/1 "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
+            # Save old default gateway for teardown restoration
+            GW_FILE="/tmp/kuvpn-gw-${TUNDEV}.saved"
+            [ -n "$real_gw" ] && echo "$real_gw" > "$GW_FILE"
+            # Replace default route with VPN tunnel (matches openconnect built-in behavior)
+            route delete default 2>/dev/null || true
+            route add default "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
         else
             real_gw=$(ip route show default 2>/dev/null | awk '/default/{print $3; exit}')
             [ -n "$real_gw" ] && [ -n "$VPNGATEWAY" ] && \
@@ -349,8 +354,14 @@ setup_routes() {
 teardown_routes() {
     if [ "$TUNNEL_MODE" = "full" ]; then
         if [ "$OS" = "Darwin" ]; then
-            route delete -net 0.0.0.0/1   "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
-            route delete -net 128.0.0.0/1 "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
+            # Restore original default route
+            GW_FILE="/tmp/kuvpn-gw-${TUNDEV}.saved"
+            route delete default 2>/dev/null || true
+            if [ -f "$GW_FILE" ]; then
+                OLD_GW=$(cat "$GW_FILE")
+                [ -n "$OLD_GW" ] && route add default "$OLD_GW" 2>/dev/null || true
+                rm -f "$GW_FILE"
+            fi
             [ -n "$VPNGATEWAY" ] && route delete -host "$VPNGATEWAY" 2>/dev/null || true
         else
             ip route del 0.0.0.0/1   dev "$TUNDEV" 2>/dev/null || true
