@@ -83,6 +83,7 @@ pub enum Message {
     },
     WindowOpened(iced::window::Id),
     WindowClosed(iced::window::Id),
+    WindowFocused,
     ResetClosePending,
     #[cfg(target_os = "linux")]
     GtkTick,

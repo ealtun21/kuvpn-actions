@@ -77,6 +77,7 @@ pub struct KuVpnGui {
     pub wipe_item: Option<MenuItem>,
     pub window_id: Option<iced::window::Id>,
     pub is_visible: bool,
+    pub is_minimized: bool,
     pub window_close_pending: bool,
     pub window_open_pending: bool,
     pub last_tray_click: Option<std::time::Instant>,
@@ -448,6 +449,7 @@ impl KuVpnGui {
                 log::info!("Window opened with ID: {:?}", id);
                 self.window_id = Some(id);
                 self.is_visible = true;
+                self.is_minimized = false;
                 self.window_close_pending = false;
                 self.window_open_pending = false;
                 // Explicitly focus the new window. winit's focus_window() is gated on
@@ -461,8 +463,13 @@ impl KuVpnGui {
                 if self.window_id == Some(id) {
                     self.window_id = None;
                     self.is_visible = false;
+                    self.is_minimized = false;
                     self.window_close_pending = false;
                 }
+                Task::none()
+            }
+            Message::WindowFocused => {
+                self.is_minimized = false;
                 Task::none()
             }
             Message::ResetClosePending => {
@@ -545,8 +552,9 @@ impl KuVpnGui {
             }
             Message::ToggleVisibility { from_close_request } => {
                 log::info!(
-                    "ToggleVisibility called. visible={}, close_to_tray={}, from_close_request={}, close_pending={}, open_pending={}",
+                    "ToggleVisibility called. visible={}, minimized={}, close_to_tray={}, from_close_request={}, close_pending={}, open_pending={}",
                     self.is_visible,
+                    self.is_minimized,
                     self.settings.close_to_tray,
                     from_close_request,
                     self.window_close_pending,
@@ -556,6 +564,19 @@ impl KuVpnGui {
                 // Ignore toggles while a close or open is in-flight
                 if self.window_close_pending || self.window_open_pending {
                     log::info!("Ignoring toggle - operation in flight");
+                    return Task::none();
+                }
+
+                // If the window is minimized, restore it instead of hiding
+                if self.is_visible && self.is_minimized && !from_close_request {
+                    log::info!("Window is minimized — restoring instead of hiding");
+                    self.is_minimized = false;
+                    if let Some(id) = self.window_id {
+                        return Task::batch(vec![
+                            iced::window::minimize(id, false),
+                            iced::window::gain_focus(id),
+                        ]);
+                    }
                     return Task::none();
                 }
 
@@ -916,6 +937,7 @@ impl KuVpnGui {
             }
             Message::MinimizeWindow => {
                 if let Some(id) = self.window_id {
+                    self.is_minimized = true;
                     iced::window::minimize(id, true)
                 } else {
                     Task::none()
@@ -1013,6 +1035,13 @@ impl KuVpnGui {
             }),
         );
         subs.push(iced::window::close_events().map(Message::WindowClosed));
+        subs.push(iced::event::listen_with(|event, _, _| {
+            if let iced::Event::Window(iced::window::Event::Focused) = event {
+                Some(Message::WindowFocused)
+            } else {
+                None
+            }
+        }));
 
         // Tray & Menu events
         subs.push(Subscription::run(|| {
@@ -1099,6 +1128,7 @@ impl Default for KuVpnGui {
             wipe_item: None,
             window_id: None,
             is_visible: false,
+            is_minimized: false,
             window_close_pending: false,
             window_open_pending: false,
             last_tray_click: None,
