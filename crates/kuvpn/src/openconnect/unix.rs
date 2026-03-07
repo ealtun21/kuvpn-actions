@@ -272,27 +272,18 @@ impl Drop for TempScript {
     }
 }
 
-/// Generates a vpnc-script for the given `TunnelMode` (Split or Full), writes it
-/// to a temporary file, makes it executable, and returns a [`TempScript`] handle.
+/// Generates a full-tunnel vpnc-script, writes it to a temporary file, makes it
+/// executable, and returns a [`TempScript`] handle.
 ///
-/// The script handles routing and DNS setup/teardown on both macOS and Linux,
-/// fixing the macOS-specific `networksetup` failure in openconnect's built-in script.
-pub fn generate_vpnc_script(
-    mode: &crate::session::TunnelMode,
-) -> anyhow::Result<TempScript> {
-    let mode_str = match mode {
-        crate::session::TunnelMode::Full => "full",
-        _ => "split",
-    };
-
-    // The script is baked in at compile time; only TUNNEL_MODE is substituted.
-    let script = VPNC_SCRIPT_TEMPLATE.replace("{TUNNEL_MODE}", mode_str);
-
+/// Handles routing and DNS setup/teardown on both macOS and Linux,
+/// replacing the macOS-specific `networksetup` calls that fail in openconnect's
+/// built-in script.
+pub fn generate_vpnc_script() -> anyhow::Result<TempScript> {
     // Pick a unique temp path: /tmp/kuvpn-vpnc-<pid>.sh
     let path = std::env::temp_dir()
         .join(format!("kuvpn-vpnc-{}.sh", std::process::id()));
 
-    std::fs::write(&path, script.as_bytes())?;
+    std::fs::write(&path, VPNC_SCRIPT_TEMPLATE.as_bytes())?;
 
     // Make executable (rwxr-xr-x)
     #[cfg(unix)]
@@ -304,14 +295,13 @@ pub fn generate_vpnc_script(
     Ok(TempScript { path })
 }
 
-/// Cross-platform vpnc-script template.
-/// Handles routing and DNS for both macOS (scutil) and Linux (resolvectl / resolv.conf).
-/// `{TUNNEL_MODE}` is substituted with `"full"` or `"split"` at runtime.
+/// Full-tunnel vpnc-script template.
+/// Routes all IPv4 traffic through the VPN (0/1 + 128/1 on macOS, same on Linux).
+/// Handles DNS via scutil on macOS, resolvectl/resolv.conf on Linux.
 const VPNC_SCRIPT_TEMPLATE: &str = r#"#!/bin/sh
 # kuvpn generated vpnc-script — do not edit manually.
-# Handles routing and DNS for openconnect VPN tunnels.
+# Full-tunnel mode: all IPv4 traffic is routed through the VPN.
 
-TUNNEL_MODE="{TUNNEL_MODE}"
 OS="$(uname -s)"
 
 setup_interface() {
@@ -340,129 +330,52 @@ teardown_interface() {
 }
 
 setup_routes() {
-    if [ "$TUNNEL_MODE" = "full" ]; then
-        if [ "$OS" = "Darwin" ]; then
-            real_gw=$(route -n get default 2>/dev/null | awk '/gateway:/{print $2}')
-            primary_if=$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')
-            # Protect the VPN server itself so it stays reachable via WiFi.
-            [ -n "$real_gw" ] && [ -n "$VPNGATEWAY" ] && \
-                route add -host "$VPNGATEWAY" "$real_gw" 2>/dev/null || true
-            # Add two more-specific routes covering all of IPv4 (0/1 + 128/1).
-            # These take precedence over the existing /0 default route without
-            # deleting it, so teardown just removes these two entries.
-            route add -net 0.0.0.0   -netmask 128.0.0.0 -interface "$TUNDEV" 2>/dev/null || true
-            route add -net 128.0.0.0 -netmask 128.0.0.0 -interface "$TUNDEV" 2>/dev/null || true
-            # Disable IPv6 on the primary interface to prevent leaks.
-            # (IPv4 is tunneled; IPv6 would otherwise escape through Wi-Fi/Ethernet.)
-            IPV6_FILE="/tmp/kuvpn-ipv6-${TUNDEV}.saved"
-            if [ -n "$primary_if" ]; then
-                svc=$(/usr/sbin/networksetup -listnetworkserviceorder 2>/dev/null | \
-                    grep -B2 "Device: $primary_if" | grep -v "Device:" | grep -v "^[[:space:]]*$" | \
-                    head -1 | sed 's/^([^)]*) //')
-                if [ -n "$svc" ]; then
-                    printf '%s' "$svc" > "$IPV6_FILE"
-                    /usr/sbin/networksetup -setv6off "$svc" 2>/dev/null || true
-                fi
+    if [ "$OS" = "Darwin" ]; then
+        real_gw=$(route -n get default 2>/dev/null | awk '/gateway:/{print $2}')
+        primary_if=$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')
+        # Protect the VPN server so it stays reachable via WiFi.
+        [ -n "$real_gw" ] && [ -n "$VPNGATEWAY" ] && \
+            route add -host "$VPNGATEWAY" "$real_gw" 2>/dev/null || true
+        # 0/1 + 128/1 cover all IPv4 and take precedence over the /0 default
+        # route without deleting it, so teardown is a simple pair of deletes.
+        route add -net 0.0.0.0   -netmask 128.0.0.0 -interface "$TUNDEV" 2>/dev/null || true
+        route add -net 128.0.0.0 -netmask 128.0.0.0 -interface "$TUNDEV" 2>/dev/null || true
+        # Disable IPv6 on the primary interface to prevent leaks.
+        IPV6_FILE="/tmp/kuvpn-ipv6-${TUNDEV}.saved"
+        if [ -n "$primary_if" ]; then
+            svc=$(/usr/sbin/networksetup -listnetworkserviceorder 2>/dev/null | \
+                grep -B2 "Device: $primary_if" | grep -v "Device:" | grep -v "^[[:space:]]*$" | \
+                head -1 | sed 's/^([^)]*) //')
+            if [ -n "$svc" ]; then
+                printf '%s' "$svc" > "$IPV6_FILE"
+                /usr/sbin/networksetup -setv6off "$svc" 2>/dev/null || true
             fi
-        else
-            real_gw=$(ip route show default 2>/dev/null | awk '/default/{print $3; exit}')
-            [ -n "$real_gw" ] && [ -n "$VPNGATEWAY" ] && \
-                ip route add "$VPNGATEWAY/32" via "$real_gw" 2>/dev/null || true
-            ip route add 0.0.0.0/1   dev "$TUNDEV" 2>/dev/null || true
-            ip route add 128.0.0.0/1 dev "$TUNDEV" 2>/dev/null || true
         fi
     else
-        # Split tunnel: keep the existing default route (WiFi) intact.
-        # Only route the VPN-assigned subnet and its DNS servers through the tunnel
-        # so that KU-internal resources are reachable while internet traffic stays
-        # on WiFi/Ethernet — without touching IPv6 at all.
-        if [ "$OS" = "Darwin" ]; then
-            # Derive the network address from the assigned IP + server netmask.
-            IFS=. read -r _a _b _c _d << _IPEOF_
-$INTERNAL_IP4_ADDRESS
-_IPEOF_
-            IFS=. read -r _ma _mb _mc _md << _IPEOF_
-$INTERNAL_IP4_NETMASK
-_IPEOF_
-            NET_ADDR="$((_a & _ma)).$((_b & _mb)).$((_c & _mc)).$((_d & _md))"
-            route add -net "$NET_ADDR" -netmask "$INTERNAL_IP4_NETMASK" \
-                -interface "$TUNDEV" 2>/dev/null || true
-            # Route each VPN DNS server through the tunnel.
-            for _dns in $INTERNAL_IP4_DNS; do
-                route add -host "$_dns" -interface "$TUNDEV" 2>/dev/null || true
-            done
-        else
-            # Linux — add only the specific subnets the server advertises.
-            i=0
-            while [ "$i" -lt "${CISCO_SPLIT_INC:-0}" ]; do
-                eval "addr=\$CISCO_SPLIT_INC_${i}_ADDR"
-                eval "masklen=\$CISCO_SPLIT_INC_${i}_MASKLEN"
-                if [ -n "$addr" ] && [ -n "$masklen" ]; then
-                    if [ "$addr" = "0.0.0.0" ] && [ "$masklen" = "0" ]; then
-                        real_gw=$(ip route show default 2>/dev/null | awk '/default/{print $3; exit}')
-                        [ -n "$real_gw" ] && [ -n "$VPNGATEWAY" ] && \
-                            ip route add "$VPNGATEWAY/32" via "$real_gw" 2>/dev/null || true
-                        ip route add 0.0.0.0/1   dev "$TUNDEV" 2>/dev/null || true
-                        ip route add 128.0.0.0/1 dev "$TUNDEV" 2>/dev/null || true
-                    else
-                        ip route add "$addr/$masklen" dev "$TUNDEV" 2>/dev/null || true
-                    fi
-                fi
-                i=$((i + 1))
-            done
-        fi
+        real_gw=$(ip route show default 2>/dev/null | awk '/default/{print $3; exit}')
+        [ -n "$real_gw" ] && [ -n "$VPNGATEWAY" ] && \
+            ip route add "$VPNGATEWAY/32" via "$real_gw" 2>/dev/null || true
+        ip route add 0.0.0.0/1   dev "$TUNDEV" 2>/dev/null || true
+        ip route add 128.0.0.0/1 dev "$TUNDEV" 2>/dev/null || true
     fi
 }
 
 teardown_routes() {
-    if [ "$TUNNEL_MODE" = "full" ]; then
-        if [ "$OS" = "Darwin" ]; then
-            route delete -net 0.0.0.0   -netmask 128.0.0.0 2>/dev/null || true
-            route delete -net 128.0.0.0 -netmask 128.0.0.0 2>/dev/null || true
-            [ -n "$VPNGATEWAY" ] && route delete -host "$VPNGATEWAY" 2>/dev/null || true
-            # Restore IPv6 on the primary interface.
-            IPV6_FILE="/tmp/kuvpn-ipv6-${TUNDEV}.saved"
-            if [ -f "$IPV6_FILE" ]; then
-                svc=$(cat "$IPV6_FILE")
-                [ -n "$svc" ] && /usr/sbin/networksetup -setv6automatic "$svc" 2>/dev/null || true
-                rm -f "$IPV6_FILE"
-            fi
-        else
-            ip route del 0.0.0.0/1   dev "$TUNDEV" 2>/dev/null || true
-            ip route del 128.0.0.0/1 dev "$TUNDEV" 2>/dev/null || true
-            [ -n "$VPNGATEWAY" ] && ip route del "$VPNGATEWAY/32" 2>/dev/null || true
+    if [ "$OS" = "Darwin" ]; then
+        route delete -net 0.0.0.0   -netmask 128.0.0.0 2>/dev/null || true
+        route delete -net 128.0.0.0 -netmask 128.0.0.0 2>/dev/null || true
+        [ -n "$VPNGATEWAY" ] && route delete -host "$VPNGATEWAY" 2>/dev/null || true
+        # Restore IPv6.
+        IPV6_FILE="/tmp/kuvpn-ipv6-${TUNDEV}.saved"
+        if [ -f "$IPV6_FILE" ]; then
+            svc=$(cat "$IPV6_FILE")
+            [ -n "$svc" ] && /usr/sbin/networksetup -setv6automatic "$svc" 2>/dev/null || true
+            rm -f "$IPV6_FILE"
         fi
     else
-        if [ "$OS" = "Darwin" ]; then
-            # Remove only the routes we added; default route was never touched.
-            IFS=. read -r _a _b _c _d << _IPEOF_
-$INTERNAL_IP4_ADDRESS
-_IPEOF_
-            IFS=. read -r _ma _mb _mc _md << _IPEOF_
-$INTERNAL_IP4_NETMASK
-_IPEOF_
-            NET_ADDR="$((_a & _ma)).$((_b & _mb)).$((_c & _mc)).$((_d & _md))"
-            route delete -net "$NET_ADDR" -netmask "$INTERNAL_IP4_NETMASK" 2>/dev/null || true
-            for _dns in $INTERNAL_IP4_DNS; do
-                route delete -host "$_dns" 2>/dev/null || true
-            done
-        else
-            i=0
-            while [ "$i" -lt "${CISCO_SPLIT_INC:-0}" ]; do
-                eval "addr=\$CISCO_SPLIT_INC_${i}_ADDR"
-                eval "masklen=\$CISCO_SPLIT_INC_${i}_MASKLEN"
-                if [ -n "$addr" ] && [ -n "$masklen" ]; then
-                    if [ "$addr" = "0.0.0.0" ] && [ "$masklen" = "0" ]; then
-                        ip route del 0.0.0.0/1   dev "$TUNDEV" 2>/dev/null || true
-                        ip route del 128.0.0.0/1 dev "$TUNDEV" 2>/dev/null || true
-                        [ -n "$VPNGATEWAY" ] && ip route del "$VPNGATEWAY/32" 2>/dev/null || true
-                    else
-                        ip route del "$addr/$masklen" dev "$TUNDEV" 2>/dev/null || true
-                    fi
-                fi
-                i=$((i + 1))
-            done
-        fi
+        ip route del 0.0.0.0/1   dev "$TUNDEV" 2>/dev/null || true
+        ip route del 128.0.0.0/1 dev "$TUNDEV" 2>/dev/null || true
+        [ -n "$VPNGATEWAY" ] && ip route del "$VPNGATEWAY/32" 2>/dev/null || true
     fi
 }
 

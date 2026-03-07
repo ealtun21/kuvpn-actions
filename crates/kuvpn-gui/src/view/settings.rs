@@ -373,13 +373,13 @@ impl KuVpnGui {
             col = col.push(self.view_unified_control(
                 "Tunnel Mode:",
                 self.view_segmented_control(
-                    &["Split", "Full", "Manual"],
-                    &[0.0, 1.0, 2.0],
+                    &["Full", "Manual"],
+                    &[1.0, 2.0],
                     self.settings.tunnel_mode_val,
                     is_locked,
                     Message::TunnelModeChanged,
                 ),
-                "Split: only KU-network traffic goes through the VPN; internet traffic uses your normal connection.\n\nFull: all traffic is routed through the VPN tunnel.\n\nManual: supply your own vpnc-script for full control over routing and DNS.",
+                "Full: all traffic is routed through the VPN tunnel.\n\nManual: supply your own vpnc-script for full control over routing and DNS.",
             ));
             // VPN Script field — visible only in Manual mode
             if self.settings.tunnel_mode_val.round() as i32 == 2 {

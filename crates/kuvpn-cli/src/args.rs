@@ -104,7 +104,6 @@ pub struct Args {
     pub history: bool,
 
     /// Tunnel mode: how traffic is routed through the VPN.
-    /// split: only VPN-bound traffic goes through the tunnel.
     /// full: all traffic is routed through the VPN (default).
     /// manual: pass your own vpnc-script via --vpnc-script.
     #[arg(long, value_enum, default_value_t = CliTunnelMode::Full)]
@@ -119,8 +118,6 @@ pub struct Args {
 /// Tunnel mode choices for the CLI (mirrors `kuvpn::TunnelMode`).
 #[derive(Debug, Clone, ValueEnum, Default)]
 pub enum CliTunnelMode {
-    /// Only VPN-pushed split routes go through the tunnel.
-    Split,
     /// All traffic is routed through the VPN.
     #[default]
     Full,

@@ -310,7 +310,6 @@ impl KuVpnGui {
             escalation_tool: Some(self.settings.escalation_tool.clone()),
             interface_name: "kuvpn0".to_string(),
             tunnel_mode: match self.settings.tunnel_mode_val.round() as i32 {
-                0 => kuvpn::TunnelMode::Split,
                 2 => kuvpn::TunnelMode::Manual(
                     if self.settings.vpnc_script.is_empty() {
                         None

@@ -59,8 +59,6 @@ impl ParsedLog {
 /// Controls how traffic is routed through the VPN tunnel.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TunnelMode {
-    /// Only traffic destined for VPN-pushed split routes goes through the tunnel.
-    Split,
     /// All traffic (0.0.0.0/0) is routed through the tunnel.
     Full,
     /// User supplies their own vpnc-script. `None` passes no `--script` flag
@@ -347,8 +345,8 @@ impl SessionThread {
                         }
                         path.clone()
                     }
-                    TunnelMode::Split | TunnelMode::Full => {
-                        let script = generate_vpnc_script(&self.config.tunnel_mode)
+                    TunnelMode::Full => {
+                        let script = generate_vpnc_script()
                             .map_err(|e| self.set_conn_error(&e.to_string()))?;
                         let path = script.path_str().map(str::to_string);
                         if verbose {
