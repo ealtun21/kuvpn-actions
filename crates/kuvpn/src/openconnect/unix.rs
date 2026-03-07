@@ -343,6 +343,7 @@ setup_routes() {
     if [ "$TUNNEL_MODE" = "full" ]; then
         if [ "$OS" = "Darwin" ]; then
             real_gw=$(route -n get default 2>/dev/null | awk '/gateway:/{print $2}')
+            primary_if=$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')
             # Protect the VPN server itself so it stays reachable via WiFi.
             [ -n "$real_gw" ] && [ -n "$VPNGATEWAY" ] && \
                 route add -host "$VPNGATEWAY" "$real_gw" 2>/dev/null || true
@@ -351,6 +352,18 @@ setup_routes() {
             # deleting it, so teardown just removes these two entries.
             route add -net 0.0.0.0   -netmask 128.0.0.0 -interface "$TUNDEV" 2>/dev/null || true
             route add -net 128.0.0.0 -netmask 128.0.0.0 -interface "$TUNDEV" 2>/dev/null || true
+            # Disable IPv6 on the primary interface to prevent leaks.
+            # (IPv4 is tunneled; IPv6 would otherwise escape through Wi-Fi/Ethernet.)
+            IPV6_FILE="/tmp/kuvpn-ipv6-${TUNDEV}.saved"
+            if [ -n "$primary_if" ]; then
+                svc=$(/usr/sbin/networksetup -listnetworkserviceorder 2>/dev/null | \
+                    grep -B2 "Device: $primary_if" | grep -v "Device:" | grep -v "^[[:space:]]*$" | \
+                    head -1 | sed 's/^([^)]*) //')
+                if [ -n "$svc" ]; then
+                    printf '%s' "$svc" > "$IPV6_FILE"
+                    /usr/sbin/networksetup -setv6off "$svc" 2>/dev/null || true
+                fi
+            fi
         else
             real_gw=$(ip route show default 2>/dev/null | awk '/default/{print $3; exit}')
             [ -n "$real_gw" ] && [ -n "$VPNGATEWAY" ] && \
@@ -399,6 +412,13 @@ teardown_routes() {
             route delete -net 0.0.0.0   -netmask 128.0.0.0 2>/dev/null || true
             route delete -net 128.0.0.0 -netmask 128.0.0.0 2>/dev/null || true
             [ -n "$VPNGATEWAY" ] && route delete -host "$VPNGATEWAY" 2>/dev/null || true
+            # Restore IPv6 on the primary interface.
+            IPV6_FILE="/tmp/kuvpn-ipv6-${TUNDEV}.saved"
+            if [ -f "$IPV6_FILE" ]; then
+                svc=$(cat "$IPV6_FILE")
+                [ -n "$svc" ] && /usr/sbin/networksetup -setv6automatic "$svc" 2>/dev/null || true
+                rm -f "$IPV6_FILE"
+            fi
         else
             ip route del 0.0.0.0/1   dev "$TUNDEV" 2>/dev/null || true
             ip route del 128.0.0.0/1 dev "$TUNDEV" 2>/dev/null || true
