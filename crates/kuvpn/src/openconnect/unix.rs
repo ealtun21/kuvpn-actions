@@ -316,11 +316,12 @@ OS="$(uname -s)"
 
 setup_interface() {
     if [ "$OS" = "Darwin" ]; then
-        # openconnect configures the utun address and peer before calling the script
-        # (using the internal gateway 10.x and actual netmask from the server).
-        # Do NOT call ifconfig here — reconfiguring the interface breaks ESP routing
-        # for external traffic. Just ensure the host route exists so that
-        # 'route add default $INTERNAL_IP4_ADDRESS' resolves correctly.
+        # Configure the utun interface. Our script is responsible for all interface
+        # setup when --script is provided. Without ifconfig the kernel has no IP on
+        # the interface and all subsequent routing commands fail with ENETUNREACH.
+        ifconfig "$TUNDEV" "$INTERNAL_IP4_ADDRESS" "$INTERNAL_IP4_ADDRESS" \
+            mtu "${INTERNAL_IP4_MTU:-1400}" netmask 255.255.255.255 up
+        # Host route for the tunnel endpoint — required before adding a default route.
         route add -host "$INTERNAL_IP4_ADDRESS" -interface "$TUNDEV" 2>/dev/null || true
     else
         ip addr add "${INTERNAL_IP4_ADDRESS}/${INTERNAL_IP4_NETMASKLEN:-24}" dev "$TUNDEV" 2>/dev/null || true
@@ -331,7 +332,7 @@ setup_interface() {
 teardown_interface() {
     if [ "$OS" = "Darwin" ]; then
         route delete -host "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
-        # openconnect closes the utun fd; no ifconfig down needed
+        ifconfig "$TUNDEV" down 2>/dev/null || true
     else
         ip addr del "${INTERNAL_IP4_ADDRESS}/${INTERNAL_IP4_NETMASKLEN:-24}" dev "$TUNDEV" 2>/dev/null || true
         ip link set "$TUNDEV" down 2>/dev/null || true
@@ -342,13 +343,13 @@ setup_routes() {
     if [ "$TUNNEL_MODE" = "full" ]; then
         if [ "$OS" = "Darwin" ]; then
             real_gw=$(route -n get default 2>/dev/null | awk '/gateway:/{print $2}')
-            # Protect the VPN server itself so it stays reachable via WiFi
+            # Protect the VPN server itself so it stays reachable via WiFi.
             [ -n "$real_gw" ] && [ -n "$VPNGATEWAY" ] && \
                 route add -host "$VPNGATEWAY" "$real_gw" 2>/dev/null || true
-            # Save old default gateway for teardown restoration
+            # Save old default gateway for teardown restoration.
             GW_FILE="/tmp/kuvpn-gw-${TUNDEV}.saved"
             [ -n "$real_gw" ] && echo "$real_gw" > "$GW_FILE"
-            # Replace default route with VPN tunnel (matches openconnect built-in behavior)
+            # Replace default route so all traffic goes through the VPN.
             route delete default 2>/dev/null || true
             route add default "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
         else
@@ -359,26 +360,16 @@ setup_routes() {
             ip route add 128.0.0.0/1 dev "$TUNDEV" 2>/dev/null || true
         fi
     else
-        i=0
-        while [ "$i" -lt "${CISCO_SPLIT_INC:-0}" ]; do
-            eval "addr=\$CISCO_SPLIT_INC_${i}_ADDR"
-            eval "masklen=\$CISCO_SPLIT_INC_${i}_MASKLEN"
-            if [ -n "$addr" ] && [ -n "$masklen" ]; then
-                if [ "$OS" = "Darwin" ]; then
-                    if [ "$addr" = "0.0.0.0" ] && [ "$masklen" = "0" ]; then
-                        # Server pushed 0/0 — can't 'route add' over existing default;
-                        # do the same default-route replacement as full tunnel.
-                        real_gw=$(route -n get default 2>/dev/null | awk '/gateway:/{print $2}')
-                        [ -n "$real_gw" ] && [ -n "$VPNGATEWAY" ] && \
-                            route add -host "$VPNGATEWAY" "$real_gw" 2>/dev/null || true
-                        GW_FILE="/tmp/kuvpn-gw-${TUNDEV}.saved"
-                        [ -n "$real_gw" ] && echo "$real_gw" > "$GW_FILE"
-                        route delete default 2>/dev/null || true
-                        route add default "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
-                    else
-                        route add -net "$addr/$masklen" "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
-                    fi
-                else
+        # Split tunnel:
+        # macOS — the NC protocol's built-in ESP forwarding handles traffic selection;
+        # we do not add any routes here so the existing default route (WiFi) is kept.
+        # Linux — add only the specific subnets the server advertises.
+        if [ "$OS" != "Darwin" ]; then
+            i=0
+            while [ "$i" -lt "${CISCO_SPLIT_INC:-0}" ]; do
+                eval "addr=\$CISCO_SPLIT_INC_${i}_ADDR"
+                eval "masklen=\$CISCO_SPLIT_INC_${i}_MASKLEN"
+                if [ -n "$addr" ] && [ -n "$masklen" ]; then
                     if [ "$addr" = "0.0.0.0" ] && [ "$masklen" = "0" ]; then
                         real_gw=$(ip route show default 2>/dev/null | awk '/default/{print $3; exit}')
                         [ -n "$real_gw" ] && [ -n "$VPNGATEWAY" ] && \
@@ -389,16 +380,16 @@ setup_routes() {
                         ip route add "$addr/$masklen" dev "$TUNDEV" 2>/dev/null || true
                     fi
                 fi
-            fi
-            i=$((i + 1))
-        done
+                i=$((i + 1))
+            done
+        fi
     fi
 }
 
 teardown_routes() {
     if [ "$TUNNEL_MODE" = "full" ]; then
         if [ "$OS" = "Darwin" ]; then
-            # Restore original default route
+            # Restore original default route.
             GW_FILE="/tmp/kuvpn-gw-${TUNDEV}.saved"
             route delete default 2>/dev/null || true
             if [ -f "$GW_FILE" ]; then
@@ -413,28 +404,24 @@ teardown_routes() {
             [ -n "$VPNGATEWAY" ] && ip route del "$VPNGATEWAY/32" 2>/dev/null || true
         fi
     else
-        # Split teardown: check if we did a default-route replacement (0/0 case)
-        GW_FILE="/tmp/kuvpn-gw-${TUNDEV}.saved"
-        if [ "$OS" = "Darwin" ] && [ -f "$GW_FILE" ]; then
-            route delete default 2>/dev/null || true
-            OLD_GW=$(cat "$GW_FILE")
-            [ -n "$OLD_GW" ] && route add default "$OLD_GW" 2>/dev/null || true
-            rm -f "$GW_FILE"
-            [ -n "$VPNGATEWAY" ] && route delete -host "$VPNGATEWAY" 2>/dev/null || true
-        else
-        i=0
-        while [ "$i" -lt "${CISCO_SPLIT_INC:-0}" ]; do
-            eval "addr=\$CISCO_SPLIT_INC_${i}_ADDR"
-            eval "masklen=\$CISCO_SPLIT_INC_${i}_MASKLEN"
-            if [ -n "$addr" ] && [ -n "$masklen" ]; then
-                if [ "$OS" = "Darwin" ]; then
-                    route delete -net "$addr/$masklen" "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
-                else
-                    ip route del "$addr/$masklen" dev "$TUNDEV" 2>/dev/null || true
+        # Split tunnel: macOS added no routes, nothing to tear down.
+        # Linux: remove only the specific subnets we added.
+        if [ "$OS" != "Darwin" ]; then
+            i=0
+            while [ "$i" -lt "${CISCO_SPLIT_INC:-0}" ]; do
+                eval "addr=\$CISCO_SPLIT_INC_${i}_ADDR"
+                eval "masklen=\$CISCO_SPLIT_INC_${i}_MASKLEN"
+                if [ -n "$addr" ] && [ -n "$masklen" ]; then
+                    if [ "$addr" = "0.0.0.0" ] && [ "$masklen" = "0" ]; then
+                        ip route del 0.0.0.0/1   dev "$TUNDEV" 2>/dev/null || true
+                        ip route del 128.0.0.0/1 dev "$TUNDEV" 2>/dev/null || true
+                        [ -n "$VPNGATEWAY" ] && ip route del "$VPNGATEWAY/32" 2>/dev/null || true
+                    else
+                        ip route del "$addr/$masklen" dev "$TUNDEV" 2>/dev/null || true
+                    fi
                 fi
-            fi
-            i=$((i + 1))
-        done
+                i=$((i + 1))
+            done
         fi
     fi
 }
