@@ -316,12 +316,11 @@ OS="$(uname -s)"
 
 setup_interface() {
     if [ "$OS" = "Darwin" ]; then
-        # Assign the VPN IP to the utun device (point-to-point, both ends = our address).
-        # openconnect delegates this to the script when --script is provided.
-        ifconfig "$TUNDEV" "$INTERNAL_IP4_ADDRESS" "$INTERNAL_IP4_ADDRESS" \
-            mtu "${INTERNAL_IP4_MTU:-1400}" netmask 255.255.255.255 up
-        # Host route makes the kernel aware that $INTERNAL_IP4_ADDRESS lives on this
-        # tunnel, which is required for 'route add default $INTERNAL_IP4_ADDRESS' to work.
+        # openconnect configures the utun address and peer before calling the script
+        # (using the internal gateway 10.x and actual netmask from the server).
+        # Do NOT call ifconfig here — reconfiguring the interface breaks ESP routing
+        # for external traffic. Just ensure the host route exists so that
+        # 'route add default $INTERNAL_IP4_ADDRESS' resolves correctly.
         route add -host "$INTERNAL_IP4_ADDRESS" -interface "$TUNDEV" 2>/dev/null || true
     else
         ip addr add "${INTERNAL_IP4_ADDRESS}/${INTERNAL_IP4_NETMASKLEN:-24}" dev "$TUNDEV" 2>/dev/null || true
@@ -332,7 +331,7 @@ setup_interface() {
 teardown_interface() {
     if [ "$OS" = "Darwin" ]; then
         route delete -host "$INTERNAL_IP4_ADDRESS" 2>/dev/null || true
-        # openconnect closes the utun fd itself; no ifconfig down needed
+        # openconnect closes the utun fd; no ifconfig down needed
     else
         ip addr del "${INTERNAL_IP4_ADDRESS}/${INTERNAL_IP4_NETMASKLEN:-24}" dev "$TUNDEV" 2>/dev/null || true
         ip link set "$TUNDEV" down 2>/dev/null || true
