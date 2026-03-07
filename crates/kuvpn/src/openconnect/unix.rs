@@ -458,6 +458,7 @@ pub(super) fn execute(
     #[cfg_attr(target_os = "macos", allow(unused_variables))] interface_name: &str,
     sudo_password: Option<String>,
     custom_script: Option<&str>,
+    verbose: bool,
 ) -> anyhow::Result<VpnProcess> {
     let command_to_run = resolve_escalation_tool(run_command).ok_or_else(|| {
         anyhow::anyhow!(
@@ -501,6 +502,10 @@ pub(super) fn execute(
 
     if let Some(script) = custom_script {
         cmd.arg("--script").arg(script);
+    }
+
+    if verbose {
+        cmd.arg("--verbose");
     }
 
     cmd.arg("-C")

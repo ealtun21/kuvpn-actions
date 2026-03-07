@@ -329,6 +329,8 @@ impl SessionThread {
         dsid: String,
         #[cfg_attr(not(unix), allow(unused_variables))] provider: &Arc<dyn CredentialsProvider>,
     ) -> Result<VpnProcess, ()> {
+        let verbose = log::max_level() >= log::LevelFilter::Debug;
+
         // Resolve the vpnc-script path. On Unix we generate one for Split/Full modes;
         // on Windows no script is supported so this is always None.
         let custom_script: Option<String> = {
@@ -336,11 +338,30 @@ impl SessionThread {
             {
                 use crate::openconnect::unix::generate_vpnc_script;
                 match &self.config.tunnel_mode {
-                    TunnelMode::Manual(path) => path.clone(),
+                    TunnelMode::Manual(path) => {
+                        if verbose {
+                            self.send_log(format!(
+                                "Debug|vpnc-script (manual): {}",
+                                path.as_deref().unwrap_or("<none — openconnect built-in>")
+                            ));
+                        }
+                        path.clone()
+                    }
                     TunnelMode::Split | TunnelMode::Full => {
                         let script = generate_vpnc_script(&self.config.tunnel_mode)
                             .map_err(|e| self.set_conn_error(&e.to_string()))?;
                         let path = script.path_str().map(str::to_string);
+                        if verbose {
+                            if let Some(ref p) = path {
+                                self.send_log(format!("Debug|Generated vpnc-script: {}", p));
+                                if let Ok(content) = std::fs::read_to_string(p) {
+                                    self.send_log(format!(
+                                        "Debug|Script content:\n{}",
+                                        content
+                                    ));
+                                }
+                            }
+                        }
                         self.active_script = Some(script);
                         path
                     }
@@ -364,6 +385,15 @@ impl SessionThread {
                 self.config.openconnect_path
             ));
         })?;
+
+        if verbose {
+            self.send_log(format!("Debug|Tunnel mode: {:?}", self.config.tunnel_mode));
+            self.send_log(format!(
+                "Debug|openconnect: {} | script: {} | verbose: true",
+                runner.path.display(),
+                runner.custom_script.as_deref().unwrap_or("<none>"),
+            ));
+        }
 
         let sudo_password = {
             #[cfg(unix)]
@@ -393,14 +423,22 @@ impl SessionThread {
                 Stdio::piped(),
                 sudo_password,
                 matches!(self.config.tunnel_mode, TunnelMode::Full),
+                verbose,
             )
             .map_err(|e| self.set_conn_error(&e.to_string()))
     }
 
     fn spawn_log_readers(&self, proc: &mut VpnProcess) {
+        // In debug/trace mode openconnect runs with --verbose; label its stdout
+        // as Debug so the flood of detail doesn't pollute the Info console view.
+        let oc_stdout_level = if log::max_level() >= log::LevelFilter::Debug {
+            "Debug"
+        } else {
+            "Info"
+        };
         if let VpnProcess::Unix(ref mut child) = proc {
             if let Some(stdout) = child.stdout.take() {
-                spawn_stream_reader(stdout, "Info", Arc::clone(&self.logs_tx));
+                spawn_stream_reader(stdout, oc_stdout_level, Arc::clone(&self.logs_tx));
             }
             if let Some(stderr) = child.stderr.take() {
                 spawn_stream_reader(stderr, "Warn", Arc::clone(&self.logs_tx));

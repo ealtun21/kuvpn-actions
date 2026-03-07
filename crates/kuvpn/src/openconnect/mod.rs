@@ -215,6 +215,7 @@ impl OpenConnectRunner {
         stderr: Stdio,
         sudo_password: Option<String>,
         full_tunnel: bool,
+        verbose: bool,
     ) -> anyhow::Result<VpnProcess> {
         execute_openconnect(
             cookie_value,
@@ -227,6 +228,7 @@ impl OpenConnectRunner {
             sudo_password,
             self.custom_script.as_deref(),
             full_tunnel,
+            verbose,
         )
     }
 }
@@ -247,6 +249,7 @@ pub fn execute_openconnect(
     sudo_password: Option<String>,
     custom_script: Option<&str>,
     full_tunnel: bool,
+    verbose: bool,
 ) -> anyhow::Result<VpnProcess> {
     #[cfg(unix)]
     {
@@ -263,6 +266,7 @@ pub fn execute_openconnect(
             interface_name,
             sudo_password,
             custom_script,
+            verbose,
         );
     }
 
