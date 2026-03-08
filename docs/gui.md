@@ -76,7 +76,7 @@ Download and run **`KUVPN-Setup-windows-x86_64.exe`** from the [Releases](https:
 
 ## First Launch
 
-When KUVPN opens you will see three tabs: **Connection**, **Console**, and **Settings**.
+When KUVPN opens you will see four tabs: **Connection**, **History**, **Console**, and **Settings**.
 
 Before connecting, go to **Settings** and verify:
 
@@ -153,8 +153,34 @@ KUVPN sends OS notifications for:
 | Log level | Controls how much is shown in the Console tab |
 | Close to tray | Minimise to tray instead of quitting when the window is closed |
 | Client-side decorations | Use custom window chrome instead of the OS title bar |
+| Tunnel mode | `Full` routes all traffic through the VPN. `Manual` lets you supply a custom vpnc-script for advanced routing. |
+| VPN Script | Path to a custom vpnc-script (only shown in Manual tunnel mode). Click **Test** to validate before connecting. |
 
 Click **Reset to defaults** to restore all settings.
+
+---
+
+## History
+
+The **History** tab shows a log of past connection events:
+
+| Entry | Description |
+|-------|-------------|
+| Connected | A new session was established |
+| Reconnected | An automatic reconnect after a tunnel drop (`prev: Xm Ys` shows how long the previous segment lasted) |
+| Disconnected | Clean disconnect. Shows total session duration. If the session included reconnects, shows "after N reconnect attempt(s)". |
+| Cancelled | User-cancelled before tunnel came up |
+| Error | Connection failed |
+
+Click **Clear** to wipe the history.
+
+---
+
+## Automatic Reconnect
+
+If the VPN tunnel drops unexpectedly, KUVPN automatically tries to reconnect up to 3 times with a short delay between each attempt. The status bar shows **Reconnecting... (attempt N/3)**. You can cancel at any time by clicking **Disconnect**.
+
+When a stale session causes the initial tunnel to fail, KUVPN detects it, clears the session data, and retries automatically. A separator line is inserted in the console log so you can see what happened before and after the retry.
 
 ---
 
@@ -187,6 +213,10 @@ sudo xattr -r -d com.apple.quarantine /Applications/KUVPN.app
 ```
 
 This is a one-time step required because the app is not notarized through the Apple App Store.
+
+### Connection shows "Connected" but VPN traffic is not working
+
+This should be automatically detected and trigger a reconnect. If it persists, click **Disconnect** and reconnect manually. Check the Console tab for error details.
 
 ### Logs
 

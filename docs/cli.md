@@ -67,10 +67,23 @@ Press **Ctrl+C** to disconnect.
 | `--disable-headless` | `-d` | `false` | Show the browser window instead of running headlessly |
 | `--no-auto-login` | | `false` | Disable automation — poll for DSID in a visible browser you control |
 | `--get-dsid` | `-g` | `false` | Print the DSID cookie and exit without starting OpenConnect |
+| `--history` | | `false` | Print connection history and exit |
 | `--clean` | `-c` | `false` | Delete saved session data and exit |
 | `--run-command` | `-r` | *(auto-detected)* | Override the privilege escalation tool (`sudo`, `pkexec`, or a custom script) |
 | `--openconnect-path` | | `openconnect` | Path or command name for the OpenConnect binary |
 | `--interface-name` | | `kuvpn0` | Name for the TUN interface created by OpenConnect |
+| `--tunnel-mode` | | `full` | Tunnel mode: `full` (all traffic via VPN) or `manual` (custom vpnc-script) |
+| `--vpnc-script` | | *(none)* | Path to a custom vpnc-script. Required when `--tunnel-mode manual` is set. |
+
+---
+
+## Connection History
+
+```bash
+kuvpn --history
+```
+
+Displays a timestamped list of past connection events (Connected, Reconnected, Disconnected, Cancelled, Error) with session durations. Reconnected entries show the duration of the previous session segment as `(prev: Xm Ys)`.
 
 ---
 

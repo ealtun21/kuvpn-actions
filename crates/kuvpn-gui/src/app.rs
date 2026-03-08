@@ -94,6 +94,8 @@ pub struct KuVpnGui {
     /// Disabled when the user manually scrolls up; re-enabled when they
     /// scroll back to within ~1 % of the bottom.
     pub console_auto_scroll: bool,
+    /// Persistent rotating log file for post-mortem debugging.
+    pub log_file: Option<kuvpn::FileLogger>,
 }
 
 impl KuVpnGui {
@@ -271,6 +273,14 @@ impl KuVpnGui {
     fn handle_connect_pressed(&mut self) -> Task<Message> {
         if self.status != ConnectionStatus::Disconnected && self.status != ConnectionStatus::Error {
             return Task::none();
+        }
+
+        // Warn if a stale openconnect process is already running before we start a new session.
+        if kuvpn::is_openconnect_running() && self.status == ConnectionStatus::Disconnected {
+            log::warn!(
+                "An OpenConnect process is already running. \
+                 It will be monitored or replaced when the new session starts."
+            );
         }
 
         // Manual mode requires a tested, valid vpnc-script path before connecting.
@@ -712,7 +722,10 @@ impl KuVpnGui {
                     if parsed.level <= user_filter {
                         self.logs
                             .push(format!("[{}] {}", parsed.prefix(), parsed.message));
-                        if self.logs.len() > 500 {
+                        if let Some(ref mut f) = self.log_file {
+                            f.write_line(&raw_log);
+                        }
+                        if self.logs.len() > 5000 {
                             self.logs.remove(0);
                         }
                     }
@@ -1174,6 +1187,9 @@ impl Default for KuVpnGui {
             was_shown_for_prompt: false,
             last_diagnostic_path: None,
             console_auto_scroll: true,
+            log_file: kuvpn::get_user_data_dir()
+                .ok()
+                .and_then(|d| kuvpn::FileLogger::open(d.join("kuvpn-gui.log"))),
         }
     }
 }

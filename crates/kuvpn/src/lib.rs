@@ -7,6 +7,7 @@ pub mod browser;
 pub mod diagnostics;
 pub mod dsid;
 pub mod error;
+pub mod file_logger;
 pub mod handlers;
 #[cfg(windows)]
 pub mod helper;
@@ -25,6 +26,7 @@ pub use history::{
     append_event, clear_events, format_duration_secs, format_timestamp_unix, load_events,
     ConnectionEvent, EventKind,
 };
+pub use file_logger::FileLogger;
 pub use logger::init_logger;
 #[cfg(unix)]
 pub use openconnect::{

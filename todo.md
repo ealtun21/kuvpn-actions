@@ -2,6 +2,39 @@
 
 ---
 
+## Round 3
+
+### 1 — Detection gap fix (session.rs)
+- [x] `session.rs`: after `connected_detected` becomes true, watchdog uses `is_vpn_interface_up()` only (not combined check) to detect tunnel drops
+
+### 2 — Orphan process startup warning
+- [x] `app.rs`: warn if openconnect is already running when `handle_connect_pressed()` is called
+- [x] `cli/main.rs`: print yellow `!` warning if openconnect is already running at session start
+
+### 3 — Rotating file logger
+- [x] `kuvpn/src/file_logger.rs`: new `FileLogger` struct with 10 MiB rotation
+- [x] `lib.rs`: add `pub mod file_logger` and `pub use file_logger::FileLogger`
+- [x] `app.rs`: add `log_file: Option<kuvpn::FileLogger>` field; initialize from user data dir; write each log line to file
+- [x] `app.rs`: raise in-memory log cap from 500 → 5000
+- [x] `cli/main.rs`: open `kuvpn.log`; write each raw log message to file via `drain_logs`
+
+### 4 — Config versioning
+- [x] `config.rs`: add `config_version: u32` field with `#[serde(default)]`
+- [x] `config.rs`: add `CURRENT_VERSION = 1`, `migrate()` method
+- [x] `config.rs`: call `settings.migrate()` after deserialization in `load()`
+
+### 5 — Version bump script fixes
+- [x] `scripts/bump_version.sh`: update Inno Setup `.iss` version alongside `Cargo.toml`
+- [x] `.github/workflows/release.yml`: replace hardcoded `VERSION="2.0.3"` with dynamic extraction in both macOS jobs
+- [x] `packaging/windows/kuvpn.iss`: bump `MyAppVersion` to `3.0.0`
+
+### 6 — Documentation
+- [x] `docs/cli.md`: add `--history`, `--tunnel-mode`, `--vpnc-script` to Options table; add Connection History section
+- [x] `docs/gui.md`: update First Launch tabs list; add Tunnel mode + VPN Script to Settings Reference; add History section; add Automatic Reconnect section; add broken-tunnel troubleshooting entry
+- [x] `README.md`: update Features section with new capabilities
+
+---
+
 ## Round 2
 
 ### A — "Attempt N/M" in GUI during reconnect

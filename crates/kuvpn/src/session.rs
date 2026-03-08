@@ -496,7 +496,16 @@ impl SessionThread {
                 return None; // user-cancelled
             }
 
-            if self.is_vpn_connected() {
+            // During establishment: use the combined check (process OR interface).
+            // During monitoring: only trust the interface — openconnect can keep running
+            // while the tunnel is broken, which would mask the drop otherwise.
+            let currently_up = if connected_detected {
+                is_vpn_interface_up(&self.config.interface_name)
+            } else {
+                self.is_vpn_connected()
+            };
+
+            if currently_up {
                 if !connected_detected {
                     connected_detected = true;
                     self.connected_at = Some(Instant::now());

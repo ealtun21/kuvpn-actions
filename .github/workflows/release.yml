@@ -181,7 +181,7 @@ jobs:
       - name: Create App Bundle
         run: |
           APP_NAME="KUVPN"
-          VERSION="2.0.3"
+          VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
           TARGET="x86_64-apple-darwin"
           APP_BUNDLE="${APP_NAME}.app"
           rm -rf "$APP_BUNDLE"
@@ -259,7 +259,7 @@ jobs:
       - name: Create App Bundle
         run: |
           APP_NAME="KUVPN"
-          VERSION="2.0.3"
+          VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
           TARGET="aarch64-apple-darwin"
           APP_BUNDLE="${APP_NAME}.app"
           rm -rf "$APP_BUNDLE"

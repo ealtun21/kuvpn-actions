@@ -81,6 +81,11 @@ curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install
 - Full Auto, Visual Auto, and Manual login modes
 - Headless (background) browser for seamless authentication
 - Session persistence — stays logged in across reconnects
+- Automatic tunnel reconnect (up to 3 attempts) with configurable delay
+- Connection history with session durations and reconnect tracking
+- Full and Manual tunnel modes (Full routes all traffic; Manual accepts a custom vpnc-script)
+- Persistent 10 MB rolling log file for post-mortem debugging
+- Broken-tunnel detection: monitors the actual VPN interface, not just the process
 - Static CLI binary, no runtime dependencies
 
 ---
