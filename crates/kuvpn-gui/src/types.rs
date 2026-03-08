@@ -93,6 +93,7 @@ pub enum Message {
     TestVpncScript,
     VpncScriptTestResult(Option<String>),
     CopyLogs,
+    ConsoleScrolled(iced::widget::scrollable::RelativeOffset),
     DragWindow,
     MinimizeWindow,
     QuitRequested,

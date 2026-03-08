@@ -22,6 +22,17 @@ fn log_line_color(line: &str, p: Palette) -> Color {
     }
 }
 
+/// Splits `"[XXX] message text"` into `("[XXX]", "message text")`.
+/// Lines without a bracket prefix are returned as `("", line)`.
+fn split_log_prefix(line: &str) -> (&str, &str) {
+    if line.starts_with('[') {
+        if let Some(pos) = line.find("] ") {
+            return (&line[..pos + 1], &line[pos + 2..]);
+        }
+    }
+    ("", line)
+}
+
 impl KuVpnGui {
     pub fn view_console(&self) -> Element<'_, Message> {
         let s = self.styler();
@@ -31,11 +42,18 @@ impl KuVpnGui {
             .logs
             .iter()
             .map(|line| {
-                text(line.as_str())
-                    .font(Font::MONOSPACE)
-                    .size(12)
-                    .color(log_line_color(line, p))
-                    .into()
+                let color = log_line_color(line, p);
+                let (prefix, message) = split_log_prefix(line);
+                row![
+                    text(prefix).font(Font::MONOSPACE).size(12).color(color),
+                    text(message)
+                        .font(Font::MONOSPACE)
+                        .size(12)
+                        .color(color)
+                        .width(Length::Fill),
+                ]
+                .spacing(6)
+                .into()
             })
             .collect();
 
@@ -64,10 +82,10 @@ impl KuVpnGui {
                         }),
                 )
                 .height(Length::Fill)
-                .direction(scrollable::Direction::Both {
-                    vertical: scrollable::Scrollbar::default(),
-                    horizontal: scrollable::Scrollbar::default(),
-                })
+                .direction(scrollable::Direction::Vertical(
+                    scrollable::Scrollbar::default(),
+                ))
+                .on_scroll(|vp| Message::ConsoleScrolled(vp.relative_offset()))
                 .id(CONSOLE_SCROLL_ID.clone())
                 .style(s.scrollbar()),
             ]

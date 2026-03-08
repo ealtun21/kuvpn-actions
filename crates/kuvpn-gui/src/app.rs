@@ -90,6 +90,10 @@ pub struct KuVpnGui {
     /// Path to the most recently saved automation diagnostic bundle, if any.
     /// Shown as an "Open folder" button inside the automation warning card.
     pub last_diagnostic_path: Option<String>,
+    /// Whether the console log should snap to the bottom on new entries.
+    /// Disabled when the user manually scrolls up; re-enabled when they
+    /// scroll back to within ~1 % of the bottom.
+    pub console_auto_scroll: bool,
 }
 
 impl KuVpnGui {
@@ -702,10 +706,20 @@ impl KuVpnGui {
                         }
                     }
                 }
-                iced::widget::operation::snap_to(
-                    crate::view::console::CONSOLE_SCROLL_ID.clone(),
-                    iced::widget::operation::RelativeOffset::END,
-                )
+                if self.console_auto_scroll {
+                    iced::widget::operation::snap_to(
+                        crate::view::console::CONSOLE_SCROLL_ID.clone(),
+                        iced::widget::operation::RelativeOffset::END,
+                    )
+                } else {
+                    Task::none()
+                }
+            }
+
+            Message::ConsoleScrolled(offset) => {
+                // Re-engage auto-scroll when the user scrolls back within ~1% of the bottom.
+                self.console_auto_scroll = offset.y >= 0.99;
+                Task::none()
             }
 
             Message::MfaPushReceived(code) => {
@@ -1148,6 +1162,7 @@ impl Default for KuVpnGui {
             available_escalation_tools,
             was_shown_for_prompt: false,
             last_diagnostic_path: None,
+            console_auto_scroll: true,
         }
     }
 }
