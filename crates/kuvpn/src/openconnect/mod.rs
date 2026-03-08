@@ -207,6 +207,7 @@ impl OpenConnectRunner {
     }
 
     /// Starts an OpenConnect tunnel, returning the spawned [`VpnProcess`].
+    #[allow(clippy::too_many_arguments)]
     pub fn execute(
         &self,
         cookie_value: String,
@@ -256,7 +257,7 @@ pub fn execute_openconnect(
         // full_tunnel is acted upon in the session watchdog after the interface
         // comes up; the openconnect invocation itself does not need it.
         let _ = full_tunnel;
-        return unix::execute(
+        unix::execute(
             cookie_value,
             url,
             run_command,
@@ -267,12 +268,20 @@ pub fn execute_openconnect(
             sudo_password,
             custom_script,
             verbose,
-        );
+        )
     }
 
     #[cfg(windows)]
     {
-        let _ = (run_command, stdout, stderr, interface_name, sudo_password, custom_script);
-        return windows::execute(cookie_value, url, openconnect_path, full_tunnel);
+        let _ = (
+            run_command,
+            stdout,
+            stderr,
+            interface_name,
+            sudo_password,
+            custom_script,
+            verbose,
+        );
+        windows::execute(cookie_value, url, openconnect_path, full_tunnel)
     }
 }
