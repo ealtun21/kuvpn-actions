@@ -127,9 +127,9 @@ impl KuVpnGui {
 
         let tab_content = match self.current_tab {
             Tab::Connection => self.view_connection_tab(),
-            Tab::Settings => self.view_settings_tab(),
-            Tab::History => self.view_history_tab(),
-            Tab::Console => self.view_console_tab(),
+            Tab::Settings => self.view_advanced_settings(),
+            Tab::History => self.view_history(),
+            Tab::Console => self.view_console(),
         };
 
         // Build the column without placeholder spacers so that when no banners are
@@ -291,17 +291,5 @@ impl KuVpnGui {
             .height(Length::Fill)
             .style(s.card())
             .into()
-    }
-
-    fn view_settings_tab(&self) -> Element<'_, Message> {
-        self.view_advanced_settings()
-    }
-
-    fn view_history_tab(&self) -> Element<'_, Message> {
-        self.view_history()
-    }
-
-    fn view_console_tab(&self) -> Element<'_, Message> {
-        self.view_console()
     }
 }
