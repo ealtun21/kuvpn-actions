@@ -239,7 +239,7 @@ impl OpenConnectRunner {
 /// Starts an OpenConnect tunnel. Prefer [`OpenConnectRunner::execute`] over calling
 /// this directly.
 #[allow(clippy::too_many_arguments)]
-pub fn execute_openconnect(
+pub(crate) fn execute_openconnect(
     cookie_value: String,
     url: String,
     run_command: &Option<String>,
