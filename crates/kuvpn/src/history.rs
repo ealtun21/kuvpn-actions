@@ -46,9 +46,7 @@ pub fn now_unix() -> u64 {
 }
 
 fn history_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let mut dir = crate::utils::get_user_data_dir()?;
-    dir.pop(); // up from 'profile' → 'kuvpn'
-    Ok(dir.join("history.json"))
+    Ok(crate::utils::kuvpn_data_dir()?.join("history.json"))
 }
 
 /// Appends one event to the on-disk history file.

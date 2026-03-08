@@ -23,13 +23,13 @@ pub use error::{AuthError, ErrorCategory};
 pub use helper::run_vpn_helper_if_requested;
 pub use history::{append_event, clear_events, load_events, ConnectionEvent, EventKind};
 pub use logger::init_logger;
-pub use openconnect::{
-    execute_openconnect, get_openconnect_pid, get_vpn_interface_name, is_openconnect_running,
-    is_vpn_interface_up, kill_process, locate_openconnect, OpenConnectRunner,
-};
 #[cfg(unix)]
 pub use openconnect::{
     find_askpass, list_available_escalation_tools, needs_password_prompt, resolve_escalation_tool,
 };
+pub use openconnect::{
+    get_openconnect_pid, get_vpn_interface_name, is_openconnect_running, is_vpn_interface_up,
+    kill_process, locate_openconnect, OpenConnectRunner,
+};
 pub use session::{ConnectionStatus, ParsedLog, SessionConfig, TunnelMode, VpnSession};
-pub use utils::get_user_data_dir;
+pub use utils::{get_user_data_dir, has_session_data, wipe_user_data_dir};
