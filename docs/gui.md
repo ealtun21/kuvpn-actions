@@ -2,7 +2,7 @@
 
 [← Back to README](../README.md) · [CLI Documentation →](cli.md)
 
-**KUVPN** is the graphical frontend. It lives in your system tray, sends OS notifications for MFA and connection events, and automatically brings itself to focus when it needs your input.
+**KUVPN** is the graphical frontend. It lives in your system tray and automatically brings itself to focus when it needs your input.
 
 ---
 
@@ -92,7 +92,7 @@ Before connecting, go to **Settings** and verify:
 1. Switch to the **Connection** tab.
 2. Click **Connect**.
 3. The status changes to *Connecting* and the Console tab will show live log output.
-4. If MFA is required, KUVPN sends an OS notification and brings the window to the front so you can respond.
+4. If MFA is required, KUVPN brings the window to the front so you can respond.
 5. Once connected, the status shows *Connected* and the tray icon turns green.
 
 To disconnect, click **Disconnect** or use the tray menu.
@@ -126,17 +126,6 @@ The tray icon reflects the current connection state:
 | Shield + red X | Disconnected / error |
 
 Right-clicking the tray icon gives you a menu to show/hide the window, connect, disconnect, or quit.
-
----
-
-## Notifications
-
-KUVPN sends OS notifications for:
-
-- **MFA required** — shows the push code directly in the notification so you can approve it from your phone without switching back to the app. If a code needs to be typed, the app comes to the foreground automatically.
-- **Action required** — when the VPN process needs input (e.g., a password prompt), you are notified and the window is brought to focus.
-- **Connected** — confirmation when the tunnel is up.
-- **Connection error** — shown when something goes wrong, with a brief description.
 
 ---
 

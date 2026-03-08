@@ -76,12 +76,11 @@ curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install
 ## Features
 
 - Modern GUI with system tray and status icons
-- OS notifications for MFA codes and connection events
 - Auto-shows the window when input or MFA is required
 - Full Auto, Visual Auto, and Manual login modes
 - Headless (background) browser for seamless authentication
 - Session persistence — stays logged in across reconnects
-- Automatic tunnel reconnect (up to 3 attempts) with configurable delay
+- Automatic tunnel reconnect (up to 3 attempts) with a short delay between each attempt
 - Connection history with session durations and reconnect tracking
 - Full and Manual tunnel modes (Full routes all traffic; Manual accepts a custom vpnc-script)
 - Persistent 10 MB rolling log file for post-mortem debugging
