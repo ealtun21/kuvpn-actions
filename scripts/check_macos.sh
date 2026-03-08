@@ -26,6 +26,7 @@ if [ "$1" != "--no-container" ] && [ ! -f /.containerenv ]; then
             
             echo \"Updating toolchain...\"
             rustup update stable 2>&1 | tail -1
+            rustup component add clippy --toolchain stable 2>&1 | tail -1
 
             echo \"Checking x86_64-apple-darwin...\"
             export CC_x86_64_apple_darwin=x86_64-apple-darwin22.4-clang
