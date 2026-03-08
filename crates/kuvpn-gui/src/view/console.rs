@@ -4,6 +4,10 @@ use crate::types::Message;
 use iced::widget::{button, column, container, row, scrollable, text};
 use iced::{Alignment, Color, Element, Font, Length, Padding};
 
+/// Stable ID for the console log scrollable; used to programmatically snap to bottom.
+pub static CONSOLE_SCROLL_ID: std::sync::LazyLock<iced::widget::Id> =
+    std::sync::LazyLock::new(|| iced::widget::Id::new("console_logs"));
+
 fn log_line_color(line: &str, p: Palette) -> Color {
     if line.starts_with("[ERR]") || line.starts_with("[!]") {
         p.danger
@@ -64,6 +68,7 @@ impl KuVpnGui {
                     vertical: scrollable::Scrollbar::default(),
                     horizontal: scrollable::Scrollbar::default(),
                 })
+                .id(CONSOLE_SCROLL_ID.clone())
                 .style(s.scrollbar()),
             ]
             .spacing(12),
