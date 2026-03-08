@@ -7,13 +7,20 @@ use crate::types::{
     TRAY_ICON_CONNECTED, TRAY_ICON_CONNECTING, TRAY_ICON_DISCONNECTED, TRAY_ICON_NORMAL,
 };
 
+/// Groups the tray context-menu items that the app needs to update at runtime.
+pub struct TrayMenuItems {
+    pub status: MenuItem,
+    /// Kept alive so the menu item is not dropped; the tray library manages its state.
+    #[allow(dead_code)]
+    pub show: MenuItem,
+    pub connect: MenuItem,
+    pub disconnect: MenuItem,
+    pub wipe: MenuItem,
+}
+
 pub struct TrayComponents {
     pub tray: TrayIcon,
-    pub status_item: MenuItem,
-    pub show_item: MenuItem,
-    pub connect_item: MenuItem,
-    pub disconnect_item: MenuItem,
-    pub wipe_item: MenuItem,
+    pub menu_items: TrayMenuItems,
 }
 
 /// Render size for tray icons. Windows system tray uses 16–32 px; supply 32 so
@@ -106,11 +113,13 @@ pub fn init_tray() -> TrayComponents {
 
     TrayComponents {
         tray,
-        status_item,
-        show_item,
-        connect_item,
-        disconnect_item,
-        wipe_item,
+        menu_items: TrayMenuItems {
+            status: status_item,
+            show: show_item,
+            connect: connect_item,
+            disconnect: disconnect_item,
+            wipe: wipe_item,
+        },
     }
 }
 
