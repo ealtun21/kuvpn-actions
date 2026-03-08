@@ -499,6 +499,7 @@ pub(super) fn execute(
         )
     })?;
 
+    log::info!("Using escalation tool: {}", command_to_run);
     let tool_base = tool_base_name(&command_to_run);
     let askpass = find_askpass();
     let use_askpass = askpass.is_some() && needs_password_prompt(tool_base);

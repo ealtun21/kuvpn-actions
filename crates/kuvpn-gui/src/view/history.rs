@@ -112,7 +112,13 @@ fn view_event_row<'a>(event: &'a kuvpn::ConnectionEvent, s: Styler) -> Element<'
     let ts = event.format_timestamp();
     let duration_str = event
         .format_duration_display()
-        .map(|d| format!(" · {}", d))
+        .map(|d| {
+            if event.kind == EventKind::Reconnected {
+                format!(" · prev: {}", d)
+            } else {
+                format!(" · {}", d)
+            }
+        })
         .unwrap_or_default();
 
     let mut row_content = row![

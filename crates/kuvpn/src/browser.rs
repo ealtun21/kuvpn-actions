@@ -43,6 +43,11 @@ pub fn create_browser(
         } else {
             Duration::from_secs(120) // 2 minutes for headless mode
         };
+        log::info!(
+            "Browser idle timeout: {}s ({})",
+            idle_timeout.as_secs(),
+            if manual_mode { "manual mode" } else { "headless mode" }
+        );
 
         let mut options = LaunchOptions::default_builder();
         let mut launch_options = options

@@ -1,5 +1,47 @@
 # Bug Fixes & Improvements
 
+---
+
+## Round 2
+
+### A — "Attempt N/M" in GUI during reconnect
+Already works — `send_log("Info|Reconnecting... (attempt N/M)")` flows through `LogAppended`
+into `status_message` automatically (app.rs line 698). No code change needed.
+
+### B — "Max reconnect attempts reached" message
+- [x] `session.rs`: log `Warn|All N reconnect attempts exhausted. Giving up.` before final break
+
+### C — History silent corruption warning
+- [x] `history.rs`: both `append_event` and `load_events` now `log::warn!` on JSON parse error
+
+### D — Reconnect delay between attempts
+- [x] `session.rs`: 3s interruptible delay (30 × 100ms with cancel-token check) before each retry
+
+### E — Log escalation tool selection
+- [x] `unix.rs`: `log::info!("Using escalation tool: {}", ...)` after tool is resolved
+
+### F — Browser idle timeout not logged
+- [x] `browser.rs`: `log::info!("Browser idle timeout: {}s ({})", ...)` on every launch
+
+### G — Lock `.unwrap()` → `.expect("session mutex poisoned")`
+- [x] `session.rs`: all `.lock().unwrap()` replaced via replace_all
+
+### H — Tag Disconnected history event with reconnect attempt count
+- [x] `session.rs`: `cleanup(reconnect_attempts)` now sets `event.message` when `attempts > 0`
+
+### I — Show `prev:` label for Reconnected events in history
+- [x] `view/history.rs`: Reconnected events show `· prev: Xm Ys` instead of `· Xm Ys`
+- [x] `cli/main.rs`: same for CLI history output
+
+### Session log preservation on auto-retry
+- [x] `types.rs`: add `Message::AutoRetryConnect` variant
+- [x] `app.rs`: `ConnectPressed` clears logs (user-initiated); `AutoRetryConnect` instead appends
+  a separator banner `──── auto-retry: stale session cleared ────` and preserves history
+- [x] `app.rs`: stale-session retry path changed from `ConnectPressed` → `AutoRetryConnect`
+- [x] `app.rs`: `logs.clear()` moved out of `handle_connect_pressed()` into `ConnectPressed` handler
+
+---
+
 ## Status Key
 - [ ] Not started
 - [x] Done

@@ -304,7 +304,6 @@ impl KuVpnGui {
             crate::tray::update_tray_icon(tray, self.status);
         }
         self.sync_tray_menu_items(ConnectionStatus::Connecting);
-        self.logs.clear();
 
         let (headless, no_auto_login) = login_mode_flags(self.settings.login_mode_val);
         let config = SessionConfig {
@@ -398,7 +397,7 @@ impl KuVpnGui {
                     async { kuvpn::load_events().unwrap_or_default() },
                     Message::HistoryLoaded,
                 );
-                return Task::batch(vec![history_task, Task::done(Message::ConnectPressed)]);
+                return Task::batch(vec![history_task, Task::done(Message::AutoRetryConnect)]);
             }
 
             let is_automation_failure =
@@ -679,7 +678,17 @@ impl KuVpnGui {
                 }
                 Task::none()
             }
-            Message::ConnectPressed => self.handle_connect_pressed(),
+            Message::ConnectPressed => {
+                self.logs.clear();
+                self.handle_connect_pressed()
+            }
+            Message::AutoRetryConnect => {
+                // Auto-retry (e.g. stale session cleared): preserve logs and add a separator
+                // banner so the user can see what happened before the retry started.
+                self.logs
+                    .push("──────────── auto-retry: stale session cleared ────────────".to_string());
+                self.handle_connect_pressed()
+            }
             Message::DisconnectPressed => {
                 if let Some(session) = &self.session {
                     session.cancel();

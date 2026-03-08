@@ -62,6 +62,9 @@ pub enum Message {
     EmailChanged(String),
     LoginModeChanged(f32),
     ConnectPressed,
+    /// Like ConnectPressed but triggered automatically (stale session retry).
+    /// Does NOT clear the console log — appends a separator banner instead.
+    AutoRetryConnect,
     DisconnectPressed,
     LogAppended(String),
     RequestInput(Arc<InputRequestWrapper>),

@@ -261,7 +261,13 @@ fn print_history(styles: &CliStyles) -> ExitCode {
                 };
                 let dur = event
                     .format_duration_display()
-                    .map(|d| format!(" ({})", d))
+                    .map(|d| {
+                        if event.kind == kuvpn::EventKind::Reconnected {
+                            format!(" (prev: {})", d)
+                        } else {
+                            format!(" ({})", d)
+                        }
+                    })
                     .unwrap_or_default();
                 let msg = event
                     .message
