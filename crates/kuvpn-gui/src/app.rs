@@ -298,7 +298,7 @@ impl KuVpnGui {
         self.error_message = None;
         self.error_category = None;
         self.status_message = "Initializing...".to_string();
-        self.connection_start = Some(Instant::now());
+        self.connection_start = None;
         self.status = ConnectionStatus::Connecting;
         if let Some(tray) = &self.tray_icon {
             crate::tray::update_tray_icon(tray, self.status);
@@ -442,6 +442,7 @@ impl KuVpnGui {
         }
 
         if status == ConnectionStatus::Connected {
+            self.connection_start = Some(Instant::now());
             #[cfg(unix)]
             {
                 self.active_interface = kuvpn::get_vpn_interface_name("kuvpn0");
