@@ -243,7 +243,7 @@ impl SessionThread {
                 self.set_status(ConnectionStatus::Connected);
                 self.run_watchdog(None, is_reconnect, prev_duration)
             } else {
-                match self.launch_vpn(&provider.clone()) {
+                match self.launch_vpn(&provider) {
                     Ok(Some(proc)) => self.run_watchdog(Some(proc), is_reconnect, prev_duration),
                     Ok(None) => None, // user cancelled
                     Err(_) => None,   // auth/launch error
