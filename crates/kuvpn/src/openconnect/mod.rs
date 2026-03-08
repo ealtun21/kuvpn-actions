@@ -21,9 +21,10 @@ pub(crate) mod windows;
 pub(crate) use unix::kill_browser_process;
 #[cfg(unix)]
 pub use unix::{
-    find_askpass, get_openconnect_pid, get_vpn_interface_name, is_openconnect_running,
-    is_vpn_interface_up, kill_process, list_available_escalation_tools, needs_password_prompt,
-    resolve_escalation_tool, tool_requires_password, verify_escalation_password,
+    find_askpass, get_openconnect_pid, get_vpn_interface_name, is_conflicting_vpn_active,
+    is_openconnect_running, is_vpn_interface_up, kill_process, list_available_escalation_tools,
+    needs_password_prompt, resolve_escalation_tool, tool_requires_password,
+    verify_escalation_password,
 };
 
 #[cfg(windows)]

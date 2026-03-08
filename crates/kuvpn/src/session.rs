@@ -293,6 +293,15 @@ impl SessionThread {
         &mut self,
         provider: &Arc<dyn CredentialsProvider>,
     ) -> Result<Option<VpnProcess>, ()> {
+        #[cfg(unix)]
+        if crate::openconnect::is_conflicting_vpn_active() {
+            self.set_conn_error(
+                "Another full-tunnel VPN is already routing all traffic \
+                 (e.g. a Tailscale exit node). Disable it before connecting.",
+            );
+            return Err(());
+        }
+
         self.send_log("Info|Accessing campus gateway...");
         let dsid = self.acquire_dsid(provider)?;
 

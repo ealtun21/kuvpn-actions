@@ -30,7 +30,8 @@ pub use file_logger::FileLogger;
 pub use logger::init_logger;
 #[cfg(unix)]
 pub use openconnect::{
-    find_askpass, list_available_escalation_tools, needs_password_prompt, resolve_escalation_tool,
+    find_askpass, is_conflicting_vpn_active, list_available_escalation_tools,
+    needs_password_prompt, resolve_escalation_tool,
 };
 pub use openconnect::{
     get_openconnect_pid, get_vpn_interface_name, is_openconnect_running, is_vpn_interface_up,

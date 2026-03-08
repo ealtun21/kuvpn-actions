@@ -244,6 +244,55 @@ pub fn is_vpn_interface_up(interface_name: &str) -> bool {
     is_vpn_interface_up_impl(interface_name)
 }
 
+/// Returns `true` if another full-tunnel VPN is actively routing all traffic,
+/// which would conflict with KUVPN's full-tunnel mode.
+///
+/// On macOS: performs a routing lookup for `0.0.0.0` and checks whether the
+/// matched route exits via a `utun` interface.  Tailscale exit-node, Cisco
+/// AnyConnect, WireGuard full-tunnel, etc. all satisfy this condition.
+/// On Linux: same idea using `ip route get 0.0.0.0` and checking for a `tun`
+/// device.
+pub fn is_conflicting_vpn_active() -> bool {
+    conflicting_vpn_impl()
+}
+
+#[cfg(target_os = "macos")]
+fn conflicting_vpn_impl() -> bool {
+    let output = match Command::new("route").args(["-n", "get", "0.0.0.0"]).output() {
+        Ok(o) => o,
+        Err(_) => return false,
+    };
+    String::from_utf8_lossy(&output.stdout).lines().any(|line| {
+        let trimmed = line.trim();
+        if let Some(iface) = trimmed.strip_prefix("interface:") {
+            iface.trim().starts_with("utun")
+        } else {
+            false
+        }
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn conflicting_vpn_impl() -> bool {
+    // Linux: `ip route get 0.0.0.0` output looks like:
+    //   "0.0.0.0 dev tun0 src ..."  or  "0.0.0.0 via 192.168.1.1 dev eth0 ..."
+    let output = match Command::new("ip").args(["route", "get", "0.0.0.0"]).output() {
+        Ok(o) => o,
+        Err(_) => return false,
+    };
+    String::from_utf8_lossy(&output.stdout).lines().any(|line| {
+        let mut words = line.split_whitespace().peekable();
+        while let Some(w) = words.next() {
+            if w == "dev" {
+                if let Some(iface) = words.peek() {
+                    return iface.starts_with("tun");
+                }
+            }
+        }
+        false
+    })
+}
+
 #[cfg(target_os = "macos")]
 fn is_vpn_interface_up_impl(_interface_name: &str) -> bool {
     // Guard on openconnect actually running to avoid false positives from
