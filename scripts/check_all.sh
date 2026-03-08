@@ -12,6 +12,7 @@ echo "======================================"
 echo ""
 echo ">>> [1/3] Checking Linux (Native)"
 cargo check --workspace
+cargo clippy --workspace -- -D warnings
 echo "    ✓ Linux passed."
 
 echo ""

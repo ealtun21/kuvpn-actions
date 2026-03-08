@@ -18,14 +18,21 @@ pub(crate) mod windows;
 // ── Re-export platform functions ──────────────────────────────────────────────
 
 #[cfg(unix)]
+pub(crate) use unix::kill_browser_process;
+#[cfg(unix)]
 pub use unix::{
-    find_askpass, get_openconnect_pid, is_openconnect_running, is_vpn_interface_up, kill_process,
-    list_available_escalation_tools, needs_password_prompt, resolve_escalation_tool,
-    tool_requires_password, verify_escalation_password,
+    find_askpass, get_openconnect_pid, get_vpn_interface_name, is_openconnect_running,
+    is_vpn_interface_up, kill_process, list_available_escalation_tools, needs_password_prompt,
+    resolve_escalation_tool, tool_requires_password, verify_escalation_password,
 };
 
 #[cfg(windows)]
-pub use windows::{get_openconnect_pid, is_openconnect_running, is_vpn_interface_up, kill_process};
+pub(crate) use windows::kill_browser_process;
+#[cfg(windows)]
+pub use windows::{
+    get_openconnect_pid, get_vpn_interface_name, is_openconnect_running, is_vpn_interface_up,
+    kill_process,
+};
 
 // ── VpnProcess ────────────────────────────────────────────────────────────────
 
@@ -163,20 +170,6 @@ fn platform_fallback(_user_path: &str) -> Option<PathBuf> {
     None
 }
 
-// ── get_vpn_interface_name ────────────────────────────────────────────────────
-
-/// Returns the name of the currently active VPN interface, or `None` if not determinable.
-pub fn get_vpn_interface_name(configured_name: &str) -> Option<String> {
-    #[cfg(unix)]
-    return unix::vpn_interface_name(configured_name);
-
-    #[cfg(windows)]
-    {
-        let _ = configured_name;
-        None
-    }
-}
-
 // ── OpenConnectRunner ─────────────────────────────────────────────────────────
 
 /// Encapsulates static OpenConnect configuration (binary, interface, escalation tool).
@@ -207,6 +200,7 @@ impl OpenConnectRunner {
     }
 
     /// Starts an OpenConnect tunnel, returning the spawned [`VpnProcess`].
+    #[allow(clippy::too_many_arguments)]
     pub fn execute(
         &self,
         cookie_value: String,
@@ -238,7 +232,7 @@ impl OpenConnectRunner {
 /// Starts an OpenConnect tunnel. Prefer [`OpenConnectRunner::execute`] over calling
 /// this directly.
 #[allow(clippy::too_many_arguments)]
-pub fn execute_openconnect(
+pub(crate) fn execute_openconnect(
     cookie_value: String,
     url: String,
     run_command: &Option<String>,
@@ -256,7 +250,7 @@ pub fn execute_openconnect(
         // full_tunnel is acted upon in the session watchdog after the interface
         // comes up; the openconnect invocation itself does not need it.
         let _ = full_tunnel;
-        return unix::execute(
+        unix::execute(
             cookie_value,
             url,
             run_command,
@@ -267,12 +261,20 @@ pub fn execute_openconnect(
             sudo_password,
             custom_script,
             verbose,
-        );
+        )
     }
 
     #[cfg(windows)]
     {
-        let _ = (run_command, stdout, stderr, interface_name, sudo_password, custom_script);
-        return windows::execute(cookie_value, url, openconnect_path, full_tunnel);
+        let _ = (
+            run_command,
+            stdout,
+            stderr,
+            interface_name,
+            sudo_password,
+            custom_script,
+            verbose,
+        );
+        windows::execute(cookie_value, url, openconnect_path, full_tunnel)
     }
 }

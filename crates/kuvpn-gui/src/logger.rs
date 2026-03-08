@@ -38,7 +38,14 @@ impl log::Log for GuiLogger {
         }
         let Ok(guard) = self.tx.lock() else { return };
         if let Some(tx) = &*guard {
-            let _ = tx.try_send(format!("{:?}|{}", record.level(), record.args()));
+            let level = match record.level() {
+                log::Level::Error => "Error",
+                log::Level::Warn => "Warn",
+                log::Level::Info => "Info",
+                log::Level::Debug => "Debug",
+                log::Level::Trace => "Trace",
+            };
+            let _ = tx.try_send(format!("{}|{}", level, record.args()));
         }
     }
     fn flush(&self) {}

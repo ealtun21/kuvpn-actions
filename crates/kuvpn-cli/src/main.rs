@@ -8,7 +8,7 @@ mod credentials;
 use args::Args;
 use clap::Parser;
 use console::Style;
-use credentials::{format_duration, CliCredentialsProvider};
+use credentials::CliCredentialsProvider;
 use indicatif::{ProgressBar, ProgressStyle};
 use kuvpn::{
     init_logger, run_login_and_get_dsid, ConnectionStatus, LoginConfig, ParsedLog, SessionConfig,
@@ -42,10 +42,9 @@ impl CliStyles {
 
 // ── Log message handling ──────────────────────────────────────────────────────
 
-/// Processes one parsed log entry.
-///
-/// Returns `true` if the message was handled (no further processing needed).
-/// Mutates `spinner_active` and `connection_start` in place.
+/// Processes one parsed log entry, printing status updates and forwarding
+/// non-status messages to the logger. Mutates `spinner_active` and
+/// `connection_start` in place.
 fn handle_log(
     parsed: &ParsedLog,
     spinner: &ProgressBar,
@@ -53,7 +52,7 @@ fn handle_log(
     connection_start: &mut Option<Instant>,
     styles: &CliStyles,
     interface_name: &str,
-) -> bool {
+) {
     let msg = parsed.message.as_str();
 
     match msg {
@@ -63,7 +62,7 @@ fn handle_log(
                 *spinner_active = true;
             }
             spinner.set_message("Accessing campus gateway...");
-            return true;
+            return;
         }
         "Initializing tunnel..." => {
             clear_spinner(spinner, spinner_active);
@@ -72,7 +71,7 @@ fn handle_log(
                 styles.green.apply_to("✓")
             );
             eprintln!("  {} Initializing tunnel...", styles.green.apply_to("✓"));
-            return true;
+            return;
         }
         "VPN interface already active, monitoring..." => {
             clear_spinner(spinner, spinner_active);
@@ -81,39 +80,44 @@ fn handle_log(
                 styles.yellow.apply_to("~"),
             );
             *connection_start = Some(Instant::now());
-            return true;
+            return;
         }
         "Connected." => {
             clear_spinner(spinner, spinner_active);
             *connection_start = Some(Instant::now());
             print_connected(interface_name, styles);
             eprintln!("    {}", styles.dim.apply_to("Press Ctrl+C to disconnect"));
-            return true;
+            return;
         }
         "Disconnecting..." => {
             clear_spinner(spinner, spinner_active);
             eprintln!("  {} Disconnecting...", styles.dim.apply_to("●"));
-            return true;
+            return;
         }
         "Disconnected." => {
             clear_spinner(spinner, spinner_active);
             let duration = connection_start
-                .map(|s| format!(" (session: {})", format_duration(s.elapsed())))
+                .map(|s| {
+                    format!(
+                        " (session: {})",
+                        kuvpn::format_duration_secs(s.elapsed().as_secs())
+                    )
+                })
                 .unwrap_or_default();
             eprintln!(
                 "  {} Disconnected{}",
                 styles.dim.apply_to("●"),
                 styles.dim.apply_to(duration),
             );
-            return true;
+            return;
         }
         _ if msg.starts_with("Reconnecting") => {
             *connection_start = None;
             clear_spinner(spinner, spinner_active);
             eprintln!("  {} {}", styles.yellow.apply_to("~"), msg);
-            return true;
+            return;
         }
-        _ if msg.ends_with("requires a password. Prompting...") => return true,
+        _ if msg.ends_with("requires a password. Prompting...") => return,
         _ => {}
     }
 
@@ -139,7 +143,7 @@ fn handle_log(
                 styles.bold.apply_to("--clean"),
             );
         }
-        return true;
+        return;
     }
 
     // Pass through to the logger for non-status messages.
@@ -147,7 +151,6 @@ fn handle_log(
         log::Level::Warn => log::warn!("{}", msg),
         _ => log::info!("{}", msg),
     }
-    true
 }
 
 fn clear_spinner(spinner: &ProgressBar, active: &mut bool) {
@@ -157,22 +160,20 @@ fn clear_spinner(spinner: &ProgressBar, active: &mut bool) {
     }
 }
 
+#[cfg(unix)]
 fn print_connected(interface_name: &str, styles: &CliStyles) {
-    #[cfg(unix)]
-    {
-        let iface = kuvpn::get_vpn_interface_name(interface_name)
-            .unwrap_or_else(|| interface_name.to_string());
-        eprintln!(
-            "  {} Connected to KU VPN {}",
-            styles.green.apply_to("✓"),
-            styles.dim.apply_to(format!("(interface: {})", iface)),
-        );
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = interface_name;
-        eprintln!("  {} Connected to KU VPN", styles.green.apply_to("✓"));
-    }
+    let iface =
+        kuvpn::get_vpn_interface_name(interface_name).unwrap_or_else(|| interface_name.to_string());
+    eprintln!(
+        "  {} Connected to KU VPN {}",
+        styles.green.apply_to("✓"),
+        styles.dim.apply_to(format!("(interface: {})", iface)),
+    );
+}
+
+#[cfg(not(unix))]
+fn print_connected(_interface_name: &str, styles: &CliStyles) {
+    eprintln!("  {} Connected to KU VPN", styles.green.apply_to("✓"));
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -259,26 +260,15 @@ fn print_history(styles: &CliStyles) -> ExitCode {
                     kuvpn::EventKind::Error => styles.red.apply_to("Error       ").to_string(),
                 };
                 let dur = event
-                    .duration_secs
-                    .map(|d| {
-                        format!(
-                            " ({})",
-                            credentials::format_duration(std::time::Duration::from_secs(d))
-                        )
-                    })
+                    .format_duration_display()
+                    .map(|d| format!(" ({})", d))
                     .unwrap_or_default();
                 let msg = event
                     .message
                     .as_deref()
                     .map(|m| format!(" — {}", m))
                     .unwrap_or_default();
-                eprintln!(
-                    "  {} [{}]{}{}",
-                    kind,
-                    format_unix_ts(event.timestamp_unix),
-                    dur,
-                    msg
-                );
+                eprintln!("  {} [{}]{}{}", kind, event.format_timestamp(), dur, msg);
             }
             ExitCode::SUCCESS
         }
@@ -291,30 +281,6 @@ fn print_history(styles: &CliStyles) -> ExitCode {
             ExitCode::FAILURE
         }
     }
-}
-
-fn format_unix_ts(unix: u64) -> String {
-    let secs = unix;
-    let mins = secs / 60;
-    let hours_total = mins / 60;
-    let days_total = hours_total / 24;
-    let sec_part = secs % 60;
-    let min_part = mins % 60;
-    let hour_part = hours_total % 24;
-    let z = days_total + 719468;
-    let era = z / 146097;
-    let doe = z - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-    format!(
-        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
-        y, m, d, hour_part, min_part, sec_part
-    )
 }
 
 fn run_get_dsid(args: &Args, styles: &CliStyles) -> ExitCode {

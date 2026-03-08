@@ -9,6 +9,8 @@ use sysinfo::System;
 
 use super::VpnProcess;
 
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 // ── Private helpers ───────────────────────────────────────────────────────────
 
 /// Returns a string unique within this process lifetime (PID + nanosecond timestamp).
@@ -155,11 +157,24 @@ pub fn kill_process(pid: u32) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Force-kills a process by PID using taskkill (non-elevated, for browser processes).
+pub(crate) fn kill_browser_process(pid: u32) {
+    use std::os::windows::process::CommandExt;
+    let _ = std::process::Command::new("taskkill")
+        .creation_flags(CREATE_NO_WINDOW)
+        .args(["/F", "/PID", &pid.to_string()])
+        .status();
+}
+
+/// Returns `None` — Windows does not support interface-name-based VPN detection.
+pub fn get_vpn_interface_name(_configured_name: &str) -> Option<String> {
+    None
+}
+
 /// Returns `true` if the named VPN interface reports as "Connected" in netsh.
 pub fn is_vpn_interface_up(interface_name: &str) -> bool {
     use std::os::windows::process::CommandExt;
     use std::process::{Command as StdCommand, Stdio as StdStdio};
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
 
     let output = StdCommand::new("netsh")
         .creation_flags(CREATE_NO_WINDOW)

@@ -61,9 +61,6 @@ impl Default for GuiSettings {
 impl GuiSettings {
     pub fn save(&self) -> anyhow::Result<()> {
         let dir = kuvpn::utils::get_user_data_dir().map_err(|e| anyhow::anyhow!("{}", e))?;
-        if !dir.exists() {
-            fs::create_dir_all(&dir)?;
-        }
         let path = dir.join("gui_settings.json");
         let json = serde_json::to_string_pretty(self)?;
         fs::write(path, json)?;

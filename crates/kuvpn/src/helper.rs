@@ -18,6 +18,9 @@ use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 /// If the process was invoked with `--vpn-helper` as its first argument, runs
 /// the helper and returns the exit code.  Returns `None` for normal startup.
 ///
@@ -49,7 +52,6 @@ pub fn run_vpn_helper_if_requested() -> Option<i32> {
 #[cfg(windows)]
 fn run_helper(stop_file: &Path, oc_path: &str, url: &str, dsid: &str, full_tunnel: bool) -> i32 {
     use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
 
     // Start openconnect directly — we're already elevated, so it inherits our
     // token without a second UAC prompt.  CREATE_NO_WINDOW suppresses the console.
@@ -77,7 +79,9 @@ fn run_helper(stop_file: &Path, oc_path: &str, url: &str, dsid: &str, full_tunne
         if wait_for_tap_interface(30) {
             inject_full_tunnel_routes();
         } else {
-            eprintln!("vpn-helper: timed out waiting for TAP interface; full tunnel routes not applied");
+            eprintln!(
+                "vpn-helper: timed out waiting for TAP interface; full tunnel routes not applied"
+            );
         }
     }
 
@@ -107,7 +111,6 @@ fn run_helper(stop_file: &Path, oc_path: &str, url: &str, dsid: &str, full_tunne
 #[cfg(windows)]
 fn wait_for_tap_interface(timeout_secs: u64) -> bool {
     use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
 
     let deadline = std::time::Instant::now() + Duration::from_secs(timeout_secs);
     loop {
@@ -139,7 +142,6 @@ fn wait_for_tap_interface(timeout_secs: u64) -> bool {
 #[cfg(windows)]
 fn inject_full_tunnel_routes() {
     use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
 
     let script = "\
         $a = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.InterfaceDescription -match 'TAP' } | Select-Object -First 1; \

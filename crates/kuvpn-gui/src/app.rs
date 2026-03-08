@@ -2,10 +2,9 @@ use futures::SinkExt;
 use iced::{Subscription, Task};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tray_icon::{
-    menu::{MenuEvent, MenuItem},
-    TrayIcon, TrayIconEvent,
-};
+use tray_icon::{menu::MenuEvent, TrayIcon, TrayIconEvent};
+
+use crate::tray::TrayMenuItems;
 
 use crate::config::GuiSettings;
 use crate::provider::{GuiInteraction, GuiProvider};
@@ -70,11 +69,7 @@ pub struct KuVpnGui {
 
     // Tray & Window state
     pub tray_icon: Option<TrayIcon>,
-    pub status_item: Option<MenuItem>,
-    pub show_item: Option<MenuItem>,
-    pub connect_item: Option<MenuItem>,
-    pub disconnect_item: Option<MenuItem>,
-    pub wipe_item: Option<MenuItem>,
+    pub tray_menu: Option<TrayMenuItems>,
     pub window_id: Option<iced::window::Id>,
     pub is_visible: bool,
     pub is_minimized: bool,
@@ -95,6 +90,10 @@ pub struct KuVpnGui {
     /// Path to the most recently saved automation diagnostic bundle, if any.
     /// Shown as an "Open folder" button inside the automation warning card.
     pub last_diagnostic_path: Option<String>,
+    /// Whether the console log should snap to the bottom on new entries.
+    /// Disabled when the user manually scrolls up; re-enabled when they
+    /// scroll back to within ~1 % of the bottom.
+    pub console_auto_scroll: bool,
 }
 
 impl KuVpnGui {
@@ -260,17 +259,12 @@ impl KuVpnGui {
             status,
             ConnectionStatus::Disconnected | ConnectionStatus::Error
         );
-        if let Some(item) = &self.connect_item {
-            item.set_enabled(is_idle);
-        }
-        if let Some(item) = &self.disconnect_item {
-            item.set_enabled(status == ConnectionStatus::Connected);
-        }
-        if let Some(item) = &self.wipe_item {
-            item.set_enabled(is_idle);
-        }
-        if let Some(item) = &self.status_item {
-            item.set_text(crate::tray::status_label(status));
+        if let Some(menu) = &self.tray_menu {
+            menu.connect.set_enabled(is_idle);
+            menu.disconnect
+                .set_enabled(status == ConnectionStatus::Connected);
+            menu.wipe.set_enabled(is_idle);
+            menu.status.set_text(crate::tray::status_label(status));
         }
     }
 
@@ -286,11 +280,13 @@ impl KuVpnGui {
             let untested = self.vpnc_script_test_result.is_none();
             if empty || invalid || untested {
                 self.error_message = Some(if empty {
-                    "Manual mode requires a vpnc-script path. Enter a path and click Test.".to_string()
+                    "Manual mode requires a vpnc-script path. Enter a path and click Test."
+                        .to_string()
                 } else if invalid {
                     "The vpnc-script path is invalid or the file does not exist. Fix it and click Test.".to_string()
                 } else {
-                    "Please click Test to verify your vpnc-script path before connecting.".to_string()
+                    "Please click Test to verify your vpnc-script path before connecting."
+                        .to_string()
                 });
                 self.status = ConnectionStatus::Error;
                 return Task::none();
@@ -330,13 +326,11 @@ impl KuVpnGui {
             escalation_tool: Some(self.settings.escalation_tool.clone()),
             interface_name: "kuvpn0".to_string(),
             tunnel_mode: match self.settings.tunnel_mode_val.round() as i32 {
-                2 => kuvpn::TunnelMode::Manual(
-                    if self.settings.vpnc_script.is_empty() {
-                        None
-                    } else {
-                        Some(self.settings.vpnc_script.clone())
-                    },
-                ),
+                2 => kuvpn::TunnelMode::Manual(if self.settings.vpnc_script.is_empty() {
+                    None
+                } else {
+                    Some(self.settings.vpnc_script.clone())
+                }),
                 _ => kuvpn::TunnelMode::Full,
             },
         };
@@ -379,6 +373,33 @@ impl KuVpnGui {
 
         if let Some(e) = err {
             self.error_category = category;
+
+            // Auto-recover from a stale DSID caused by a previous force-quit.
+            // OpenConnect exiting immediately before the tunnel is established
+            // often means the server still holds an active session and rejected
+            // the new cookie. Wipe the cached browser session data and retry
+            // once — the guard is that has_session_data() returns false after
+            // a successful wipe, so a second failure won't loop.
+            if matches!(category, Some(kuvpn::ErrorCategory::Connection))
+                && e.contains("OpenConnect process exited before tunnel was established")
+                && kuvpn::has_session_data()
+                && kuvpn::wipe_user_data_dir().is_ok()
+            {
+                self.logs.push(
+                    "[INF] Stale session detected — session data cleared. Retrying...".to_string(),
+                );
+                self.status = ConnectionStatus::Disconnected;
+                self.sync_tray_menu_items(self.status);
+                if let Some(tray) = &self.tray_icon {
+                    crate::tray::update_tray_icon(tray, self.status);
+                }
+                let history_task = Task::perform(
+                    async { kuvpn::load_events().unwrap_or_default() },
+                    Message::HistoryLoaded,
+                );
+                return Task::batch(vec![history_task, Task::done(Message::ConnectPressed)]);
+            }
+
             let is_automation_failure =
                 matches!(category, Some(kuvpn::ErrorCategory::Authentication))
                     && (e.contains("Full Auto mode unable to complete login")
@@ -685,6 +706,19 @@ impl KuVpnGui {
                         }
                     }
                 }
+                if self.console_auto_scroll {
+                    iced::widget::operation::snap_to(
+                        crate::view::console::CONSOLE_SCROLL_ID.clone(),
+                        iced::widget::operation::RelativeOffset::END,
+                    )
+                } else {
+                    Task::none()
+                }
+            }
+
+            Message::ConsoleScrolled(offset) => {
+                // Re-engage auto-scroll when the user scrolls back within ~1% of the bottom.
+                self.console_auto_scroll = offset.y >= 0.99;
                 Task::none()
             }
 
@@ -743,24 +777,19 @@ impl KuVpnGui {
             }
             Message::ClearSessionPressed => {
                 self.reset_notification = false;
-                match kuvpn::get_user_data_dir() {
-                    Ok(dir) => {
-                        if dir.exists() {
-                            if let Err(e) = std::fs::remove_dir_all(&dir) {
-                                self.logs.push(format!("Failed to clear session: {}", e));
-                                self.session_wipe_result = Some(false);
-                            } else {
-                                self.logs.push("Saved session data wiped.".to_string());
-                                self.session_wipe_result = Some(true);
-                            }
-                        } else {
-                            self.logs.push("No active session found.".to_string());
+                if !kuvpn::has_session_data() {
+                    self.logs.push("No active session found.".to_string());
+                    self.session_wipe_result = Some(true);
+                } else {
+                    match kuvpn::wipe_user_data_dir() {
+                        Ok(()) => {
+                            self.logs.push("Saved session data wiped.".to_string());
                             self.session_wipe_result = Some(true);
                         }
-                    }
-                    Err(e) => {
-                        self.logs.push(format!("System error: {}", e));
-                        self.session_wipe_result = Some(false);
+                        Err(e) => {
+                            self.logs.push(format!("Failed to clear session: {}", e));
+                            self.session_wipe_result = Some(false);
+                        }
                     }
                 }
                 self.notif_fade = 1.0;
@@ -1121,11 +1150,7 @@ impl Default for KuVpnGui {
             history: Vec::new(),
             session: None,
             tray_icon: None,
-            status_item: None,
-            show_item: None,
-            connect_item: None,
-            disconnect_item: None,
-            wipe_item: None,
+            tray_menu: None,
             window_id: None,
             is_visible: false,
             is_minimized: false,
@@ -1137,6 +1162,7 @@ impl Default for KuVpnGui {
             available_escalation_tools,
             was_shown_for_prompt: false,
             last_diagnostic_path: None,
+            console_auto_scroll: true,
         }
     }
 }
