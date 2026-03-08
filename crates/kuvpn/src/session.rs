@@ -533,6 +533,18 @@ impl SessionThread {
                     .connected_at
                     .map(|t| t.elapsed().as_secs())
                     .unwrap_or(0);
+                // If the tunnel dropped within 3 s of coming up it is almost
+                // certainly a routing conflict (e.g. Tailscale exit node, another
+                // full-tunnel VPN) rather than a genuine network drop. Retrying
+                // would just loop with the same result, so treat it as an error.
+                if duration < 3 {
+                    self.send_log(
+                        "Warn|VPN tunnel dropped immediately after connecting. \
+                         If another VPN or exit node is active (e.g. Tailscale \
+                         exit node), disable it before connecting.",
+                    );
+                    return None; // not eligible for reconnect
+                }
                 return Some(duration); // unexpected disconnect — eligible for reconnect
             } else if start_time.elapsed() > timeout {
                 self.set_conn_error("VPN tunnel failed to establish within timeout");

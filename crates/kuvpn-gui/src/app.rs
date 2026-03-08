@@ -440,6 +440,17 @@ impl KuVpnGui {
     }
 
     fn handle_status_changed(&mut self, status: ConnectionStatus) -> Task<Message> {
+        // While connected, keep retrying the interface name lookup until we get one.
+        // The tun/utun interface may not be configured at the exact moment Connected
+        // first fires (openconnect starts before the vpnc-script runs).
+        #[cfg(unix)]
+        if self.status == ConnectionStatus::Connected
+            && status == ConnectionStatus::Connected
+            && self.active_interface.is_none()
+        {
+            self.active_interface = kuvpn::get_vpn_interface_name("kuvpn0");
+        }
+
         if self.status == status {
             return Task::none();
         }
