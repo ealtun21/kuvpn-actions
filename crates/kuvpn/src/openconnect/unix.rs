@@ -247,50 +247,28 @@ pub fn is_vpn_interface_up(interface_name: &str) -> bool {
 /// Returns `true` if another full-tunnel VPN is actively routing all traffic,
 /// which would conflict with KUVPN's full-tunnel mode.
 ///
-/// On macOS: performs a routing lookup for `0.0.0.0` and checks whether the
-/// matched route exits via a `utun` interface.  Tailscale exit-node, Cisco
-/// AnyConnect, WireGuard full-tunnel, etc. all satisfy this condition.
-/// On Linux: same idea using `ip route get 0.0.0.0` and checking for a `tun`
-/// device.
+/// Finds the interface carrying the default route via `netdev`, then checks
+/// whether it has the `IFF_POINTOPOINT` kernel flag via `nix::ifaddrs`.
+/// Full-tunnel VPNs (Tailscale exit node, WireGuard, OpenVPN, Cisco AnyConnect,
+/// etc.) always set this flag on their tunnel device and install a default route
+/// through it — no interface name matching required.
 pub fn is_conflicting_vpn_active() -> bool {
-    conflicting_vpn_impl()
-}
+    use nix::ifaddrs::getifaddrs;
+    use nix::net::if_::InterfaceFlags;
 
-#[cfg(target_os = "macos")]
-fn conflicting_vpn_impl() -> bool {
-    let output = match Command::new("route").args(["-n", "get", "0.0.0.0"]).output() {
-        Ok(o) => o,
+    let iface_name = match netdev::get_default_interface() {
+        Ok(iface) => iface.name,
         Err(_) => return false,
     };
-    String::from_utf8_lossy(&output.stdout).lines().any(|line| {
-        let trimmed = line.trim();
-        if let Some(iface) = trimmed.strip_prefix("interface:") {
-            iface.trim().starts_with("utun")
-        } else {
-            false
-        }
-    })
-}
 
-#[cfg(not(target_os = "macos"))]
-fn conflicting_vpn_impl() -> bool {
-    // Linux: `ip route get 0.0.0.0` output looks like:
-    //   "0.0.0.0 dev tun0 src ..."  or  "0.0.0.0 via 192.168.1.1 dev eth0 ..."
-    let output = match Command::new("ip").args(["route", "get", "0.0.0.0"]).output() {
-        Ok(o) => o,
+    let addrs = match getifaddrs() {
+        Ok(a) => a,
         Err(_) => return false,
     };
-    String::from_utf8_lossy(&output.stdout).lines().any(|line| {
-        let mut words = line.split_whitespace().peekable();
-        while let Some(w) = words.next() {
-            if w == "dev" {
-                if let Some(iface) = words.peek() {
-                    return iface.starts_with("tun");
-                }
-            }
-        }
-        false
-    })
+
+    addrs
+        .filter(|a| a.interface_name == iface_name)
+        .any(|a| a.flags.contains(InterfaceFlags::IFF_POINTOPOINT))
 }
 
 #[cfg(target_os = "macos")]
