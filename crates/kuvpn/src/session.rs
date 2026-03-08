@@ -193,7 +193,9 @@ impl SessionThread {
 
     fn send_log(&self, msg: impl Into<String>) {
         if let Some(tx) = self.logs_tx.lock().unwrap().as_ref() {
-            let _ = tx.send(msg.into());
+            if tx.send(msg.into()).is_err() {
+                log::debug!("Log channel closed; message dropped");
+            }
         }
     }
 
@@ -517,7 +519,10 @@ impl SessionThread {
                 return None;
             } else if let Some(ref mut p) = process {
                 if !p.is_process_alive() {
-                    self.set_conn_error("OpenConnect process exited before tunnel was established");
+                    let reason = p.failure_reason().unwrap_or_else(|| {
+                        "OpenConnect process exited before tunnel was established".to_string()
+                    });
+                    self.set_conn_error(&reason);
                     return None;
                 }
             }

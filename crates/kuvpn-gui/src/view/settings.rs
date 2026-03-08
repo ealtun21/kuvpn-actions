@@ -382,7 +382,7 @@ impl KuVpnGui {
                 "Full: all traffic is routed through the VPN tunnel.\n\nManual: supply your own vpnc-script for full control over routing and DNS.",
             ));
             // VPN Script field — visible only in Manual mode
-            if self.settings.tunnel_mode_val.round() as i32 == 2 {
+            if self.settings.is_manual_mode() {
                 let script_test = self.vpnc_script_test_result;
                 let rounding = s.rounding;
                 let script_row = row![

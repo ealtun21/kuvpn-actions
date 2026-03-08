@@ -274,7 +274,7 @@ impl KuVpnGui {
         }
 
         // Manual mode requires a tested, valid vpnc-script path before connecting.
-        if self.settings.tunnel_mode_val.round() as i32 == 2 {
+        if self.settings.is_manual_mode() {
             let empty = self.settings.vpnc_script.trim().is_empty();
             let invalid = self.vpnc_script_test_result == Some(false);
             let untested = self.vpnc_script_test_result.is_none();
@@ -325,13 +325,14 @@ impl KuVpnGui {
             },
             escalation_tool: Some(self.settings.escalation_tool.clone()),
             interface_name: "kuvpn0".to_string(),
-            tunnel_mode: match self.settings.tunnel_mode_val.round() as i32 {
-                2 => kuvpn::TunnelMode::Manual(if self.settings.vpnc_script.is_empty() {
+            tunnel_mode: if self.settings.is_manual_mode() {
+                kuvpn::TunnelMode::Manual(if self.settings.vpnc_script.is_empty() {
                     None
                 } else {
                     Some(self.settings.vpnc_script.clone())
-                }),
-                _ => kuvpn::TunnelMode::Full,
+                })
+            } else {
+                kuvpn::TunnelMode::Full
             },
         };
 

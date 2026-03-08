@@ -455,5 +455,5 @@ fn drain_logs(
 fn spinner_style() -> ProgressStyle {
     ProgressStyle::default_spinner()
         .template("{spinner:.cyan} {msg}")
-        .unwrap()
+        .expect("spinner template is always valid")
 }

@@ -246,7 +246,9 @@ pub fn is_vpn_interface_up(interface_name: &str) -> bool {
 
 #[cfg(target_os = "macos")]
 fn is_vpn_interface_up_impl(_interface_name: &str) -> bool {
-    detect_active_utun().is_some()
+    // Guard on openconnect actually running to avoid false positives from
+    // other VPN clients (Cisco AnyConnect, etc.) that also create utun interfaces.
+    is_openconnect_running() && detect_active_utun().is_some()
 }
 
 #[cfg(not(target_os = "macos"))]

@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Child, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use which::which;
 
 #[cfg(unix)]
@@ -45,8 +45,9 @@ pub enum VpnProcess {
     Windows {
         /// Set to `true` when the runas background thread finishes.
         thread_finished: Arc<AtomicBool>,
-        /// Set to `true` if the helper failed to start (e.g. UAC denied).
-        thread_failed: Arc<AtomicBool>,
+        /// Stores the failure reason when the helper fails (e.g. UAC denied, binary missing).
+        /// `None` means still running or succeeded cleanly.
+        thread_failed_reason: Arc<Mutex<Option<String>>>,
         /// Creating this file signals the elevated helper to stop OpenConnect.
         stop_file: std::path::PathBuf,
     },
@@ -75,13 +76,27 @@ impl VpnProcess {
             #[cfg(windows)]
             VpnProcess::Windows {
                 thread_finished,
-                thread_failed,
+                thread_failed_reason,
                 ..
-            } => windows::vpn_process_alive(thread_finished, thread_failed),
+            } => windows::vpn_process_alive(thread_finished, thread_failed_reason),
 
             #[allow(unreachable_patterns)]
             _ => false,
         }
+    }
+
+    /// Returns the failure reason stored by the Windows helper thread, if any.
+    /// Always returns `None` on Unix.
+    pub fn failure_reason(&self) -> Option<String> {
+        #[cfg(windows)]
+        if let VpnProcess::Windows {
+            thread_failed_reason,
+            ..
+        } = self
+        {
+            return thread_failed_reason.lock().ok()?.clone();
+        }
+        None
     }
 
     /// Waits for the process to finish (with a 5-second timeout on Windows).

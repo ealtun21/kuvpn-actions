@@ -59,6 +59,11 @@ impl Default for GuiSettings {
 }
 
 impl GuiSettings {
+    /// Returns `true` when the tunnel mode slider is set to Manual (value 2).
+    pub fn is_manual_mode(&self) -> bool {
+        self.tunnel_mode_val.round() as i32 == 2
+    }
+
     pub fn save(&self) -> anyhow::Result<()> {
         let dir = kuvpn::utils::get_user_data_dir().map_err(|e| anyhow::anyhow!("{}", e))?;
         let path = dir.join("gui_settings.json");
