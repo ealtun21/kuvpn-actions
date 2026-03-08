@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 // freshly saved diagnostic bundle. `SessionThread::acquire_dsid` reads
 // and clears this to forward the path over the structured log channel.
 thread_local! {
-    pub(crate) static PENDING_DIAG_PATH: RefCell<Option<PathBuf>> = RefCell::new(None);
+    pub(crate) static PENDING_DIAG_PATH: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
 }
 
 /// A snapshot of the browser state at the moment of an automation failure.
@@ -86,5 +86,5 @@ fn days_to_ymd(mut days: u64) -> (u32, u32, u32) {
 }
 
 fn is_leap(y: u32) -> bool {
-    (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
+    (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400)
 }
