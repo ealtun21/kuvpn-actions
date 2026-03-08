@@ -1069,7 +1069,11 @@ impl KuVpnGui {
     pub fn subscription(&self) -> Subscription<Message> {
         let mut subs = vec![];
 
-        if self.is_transitioning() {
+        let need_tick = self.is_transitioning()
+            || cfg!(unix)
+                && self.status == ConnectionStatus::Connected
+                && self.active_interface.is_none();
+        if need_tick {
             subs.push(
                 iced::time::every(std::time::Duration::from_millis(16)).map(|_| Message::Tick),
             );
