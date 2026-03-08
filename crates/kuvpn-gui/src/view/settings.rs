@@ -462,7 +462,12 @@ impl KuVpnGui {
                 col = col.push(script_row);
 
                 // Warning when path is empty or not yet tested
-                let script_warn: Element<'_, Message> = if self.settings.vpnc_script.trim().is_empty() {
+                let script_warn: Element<'_, Message> = if self
+                    .settings
+                    .vpnc_script
+                    .trim()
+                    .is_empty()
+                {
                     container(
                         row![
                             svg(svg::Handle::from_memory(ICON_INFO_SVG))
@@ -492,8 +497,12 @@ impl KuVpnGui {
                             svg(svg::Handle::from_memory(ICON_INFO_SVG))
                                 .width(13)
                                 .height(13)
-                                .style(move |_, _| svg::Style { color: Some(p.warning) }),
-                            text("Click Test to verify the script path before connecting.").size(10).color(p.warning),
+                                .style(move |_, _| svg::Style {
+                                    color: Some(p.warning)
+                                }),
+                            text("Click Test to verify the script path before connecting.")
+                                .size(10)
+                                .color(p.warning),
                         ]
                         .spacing(6)
                         .align_y(Alignment::Center),
@@ -501,7 +510,9 @@ impl KuVpnGui {
                     .width(Length::Fill)
                     .padding([6, 110])
                     .style(move |_| container::Style {
-                        background: Some(Color::from_rgba(p.warning.r, p.warning.g, p.warning.b, 0.07).into()),
+                        background: Some(
+                            Color::from_rgba(p.warning.r, p.warning.g, p.warning.b, 0.07).into(),
+                        ),
                         border: Border {
                             radius: 6.0.into(),
                             color: Color::from_rgba(p.warning.r, p.warning.g, p.warning.b, 0.25),

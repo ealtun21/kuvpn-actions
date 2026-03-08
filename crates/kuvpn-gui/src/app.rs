@@ -286,11 +286,13 @@ impl KuVpnGui {
             let untested = self.vpnc_script_test_result.is_none();
             if empty || invalid || untested {
                 self.error_message = Some(if empty {
-                    "Manual mode requires a vpnc-script path. Enter a path and click Test.".to_string()
+                    "Manual mode requires a vpnc-script path. Enter a path and click Test."
+                        .to_string()
                 } else if invalid {
                     "The vpnc-script path is invalid or the file does not exist. Fix it and click Test.".to_string()
                 } else {
-                    "Please click Test to verify your vpnc-script path before connecting.".to_string()
+                    "Please click Test to verify your vpnc-script path before connecting."
+                        .to_string()
                 });
                 self.status = ConnectionStatus::Error;
                 return Task::none();
@@ -330,13 +332,11 @@ impl KuVpnGui {
             escalation_tool: Some(self.settings.escalation_tool.clone()),
             interface_name: "kuvpn0".to_string(),
             tunnel_mode: match self.settings.tunnel_mode_val.round() as i32 {
-                2 => kuvpn::TunnelMode::Manual(
-                    if self.settings.vpnc_script.is_empty() {
-                        None
-                    } else {
-                        Some(self.settings.vpnc_script.clone())
-                    },
-                ),
+                2 => kuvpn::TunnelMode::Manual(if self.settings.vpnc_script.is_empty() {
+                    None
+                } else {
+                    Some(self.settings.vpnc_script.clone())
+                }),
                 _ => kuvpn::TunnelMode::Full,
             },
         };
@@ -379,6 +379,39 @@ impl KuVpnGui {
 
         if let Some(e) = err {
             self.error_category = category;
+
+            // Auto-recover from a stale DSID caused by a previous force-quit.
+            // OpenConnect exiting immediately before the tunnel is established
+            // often means the server still holds an active session and rejected
+            // the new cookie. Wipe the cached browser session data and retry
+            // once — the natural guard is that the dir no longer exists on a
+            // second failure, so we won't loop.
+            if matches!(category, Some(kuvpn::ErrorCategory::Connection))
+                && e.contains("OpenConnect process exited before tunnel was established")
+            {
+                if let Ok(dir) = kuvpn::get_user_data_dir() {
+                    if dir.exists() && std::fs::remove_dir_all(&dir).is_ok() {
+                        self.logs.push(
+                            "[INF] Stale session detected — session data cleared. Retrying..."
+                                .to_string(),
+                        );
+                        self.status = ConnectionStatus::Disconnected;
+                        self.sync_tray_menu_items(self.status);
+                        if let Some(tray) = &self.tray_icon {
+                            crate::tray::update_tray_icon(tray, self.status);
+                        }
+                        let history_task = Task::perform(
+                            async { kuvpn::load_events().unwrap_or_default() },
+                            Message::HistoryLoaded,
+                        );
+                        return Task::batch(vec![
+                            history_task,
+                            Task::done(Message::ConnectPressed),
+                        ]);
+                    }
+                }
+            }
+
             let is_automation_failure =
                 matches!(category, Some(kuvpn::ErrorCategory::Authentication))
                     && (e.contains("Full Auto mode unable to complete login")

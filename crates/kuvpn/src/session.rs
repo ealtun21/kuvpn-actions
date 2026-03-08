@@ -353,10 +353,7 @@ impl SessionThread {
                             if let Some(ref p) = path {
                                 self.send_log(format!("Debug|Generated vpnc-script: {}", p));
                                 if let Ok(content) = std::fs::read_to_string(p) {
-                                    self.send_log(format!(
-                                        "Debug|Script content:\n{}",
-                                        content
-                                    ));
+                                    self.send_log(format!("Debug|Script content:\n{}", content));
                                 }
                             }
                         }

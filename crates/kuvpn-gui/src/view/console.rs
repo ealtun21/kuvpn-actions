@@ -55,7 +55,7 @@ impl KuVpnGui {
                         .padding(Padding {
                             top: 0.0,
                             right: 24.0,
-                            bottom: 0.0,
+                            bottom: 16.0,
                             left: 0.0,
                         }),
                 )

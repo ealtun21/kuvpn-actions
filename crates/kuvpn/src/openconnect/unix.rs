@@ -305,8 +305,7 @@ impl Drop for TempScript {
 /// built-in script.
 pub fn generate_vpnc_script() -> anyhow::Result<TempScript> {
     // Pick a unique temp path: /tmp/kuvpn-vpnc-<pid>.sh
-    let path = std::env::temp_dir()
-        .join(format!("kuvpn-vpnc-{}.sh", std::process::id()));
+    let path = std::env::temp_dir().join(format!("kuvpn-vpnc-{}.sh", std::process::id()));
 
     std::fs::write(&path, VPNC_SCRIPT_TEMPLATE.as_bytes())?;
 

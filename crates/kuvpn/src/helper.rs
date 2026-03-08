@@ -77,7 +77,9 @@ fn run_helper(stop_file: &Path, oc_path: &str, url: &str, dsid: &str, full_tunne
         if wait_for_tap_interface(30) {
             inject_full_tunnel_routes();
         } else {
-            eprintln!("vpn-helper: timed out waiting for TAP interface; full tunnel routes not applied");
+            eprintln!(
+                "vpn-helper: timed out waiting for TAP interface; full tunnel routes not applied"
+            );
         }
     }
 
