@@ -241,39 +241,49 @@ pub fn kill_process(pid: u32) -> anyhow::Result<()> {
 
 /// Returns `true` if the VPN interface is up and active.
 pub fn is_vpn_interface_up(interface_name: &str) -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        let _ = interface_name;
-        return detect_active_utun().is_some();
-    }
+    is_vpn_interface_up_impl(interface_name)
+}
 
-    #[cfg(not(target_os = "macos"))]
-    {
-        let sys_path = format!("/sys/class/net/{}", interface_name);
-        if !std::path::Path::new(&sys_path).exists() {
-            return false;
-        }
-        let operstate = format!("{}/operstate", sys_path);
-        std::fs::read_to_string(&operstate)
-            .map(|s| s.trim() != "down")
-            .unwrap_or(true)
+#[cfg(target_os = "macos")]
+fn is_vpn_interface_up_impl(_interface_name: &str) -> bool {
+    detect_active_utun().is_some()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn is_vpn_interface_up_impl(interface_name: &str) -> bool {
+    let sys_path = format!("/sys/class/net/{}", interface_name);
+    if !std::path::Path::new(&sys_path).exists() {
+        return false;
     }
+    let operstate = format!("{}/operstate", sys_path);
+    std::fs::read_to_string(&operstate)
+        .map(|s| s.trim() != "down")
+        .unwrap_or(true)
 }
 
 /// Returns the active VPN interface name for this platform.
-pub fn vpn_interface_name(configured_name: &str) -> Option<String> {
-    #[cfg(target_os = "macos")]
-    {
-        let _ = configured_name;
-        return detect_active_utun();
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let sys_path = format!("/sys/class/net/{}", configured_name);
-        std::path::Path::new(&sys_path)
-            .exists()
-            .then(|| configured_name.to_string())
-    }
+pub fn get_vpn_interface_name(configured_name: &str) -> Option<String> {
+    vpn_interface_name_impl(configured_name)
+}
+
+#[cfg(target_os = "macos")]
+fn vpn_interface_name_impl(_configured_name: &str) -> Option<String> {
+    detect_active_utun()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn vpn_interface_name_impl(configured_name: &str) -> Option<String> {
+    let sys_path = format!("/sys/class/net/{}", configured_name);
+    std::path::Path::new(&sys_path)
+        .exists()
+        .then(|| configured_name.to_string())
+}
+
+/// Sends SIGKILL to a process by PID, for force-killing browser processes.
+pub(crate) fn kill_browser_process(pid: u32) {
+    use nix::sys::signal::{self, Signal};
+    use nix::unistd::Pid;
+    let _ = signal::kill(Pid::from_raw(pid as i32), Signal::SIGKILL);
 }
 
 // ── vpnc-script generation ────────────────────────────────────────────────────

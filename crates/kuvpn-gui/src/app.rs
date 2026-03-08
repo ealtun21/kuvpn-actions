@@ -379,23 +379,21 @@ impl KuVpnGui {
             if matches!(category, Some(kuvpn::ErrorCategory::Connection))
                 && e.contains("OpenConnect process exited before tunnel was established")
                 && kuvpn::has_session_data()
+                && kuvpn::wipe_user_data_dir().is_ok()
             {
-                if kuvpn::wipe_user_data_dir().is_ok() {
-                    self.logs.push(
-                        "[INF] Stale session detected — session data cleared. Retrying..."
-                            .to_string(),
-                    );
-                    self.status = ConnectionStatus::Disconnected;
-                    self.sync_tray_menu_items(self.status);
-                    if let Some(tray) = &self.tray_icon {
-                        crate::tray::update_tray_icon(tray, self.status);
-                    }
-                    let history_task = Task::perform(
-                        async { kuvpn::load_events().unwrap_or_default() },
-                        Message::HistoryLoaded,
-                    );
-                    return Task::batch(vec![history_task, Task::done(Message::ConnectPressed)]);
+                self.logs.push(
+                    "[INF] Stale session detected — session data cleared. Retrying...".to_string(),
+                );
+                self.status = ConnectionStatus::Disconnected;
+                self.sync_tray_menu_items(self.status);
+                if let Some(tray) = &self.tray_icon {
+                    crate::tray::update_tray_icon(tray, self.status);
                 }
+                let history_task = Task::perform(
+                    async { kuvpn::load_events().unwrap_or_default() },
+                    Message::HistoryLoaded,
+                );
+                return Task::batch(vec![history_task, Task::done(Message::ConnectPressed)]);
             }
 
             let is_automation_failure =

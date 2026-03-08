@@ -38,7 +38,7 @@ impl ConnectionEvent {
     }
 }
 
-pub fn now_unix() -> u64 {
+pub(crate) fn now_unix() -> u64 {
     SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()

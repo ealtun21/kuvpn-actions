@@ -322,51 +322,82 @@ impl SessionThread {
         result.map_err(|e| self.handle_login_error(e))
     }
 
+    /// Resolves the vpnc-script path for this session.
+    /// On Unix: generates a temp script for Full mode or returns the Manual path.
+    /// On non-Unix: always returns `None` (no script support).
+    #[cfg(unix)]
+    fn resolve_vpnc_script(&mut self) -> Result<Option<String>, ()> {
+        use crate::openconnect::unix::generate_vpnc_script;
+        let verbose = log::max_level() >= log::LevelFilter::Debug;
+        match &self.config.tunnel_mode {
+            TunnelMode::Manual(path) => {
+                if verbose {
+                    self.send_log(format!(
+                        "Debug|vpnc-script (manual): {}",
+                        path.as_deref().unwrap_or("<none — openconnect built-in>")
+                    ));
+                }
+                Ok(path.clone())
+            }
+            TunnelMode::Full => {
+                let script =
+                    generate_vpnc_script().map_err(|e| self.set_conn_error(&e.to_string()))?;
+                let path = script.path_str().map(str::to_string);
+                if verbose {
+                    if let Some(ref p) = path {
+                        self.send_log(format!("Debug|Generated vpnc-script: {}", p));
+                        if let Ok(content) = std::fs::read_to_string(p) {
+                            self.send_log(format!("Debug|Script content:\n{}", content));
+                        }
+                    }
+                }
+                self.active_script = Some(script);
+                Ok(path)
+            }
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn resolve_vpnc_script(&mut self) -> Result<Option<String>, ()> {
+        Ok(None)
+    }
+
+    /// Prompts for and verifies a sudo/pkexec password when needed.
+    /// On Unix: delegates to `resolve_sudo_password`.
+    /// On non-Unix: always returns `None`.
+    #[cfg(unix)]
+    fn resolve_sudo_pw(
+        &mut self,
+        provider: &Arc<dyn CredentialsProvider>,
+    ) -> Result<Option<String>, ()> {
+        let log_fn = |m| self.send_log(m);
+        let pw = resolve_sudo_password(
+            &self.config.escalation_tool,
+            provider.as_ref(),
+            &self.cancel_token,
+            &log_fn,
+        )
+        .map_err(|_| self.set_status(ConnectionStatus::Disconnected))?;
+        self.sudo_password = pw.clone();
+        Ok(pw)
+    }
+
+    #[cfg(not(unix))]
+    fn resolve_sudo_pw(
+        &mut self,
+        _provider: &Arc<dyn CredentialsProvider>,
+    ) -> Result<Option<String>, ()> {
+        Ok(None)
+    }
+
     fn start_openconnect(
         &mut self,
         dsid: String,
-        #[cfg_attr(not(unix), allow(unused_variables))] provider: &Arc<dyn CredentialsProvider>,
+        provider: &Arc<dyn CredentialsProvider>,
     ) -> Result<VpnProcess, ()> {
         let verbose = log::max_level() >= log::LevelFilter::Debug;
 
-        // Resolve the vpnc-script path. On Unix we generate one for Split/Full modes;
-        // on Windows no script is supported so this is always None.
-        let custom_script: Option<String> = {
-            #[cfg(unix)]
-            {
-                use crate::openconnect::unix::generate_vpnc_script;
-                match &self.config.tunnel_mode {
-                    TunnelMode::Manual(path) => {
-                        if verbose {
-                            self.send_log(format!(
-                                "Debug|vpnc-script (manual): {}",
-                                path.as_deref().unwrap_or("<none — openconnect built-in>")
-                            ));
-                        }
-                        path.clone()
-                    }
-                    TunnelMode::Full => {
-                        let script = generate_vpnc_script()
-                            .map_err(|e| self.set_conn_error(&e.to_string()))?;
-                        let path = script.path_str().map(str::to_string);
-                        if verbose {
-                            if let Some(ref p) = path {
-                                self.send_log(format!("Debug|Generated vpnc-script: {}", p));
-                                if let Ok(content) = std::fs::read_to_string(p) {
-                                    self.send_log(format!("Debug|Script content:\n{}", content));
-                                }
-                            }
-                        }
-                        self.active_script = Some(script);
-                        path
-                    }
-                }
-            }
-            #[cfg(not(unix))]
-            {
-                None
-            }
-        };
+        let custom_script = self.resolve_vpnc_script()?;
 
         let runner = OpenConnectRunner::locate(
             &self.config.openconnect_path,
@@ -390,25 +421,7 @@ impl SessionThread {
             ));
         }
 
-        let sudo_password = {
-            #[cfg(unix)]
-            {
-                let log_fn = |m| self.send_log(m);
-                let pw = resolve_sudo_password(
-                    &self.config.escalation_tool,
-                    provider.as_ref(),
-                    &self.cancel_token,
-                    &log_fn,
-                )
-                .map_err(|_| self.set_status(ConnectionStatus::Disconnected))?;
-                self.sudo_password = pw.clone();
-                pw
-            }
-            #[cfg(not(unix))]
-            {
-                None
-            }
-        };
+        let sudo_password = self.resolve_sudo_pw(provider)?;
 
         runner
             .execute(
@@ -629,27 +642,12 @@ impl VpnSession {
         self.cancel_token.cancel();
         self.transition_to_disconnecting();
 
-        // Force-kill the browser process to unblock any pending CDP calls
+        // Force-kill the browser process to unblock any pending CDP calls.
+        // SIGKILL on Unix / taskkill on Windows closes Chrome's socket immediately,
+        // unblocking any pending CDP calls without waiting for graceful shutdown.
         if let Some(pid) = self.take_browser_pid() {
             log::info!("Force-killing browser process (PID: {})", pid);
-            #[cfg(unix)]
-            {
-                use nix::sys::signal::{self, Signal};
-                use nix::unistd::Pid;
-                // Use SIGKILL so the OS closes Chrome's socket immediately,
-                // unblocking any pending CDP calls (e.g. poll_dsid / evaluate)
-                // without waiting for Chrome's graceful shutdown (up to 30 s).
-                let _ = signal::kill(Pid::from_raw(pid as i32), Signal::SIGKILL);
-            }
-            #[cfg(windows)]
-            {
-                use std::os::windows::process::CommandExt;
-                const CREATE_NO_WINDOW: u32 = 0x08000000;
-                let _ = std::process::Command::new("taskkill")
-                    .creation_flags(CREATE_NO_WINDOW)
-                    .args(["/F", "/PID", &pid.to_string()])
-                    .status();
-            }
+            crate::openconnect::kill_browser_process(pid);
         }
     }
 
