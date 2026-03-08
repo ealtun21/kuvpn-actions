@@ -2,10 +2,9 @@ use futures::SinkExt;
 use iced::{Subscription, Task};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tray_icon::{
-    menu::{MenuEvent, MenuItem},
-    TrayIcon, TrayIconEvent,
-};
+use tray_icon::{menu::MenuEvent, TrayIcon, TrayIconEvent};
+
+use crate::tray::TrayMenuItems;
 
 use crate::config::GuiSettings;
 use crate::provider::{GuiInteraction, GuiProvider};
@@ -70,11 +69,7 @@ pub struct KuVpnGui {
 
     // Tray & Window state
     pub tray_icon: Option<TrayIcon>,
-    pub status_item: Option<MenuItem>,
-    pub show_item: Option<MenuItem>,
-    pub connect_item: Option<MenuItem>,
-    pub disconnect_item: Option<MenuItem>,
-    pub wipe_item: Option<MenuItem>,
+    pub tray_menu: Option<TrayMenuItems>,
     pub window_id: Option<iced::window::Id>,
     pub is_visible: bool,
     pub is_minimized: bool,
@@ -260,17 +255,12 @@ impl KuVpnGui {
             status,
             ConnectionStatus::Disconnected | ConnectionStatus::Error
         );
-        if let Some(item) = &self.connect_item {
-            item.set_enabled(is_idle);
-        }
-        if let Some(item) = &self.disconnect_item {
-            item.set_enabled(status == ConnectionStatus::Connected);
-        }
-        if let Some(item) = &self.wipe_item {
-            item.set_enabled(is_idle);
-        }
-        if let Some(item) = &self.status_item {
-            item.set_text(crate::tray::status_label(status));
+        if let Some(menu) = &self.tray_menu {
+            menu.connect.set_enabled(is_idle);
+            menu.disconnect
+                .set_enabled(status == ConnectionStatus::Connected);
+            menu.wipe.set_enabled(is_idle);
+            menu.status.set_text(crate::tray::status_label(status));
         }
     }
 
@@ -384,31 +374,27 @@ impl KuVpnGui {
             // OpenConnect exiting immediately before the tunnel is established
             // often means the server still holds an active session and rejected
             // the new cookie. Wipe the cached browser session data and retry
-            // once — the natural guard is that the dir no longer exists on a
-            // second failure, so we won't loop.
+            // once — the guard is that has_session_data() returns false after
+            // a successful wipe, so a second failure won't loop.
             if matches!(category, Some(kuvpn::ErrorCategory::Connection))
                 && e.contains("OpenConnect process exited before tunnel was established")
+                && kuvpn::has_session_data()
             {
-                if let Ok(dir) = kuvpn::get_user_data_dir() {
-                    if dir.exists() && std::fs::remove_dir_all(&dir).is_ok() {
-                        self.logs.push(
-                            "[INF] Stale session detected — session data cleared. Retrying..."
-                                .to_string(),
-                        );
-                        self.status = ConnectionStatus::Disconnected;
-                        self.sync_tray_menu_items(self.status);
-                        if let Some(tray) = &self.tray_icon {
-                            crate::tray::update_tray_icon(tray, self.status);
-                        }
-                        let history_task = Task::perform(
-                            async { kuvpn::load_events().unwrap_or_default() },
-                            Message::HistoryLoaded,
-                        );
-                        return Task::batch(vec![
-                            history_task,
-                            Task::done(Message::ConnectPressed),
-                        ]);
+                if kuvpn::wipe_user_data_dir().is_ok() {
+                    self.logs.push(
+                        "[INF] Stale session detected — session data cleared. Retrying..."
+                            .to_string(),
+                    );
+                    self.status = ConnectionStatus::Disconnected;
+                    self.sync_tray_menu_items(self.status);
+                    if let Some(tray) = &self.tray_icon {
+                        crate::tray::update_tray_icon(tray, self.status);
                     }
+                    let history_task = Task::perform(
+                        async { kuvpn::load_events().unwrap_or_default() },
+                        Message::HistoryLoaded,
+                    );
+                    return Task::batch(vec![history_task, Task::done(Message::ConnectPressed)]);
                 }
             }
 
@@ -718,7 +704,10 @@ impl KuVpnGui {
                         }
                     }
                 }
-                Task::none()
+                iced::widget::operation::snap_to(
+                    crate::view::console::CONSOLE_SCROLL_ID.clone(),
+                    iced::widget::operation::RelativeOffset::END,
+                )
             }
 
             Message::MfaPushReceived(code) => {
@@ -776,24 +765,19 @@ impl KuVpnGui {
             }
             Message::ClearSessionPressed => {
                 self.reset_notification = false;
-                match kuvpn::get_user_data_dir() {
-                    Ok(dir) => {
-                        if dir.exists() {
-                            if let Err(e) = std::fs::remove_dir_all(&dir) {
-                                self.logs.push(format!("Failed to clear session: {}", e));
-                                self.session_wipe_result = Some(false);
-                            } else {
-                                self.logs.push("Saved session data wiped.".to_string());
-                                self.session_wipe_result = Some(true);
-                            }
-                        } else {
-                            self.logs.push("No active session found.".to_string());
+                if !kuvpn::has_session_data() {
+                    self.logs.push("No active session found.".to_string());
+                    self.session_wipe_result = Some(true);
+                } else {
+                    match kuvpn::wipe_user_data_dir() {
+                        Ok(()) => {
+                            self.logs.push("Saved session data wiped.".to_string());
                             self.session_wipe_result = Some(true);
                         }
-                    }
-                    Err(e) => {
-                        self.logs.push(format!("System error: {}", e));
-                        self.session_wipe_result = Some(false);
+                        Err(e) => {
+                            self.logs.push(format!("Failed to clear session: {}", e));
+                            self.session_wipe_result = Some(false);
+                        }
                     }
                 }
                 self.notif_fade = 1.0;
@@ -1154,11 +1138,7 @@ impl Default for KuVpnGui {
             history: Vec::new(),
             session: None,
             tray_icon: None,
-            status_item: None,
-            show_item: None,
-            connect_item: None,
-            disconnect_item: None,
-            wipe_item: None,
+            tray_menu: None,
             window_id: None,
             is_visible: false,
             is_minimized: false,
