@@ -356,6 +356,12 @@ impl SessionThread {
                 Ok(path.clone())
             }
             TunnelMode::Full => {
+                // Drop any existing script handle first. Both the old and new
+                // TempScript use the same path (keyed on process PID which never
+                // changes across reconnects). If we let the old handle be dropped
+                // by the assignment below, its Drop impl deletes the file AFTER
+                // the new one has already been written to the same path.
+                self.active_script = None;
                 let script =
                     generate_vpnc_script().map_err(|e| self.set_conn_error(&e.to_string()))?;
                 let path = script.path_str().map(str::to_string);
