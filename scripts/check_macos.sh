@@ -30,14 +30,16 @@ if [ "$1" != "--no-container" ] && [ ! -f /.containerenv ]; then
             echo \"Checking x86_64-apple-darwin...\"
             export CC_x86_64_apple_darwin=x86_64-apple-darwin22.4-clang
             export CXX_x86_64_apple_darwin=x86_64-apple-darwin22.4-clang++
-            export LIBZ_SYS_STATIC=1 
+            export LIBZ_SYS_STATIC=1
             cargo +stable check --target x86_64-apple-darwin --workspace
+            cargo +stable clippy --target x86_64-apple-darwin --workspace -- -D warnings
 
             echo \"Checking aarch64-apple-darwin...\"
             export CC_aarch64_apple_darwin=aarch64-apple-darwin22.4-clang
             export CXX_aarch64_apple_darwin=aarch64-apple-darwin22.4-clang++
-            export LIBZ_SYS_STATIC=1 
+            export LIBZ_SYS_STATIC=1
             cargo +stable check --target aarch64-apple-darwin --workspace
+            cargo +stable clippy --target aarch64-apple-darwin --workspace -- -D warnings
         "
         echo "macOS checks passed (via container)."
         exit 0
@@ -50,8 +52,10 @@ fi
 
 echo "Checking x86_64-apple-darwin (Native)..."
 cargo check --target x86_64-apple-darwin --workspace
+cargo clippy --target x86_64-apple-darwin --workspace -- -D warnings
 
 echo "Checking aarch64-apple-darwin (Native)..."
 cargo check --target aarch64-apple-darwin --workspace
+cargo clippy --target aarch64-apple-darwin --workspace -- -D warnings
 
 echo "macOS checks passed."

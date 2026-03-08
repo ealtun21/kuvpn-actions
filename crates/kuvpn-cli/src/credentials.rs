@@ -4,22 +4,6 @@ use indicatif::ProgressBar;
 use kuvpn::utils::CredentialsProvider;
 use std::sync::Arc;
 
-/// Format a duration into a human-readable string like "1h 23m 45s".
-pub(crate) fn format_duration(duration: std::time::Duration) -> String {
-    let total_secs = duration.as_secs();
-    let hours = total_secs / 3600;
-    let minutes = (total_secs % 3600) / 60;
-    let seconds = total_secs % 60;
-
-    if hours > 0 {
-        format!("{}h {}m {}s", hours, minutes, seconds)
-    } else if minutes > 0 {
-        format!("{}m {}s", minutes, seconds)
-    } else {
-        format!("{}s", seconds)
-    }
-}
-
 fn read_masked_password(prompt: &str) -> String {
     let term = Term::stderr();
     let _ = term.write_str(prompt);

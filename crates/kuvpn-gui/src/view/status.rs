@@ -181,12 +181,7 @@ impl KuVpnGui {
 
         if let Some(start_time) = self.connection_start {
             let elapsed = start_time.elapsed();
-            let duration_str = format!(
-                "{}h {}m {}s",
-                elapsed.as_secs() / 3600,
-                (elapsed.as_secs() % 3600) / 60,
-                elapsed.as_secs() % 60
-            );
+            let duration_str = kuvpn::format_duration_secs(elapsed.as_secs());
 
             let pill_style = s.pill(p.success);
 

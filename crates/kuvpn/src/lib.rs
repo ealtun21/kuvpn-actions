@@ -21,7 +21,10 @@ pub use dsid::{run_login_and_get_dsid, LoginConfig};
 pub use error::{AuthError, ErrorCategory};
 #[cfg(windows)]
 pub use helper::run_vpn_helper_if_requested;
-pub use history::{append_event, clear_events, load_events, ConnectionEvent, EventKind};
+pub use history::{
+    append_event, clear_events, format_duration_secs, format_timestamp_unix, load_events,
+    ConnectionEvent, EventKind,
+};
 pub use logger::init_logger;
 #[cfg(unix)]
 pub use openconnect::{

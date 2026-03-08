@@ -50,41 +50,10 @@ pub(crate) fn now_iso() -> String {
     let min = (secs_of_day % 3600) / 60;
     let sec = secs_of_day % 60;
 
-    let days = ts / 86400;
-    let (year, month, day) = days_to_ymd(days);
+    let (year, month, day) = crate::history::days_to_ymd(ts / 86400);
 
     format!(
         "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}",
         year, month, day, hour, min, sec
     )
-}
-
-fn days_to_ymd(mut days: u64) -> (u32, u32, u32) {
-    let mut year = 1970u32;
-    loop {
-        let dy = if is_leap(year) { 366u64 } else { 365u64 };
-        if days < dy {
-            break;
-        }
-        days -= dy;
-        year += 1;
-    }
-    let months: [u64; 12] = if is_leap(year) {
-        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    } else {
-        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    };
-    let mut month = 1u32;
-    for &dim in &months {
-        if days < dim {
-            break;
-        }
-        days -= dim;
-        month += 1;
-    }
-    (year, month, days as u32 + 1)
-}
-
-fn is_leap(y: u32) -> bool {
-    (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400)
 }

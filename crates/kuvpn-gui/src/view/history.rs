@@ -88,12 +88,7 @@ impl KuVpnGui {
         .height(Length::Fill);
 
         container(content)
-            .padding(Padding {
-                top: 24.0,
-                right: 24.0,
-                bottom: 24.0,
-                left: 24.0,
-            })
+            .padding(24)
             .width(Length::Fill)
             .height(Length::Fill)
             .style(s.card())
@@ -114,10 +109,10 @@ fn view_event_row<'a>(event: &'a kuvpn::ConnectionEvent, s: Styler) -> Element<'
         EventKind::Error => (p.danger, "Error"),
     };
 
-    let ts = format_timestamp(event.timestamp_unix);
+    let ts = event.format_timestamp();
     let duration_str = event
-        .duration_secs
-        .map(|d| format!(" · {}", format_duration(d)))
+        .format_duration_display()
+        .map(|d| format!(" · {}", d))
         .unwrap_or_default();
 
     let mut row_content = row![
@@ -159,51 +154,4 @@ fn view_event_row<'a>(event: &'a kuvpn::ConnectionEvent, s: Styler) -> Element<'
         .width(Length::Fill)
         .style(s.history_row())
         .into()
-}
-
-fn format_timestamp(unix: u64) -> String {
-    // Simple formatting without chrono: derive date parts from epoch arithmetic.
-    // We need the total seconds since epoch to compute readable date/time.
-    let secs = unix;
-    let mins = secs / 60;
-    let hours_total = mins / 60;
-    let days_total = hours_total / 24;
-
-    let sec_part = secs % 60;
-    let min_part = mins % 60;
-    let hour_part = hours_total % 24;
-
-    // Rough date from days since epoch (ignores leap seconds, good enough for display)
-    let (year, month, day) = days_to_ymd(days_total);
-
-    format!(
-        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
-        year, month, day, hour_part, min_part, sec_part
-    )
-}
-
-/// Very small Gregorian calendar approximation (no leap-second correction).
-fn days_to_ymd(days: u64) -> (u64, u64, u64) {
-    // Use the proleptic Gregorian algorithm from the civil::date paper
-    let z = days + 719468;
-    let era = z / 146097;
-    let doe = z - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-    (y, m, d)
-}
-
-fn format_duration(secs: u64) -> String {
-    if secs < 60 {
-        format!("{}s", secs)
-    } else if secs < 3600 {
-        format!("{}m {}s", secs / 60, secs % 60)
-    } else {
-        format!("{}h {}m", secs / 3600, (secs % 3600) / 60)
-    }
 }

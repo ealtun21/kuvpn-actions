@@ -11,8 +11,7 @@ use crate::types::{
 pub struct TrayMenuItems {
     pub status: MenuItem,
     /// Kept alive so the menu item is not dropped; the tray library manages its state.
-    #[allow(dead_code)]
-    pub show: MenuItem,
+    _show: MenuItem,
     pub connect: MenuItem,
     pub disconnect: MenuItem,
     pub wipe: MenuItem,
@@ -115,7 +114,7 @@ pub fn init_tray() -> TrayComponents {
         tray,
         menu_items: TrayMenuItems {
             status: status_item,
-            show: show_item,
+            _show: show_item,
             connect: connect_item,
             disconnect: disconnect_item,
             wipe: wipe_item,
