@@ -2,7 +2,7 @@
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use runas::Command as AdminCommand;
 use sysinfo::System;
@@ -37,9 +37,13 @@ pub(super) fn kill_vpn_process(stop_file: &Path) -> anyhow::Result<()> {
 
 pub(super) fn vpn_process_alive(
     thread_finished: &Arc<AtomicBool>,
-    thread_failed: &Arc<AtomicBool>,
+    thread_failed_reason: &Arc<Mutex<Option<String>>>,
 ) -> bool {
-    if thread_failed.load(Ordering::SeqCst) {
+    if thread_failed_reason
+        .lock()
+        .map(|g| g.is_some())
+        .unwrap_or(false)
+    {
         return false;
     }
     if !thread_finished.load(Ordering::SeqCst) {
@@ -88,30 +92,29 @@ pub(super) fn execute(
 
     // `runas` blocks until the helper exits, so we run it on a background thread.
     let thread_finished = Arc::new(AtomicBool::new(false));
-    let thread_failed = Arc::new(AtomicBool::new(false));
+    let thread_failed_reason: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let tf_clone = Arc::clone(&thread_finished);
-    let fail_clone = Arc::clone(&thread_failed);
+    let fail_clone = Arc::clone(&thread_failed_reason);
     std::thread::spawn(move || {
-        let failed = match cmd.status() {
-            Ok(status) if !status.success() => {
-                log::error!("VPN helper exited with failure.");
-                true
-            }
-            Err(e) => {
-                log::error!("Failed to run elevated helper: {}", e);
-                true
-            }
-            _ => false,
+        let reason = match cmd.status() {
+            Ok(status) if !status.success() => Some(
+                "VPN helper exited with a non-zero status — UAC may have been denied or openconnect failed to start".to_string(),
+            ),
+            Err(e) => Some(format!("Failed to run elevated VPN helper: {e}")),
+            _ => None,
         };
-        if failed {
-            fail_clone.store(true, Ordering::SeqCst);
+        if let Some(ref msg) = reason {
+            log::error!("{}", msg);
+            if let Ok(mut guard) = fail_clone.lock() {
+                *guard = Some(msg.clone());
+            }
         }
         tf_clone.store(true, Ordering::SeqCst);
     });
 
     Ok(VpnProcess::Windows {
         thread_finished,
-        thread_failed,
+        thread_failed_reason,
         stop_file,
     })
 }

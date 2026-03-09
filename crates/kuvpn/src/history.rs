@@ -109,7 +109,13 @@ pub fn append_event(event: &ConnectionEvent) -> Result<(), Box<dyn std::error::E
     let path = history_path()?;
     let mut events: Vec<ConnectionEvent> = if path.exists() {
         let content = std::fs::read_to_string(&path)?;
-        serde_json::from_str(&content).unwrap_or_default()
+        match serde_json::from_str(&content) {
+            Ok(v) => v,
+            Err(e) => {
+                log::warn!("history.json parse error (treating as empty): {}", e);
+                Vec::new()
+            }
+        }
     } else {
         Vec::new()
     };
@@ -125,7 +131,13 @@ pub fn load_events() -> Result<Vec<ConnectionEvent>, Box<dyn std::error::Error>>
         return Ok(Vec::new());
     }
     let content = std::fs::read_to_string(&path)?;
-    Ok(serde_json::from_str(&content).unwrap_or_default())
+    match serde_json::from_str(&content) {
+        Ok(v) => Ok(v),
+        Err(e) => {
+            log::warn!("history.json parse error (returning empty history): {}", e);
+            Ok(Vec::new())
+        }
+    }
 }
 
 /// Removes the history file.

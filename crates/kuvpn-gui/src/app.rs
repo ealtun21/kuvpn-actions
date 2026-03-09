@@ -94,6 +94,8 @@ pub struct KuVpnGui {
     /// Disabled when the user manually scrolls up; re-enabled when they
     /// scroll back to within ~1 % of the bottom.
     pub console_auto_scroll: bool,
+    /// Persistent rotating log file for post-mortem debugging.
+    pub log_file: Option<kuvpn::FileLogger>,
 }
 
 impl KuVpnGui {
@@ -273,8 +275,16 @@ impl KuVpnGui {
             return Task::none();
         }
 
+        // Warn if a stale openconnect process is already running before we start a new session.
+        if kuvpn::is_openconnect_running() && self.status == ConnectionStatus::Disconnected {
+            log::warn!(
+                "An OpenConnect process is already running. \
+                 It will be monitored or replaced when the new session starts."
+            );
+        }
+
         // Manual mode requires a tested, valid vpnc-script path before connecting.
-        if self.settings.tunnel_mode_val.round() as i32 == 2 {
+        if self.settings.is_manual_mode() {
             let empty = self.settings.vpnc_script.trim().is_empty();
             let invalid = self.vpnc_script_test_result == Some(false);
             let untested = self.vpnc_script_test_result.is_none();
@@ -304,7 +314,6 @@ impl KuVpnGui {
             crate::tray::update_tray_icon(tray, self.status);
         }
         self.sync_tray_menu_items(ConnectionStatus::Connecting);
-        self.logs.clear();
 
         let (headless, no_auto_login) = login_mode_flags(self.settings.login_mode_val);
         let config = SessionConfig {
@@ -325,13 +334,14 @@ impl KuVpnGui {
             },
             escalation_tool: Some(self.settings.escalation_tool.clone()),
             interface_name: "kuvpn0".to_string(),
-            tunnel_mode: match self.settings.tunnel_mode_val.round() as i32 {
-                2 => kuvpn::TunnelMode::Manual(if self.settings.vpnc_script.is_empty() {
+            tunnel_mode: if self.settings.is_manual_mode() {
+                kuvpn::TunnelMode::Manual(if self.settings.vpnc_script.is_empty() {
                     None
                 } else {
                     Some(self.settings.vpnc_script.clone())
-                }),
-                _ => kuvpn::TunnelMode::Full,
+                })
+            } else {
+                kuvpn::TunnelMode::Full
             },
         };
 
@@ -397,7 +407,7 @@ impl KuVpnGui {
                     async { kuvpn::load_events().unwrap_or_default() },
                     Message::HistoryLoaded,
                 );
-                return Task::batch(vec![history_task, Task::done(Message::ConnectPressed)]);
+                return Task::batch(vec![history_task, Task::done(Message::AutoRetryConnect)]);
             }
 
             let is_automation_failure =
@@ -676,9 +686,26 @@ impl KuVpnGui {
                 if self.is_transitioning() {
                     self.rotation += 0.1;
                 }
+                // Resolve the interface name as soon as possible after connecting.
+                // Tick fires every 16 ms, so this catches the name far sooner than
+                // the 100 ms session-poll loop that drives StatusChanged.
+                #[cfg(unix)]
+                if self.status == ConnectionStatus::Connected && self.active_interface.is_none() {
+                    self.active_interface = kuvpn::get_vpn_interface_name("kuvpn0");
+                }
                 Task::none()
             }
-            Message::ConnectPressed => self.handle_connect_pressed(),
+            Message::ConnectPressed => {
+                self.logs.clear();
+                self.handle_connect_pressed()
+            }
+            Message::AutoRetryConnect => {
+                // Auto-retry (e.g. stale session cleared): preserve logs and add a separator
+                // banner so the user can see what happened before the retry started.
+                self.logs
+                    .push("──────────── auto-retry: stale session cleared ────────────".to_string());
+                self.handle_connect_pressed()
+            }
             Message::DisconnectPressed => {
                 if let Some(session) = &self.session {
                     session.cancel();
@@ -702,7 +729,10 @@ impl KuVpnGui {
                     if parsed.level <= user_filter {
                         self.logs
                             .push(format!("[{}] {}", parsed.prefix(), parsed.message));
-                        if self.logs.len() > 500 {
+                        if let Some(ref mut f) = self.log_file {
+                            f.write_line(&raw_log);
+                        }
+                        if self.logs.len() > 5000 {
                             self.logs.remove(0);
                         }
                     }
@@ -1039,7 +1069,11 @@ impl KuVpnGui {
     pub fn subscription(&self) -> Subscription<Message> {
         let mut subs = vec![];
 
-        if self.is_transitioning() {
+        let need_tick = self.is_transitioning()
+            || cfg!(unix)
+                && self.status == ConnectionStatus::Connected
+                && self.active_interface.is_none();
+        if need_tick {
             subs.push(
                 iced::time::every(std::time::Duration::from_millis(16)).map(|_| Message::Tick),
             );
@@ -1164,6 +1198,9 @@ impl Default for KuVpnGui {
             was_shown_for_prompt: false,
             last_diagnostic_path: None,
             console_auto_scroll: true,
+            log_file: kuvpn::get_user_data_dir()
+                .ok()
+                .and_then(|d| kuvpn::FileLogger::open(d.join("kuvpn-gui.log"))),
         }
     }
 }

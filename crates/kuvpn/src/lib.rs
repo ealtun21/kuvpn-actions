@@ -7,6 +7,7 @@ pub mod browser;
 pub mod diagnostics;
 pub mod dsid;
 pub mod error;
+pub mod file_logger;
 pub mod handlers;
 #[cfg(windows)]
 pub mod helper;
@@ -25,10 +26,12 @@ pub use history::{
     append_event, clear_events, format_duration_secs, format_timestamp_unix, load_events,
     ConnectionEvent, EventKind,
 };
+pub use file_logger::FileLogger;
 pub use logger::init_logger;
 #[cfg(unix)]
 pub use openconnect::{
-    find_askpass, list_available_escalation_tools, needs_password_prompt, resolve_escalation_tool,
+    find_askpass, is_conflicting_vpn_active, list_available_escalation_tools,
+    needs_password_prompt, resolve_escalation_tool,
 };
 pub use openconnect::{
     get_openconnect_pid, get_vpn_interface_name, is_openconnect_running, is_vpn_interface_up,

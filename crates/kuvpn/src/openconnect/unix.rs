@@ -244,9 +244,38 @@ pub fn is_vpn_interface_up(interface_name: &str) -> bool {
     is_vpn_interface_up_impl(interface_name)
 }
 
+/// Returns `true` if another full-tunnel VPN is actively routing all traffic,
+/// which would conflict with KUVPN's full-tunnel mode.
+///
+/// Finds the interface carrying the default route via `netdev`, then checks
+/// whether it has the `IFF_POINTOPOINT` kernel flag via `nix::ifaddrs`.
+/// Full-tunnel VPNs (Tailscale exit node, WireGuard, OpenVPN, Cisco AnyConnect,
+/// etc.) always set this flag on their tunnel device and install a default route
+/// through it — no interface name matching required.
+pub fn is_conflicting_vpn_active() -> bool {
+    use nix::ifaddrs::getifaddrs;
+    use nix::net::if_::InterfaceFlags;
+
+    let iface_name = match netdev::get_default_interface() {
+        Ok(iface) => iface.name,
+        Err(_) => return false,
+    };
+
+    let addrs = match getifaddrs() {
+        Ok(a) => a,
+        Err(_) => return false,
+    };
+
+    addrs
+        .filter(|a| a.interface_name == iface_name)
+        .any(|a| a.flags.contains(InterfaceFlags::IFF_POINTOPOINT))
+}
+
 #[cfg(target_os = "macos")]
 fn is_vpn_interface_up_impl(_interface_name: &str) -> bool {
-    detect_active_utun().is_some()
+    // Guard on openconnect actually running to avoid false positives from
+    // other VPN clients (Cisco AnyConnect, etc.) that also create utun interfaces.
+    is_openconnect_running() && detect_active_utun().is_some()
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -497,6 +526,7 @@ pub(super) fn execute(
         )
     })?;
 
+    log::info!("Using escalation tool: {}", command_to_run);
     let tool_base = tool_base_name(&command_to_run);
     let askpass = find_askpass();
     let use_askpass = askpass.is_some() && needs_password_prompt(tool_base);
@@ -561,40 +591,46 @@ pub(super) fn execute(
 /// Detects an active VPN utun interface on macOS by parsing `ifconfig` output.
 /// Returns the name of a utun interface that carries an IPv4 (`inet`) address,
 /// indicating an active tunnel (system-managed utuns carry only IPv6 link-local).
+/// Detects an active openconnect tunnel interface on macOS.
+///
+/// Uses `nix::ifaddrs` to enumerate interfaces directly — no subprocess,
+/// no interface name matching.  The two conditions that identify the tunnel:
+///
+/// 1. `IFF_POINTOPOINT` — set by the kernel on all P2P tunnel devices (utun,
+///    WireGuard, etc.).
+/// 2. An IPv4 address outside the CGNAT range 100.64.0.0/10 — Tailscale and
+///    other mesh VPNs always assign addresses from that range, so excluding it
+///    avoids misidentifying them as the openconnect tunnel.
 #[cfg(target_os = "macos")]
 fn detect_active_utun() -> Option<String> {
-    let output = Command::new("/sbin/ifconfig").output().ok()?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    use nix::ifaddrs::getifaddrs;
+    use nix::net::if_::InterfaceFlags;
 
-    let mut current_utun: Option<String> = None;
-    let mut found: Option<String> = None;
-
-    for line in stdout.lines() {
-        if !line.starts_with('\t') && !line.starts_with(' ') {
-            // Interface header: "utunN: flags=..."
-            current_utun = line.find(':').and_then(|pos| {
-                let iface = &line[..pos];
-                iface.starts_with("utun").then(|| iface.to_string())
-            });
-        } else if current_utun.is_some() && line.trim_start().starts_with("inet ") {
-            // Extract the IP address (second token on the line)
-            let ip = line.split_whitespace().nth(1).unwrap_or("");
-            // Skip CGNAT range 100.64.0.0/10 (100.64–100.127) used by Tailscale/WireGuard
+    let addrs = getifaddrs().ok()?;
+    for ifaddr in addrs {
+        if !ifaddr.flags.contains(InterfaceFlags::IFF_POINTOPOINT)
+            || !ifaddr.flags.contains(InterfaceFlags::IFF_UP)
+        {
+            continue;
+        }
+        if let Some(ip) = ifaddr
+            .address
+            .as_ref()
+            .and_then(|a| a.as_sockaddr_in())
+            .map(|sin| sin.ip())
+        {
             if !is_cgnat_address(ip) {
-                found = current_utun.clone();
+                return Some(ifaddr.interface_name);
             }
         }
     }
-    found
+    None
 }
 
 /// Returns `true` for addresses in the CGNAT range 100.64.0.0/10
-/// (100.64.0.0 – 100.127.255.255), which is used by Tailscale and similar
-/// mesh VPNs and should never be assigned by an openconnect VPN.
+/// (100.64.0.0 – 100.127.255.255), used by Tailscale and similar mesh VPNs.
 #[cfg(target_os = "macos")]
-fn is_cgnat_address(addr: &str) -> bool {
-    let mut parts = addr.split('.');
-    let a: u8 = parts.next().and_then(|p| p.parse().ok()).unwrap_or(0);
-    let b: u8 = parts.next().and_then(|p| p.parse().ok()).unwrap_or(0);
+fn is_cgnat_address(addr: std::net::Ipv4Addr) -> bool {
+    let [a, b, ..] = addr.octets();
     a == 100 && (64..=127).contains(&b)
 }

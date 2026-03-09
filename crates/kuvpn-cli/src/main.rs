@@ -261,7 +261,13 @@ fn print_history(styles: &CliStyles) -> ExitCode {
                 };
                 let dur = event
                     .format_duration_display()
-                    .map(|d| format!(" ({})", d))
+                    .map(|d| {
+                        if event.kind == kuvpn::EventKind::Reconnected {
+                            format!(" (prev: {})", d)
+                        } else {
+                            format!(" ({})", d)
+                        }
+                    })
                     .unwrap_or_default();
                 let msg = event
                     .message
@@ -332,6 +338,13 @@ fn run_get_dsid(args: &Args, styles: &CliStyles) -> ExitCode {
 }
 
 fn run_vpn_session(args: &Args, styles: &CliStyles) -> ExitCode {
+    if kuvpn::is_openconnect_running() {
+        eprintln!(
+            "  {} An OpenConnect process is already running. It will be monitored or replaced.",
+            styles.yellow.apply_to("!")
+        );
+    }
+
     let config = SessionConfig {
         url: args.url.clone(),
         domain: args.domain.clone(),
@@ -347,6 +360,10 @@ fn run_vpn_session(args: &Args, styles: &CliStyles) -> ExitCode {
             args::CliTunnelMode::Manual => kuvpn::TunnelMode::Manual(args.vpnc_script.clone()),
         },
     };
+
+    let mut cli_log_file = kuvpn::get_user_data_dir()
+        .ok()
+        .and_then(|d| kuvpn::FileLogger::open(d.join("kuvpn.log")));
 
     let spinner = Arc::new(ProgressBar::new_spinner());
     spinner.set_style(spinner_style());
@@ -377,6 +394,7 @@ fn run_vpn_session(args: &Args, styles: &CliStyles) -> ExitCode {
             &mut connection_start,
             styles,
             &args.interface_name,
+            &mut cli_log_file,
         );
 
         if session.is_finished() {
@@ -389,6 +407,7 @@ fn run_vpn_session(args: &Args, styles: &CliStyles) -> ExitCode {
                 &mut connection_start,
                 styles,
                 &args.interface_name,
+                &mut cli_log_file,
             );
             clear_spinner(&spinner, &mut spinner_active);
             return if session.status() == ConnectionStatus::Error {
@@ -412,6 +431,7 @@ fn run_vpn_session(args: &Args, styles: &CliStyles) -> ExitCode {
                 &mut connection_start,
                 styles,
                 &args.interface_name,
+                &mut cli_log_file,
             );
             clear_spinner(&spinner, &mut spinner_active);
             return ExitCode::SUCCESS;
@@ -428,8 +448,12 @@ fn drain_logs(
     connection_start: &mut Option<Instant>,
     styles: &CliStyles,
     interface_name: &str,
+    log_file: &mut Option<kuvpn::FileLogger>,
 ) {
     while let Ok(raw) = log_rx.try_recv() {
+        if let Some(ref mut f) = log_file {
+            f.write_line(&raw);
+        }
         if let Some(path) = raw.strip_prefix("Diagnostic|") {
             clear_spinner(spinner, spinner_active);
             eprintln!(
@@ -455,5 +479,5 @@ fn drain_logs(
 fn spinner_style() -> ProgressStyle {
     ProgressStyle::default_spinner()
         .template("{spinner:.cyan} {msg}")
-        .unwrap()
+        .expect("spinner template is always valid")
 }

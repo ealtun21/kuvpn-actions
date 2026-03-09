@@ -192,28 +192,30 @@ impl SessionThread {
     }
 
     fn send_log(&self, msg: impl Into<String>) {
-        if let Some(tx) = self.logs_tx.lock().unwrap().as_ref() {
-            let _ = tx.send(msg.into());
+        if let Some(tx) = self.logs_tx.lock().expect("session mutex poisoned").as_ref() {
+            if tx.send(msg.into()).is_err() {
+                log::debug!("Log channel closed; message dropped");
+            }
         }
     }
 
     fn set_status(&self, s: ConnectionStatus) {
-        *self.status.lock().unwrap() = s;
+        *self.status.lock().expect("session mutex poisoned") = s;
     }
 
     fn set_conn_error(&self, msg: &str) {
-        *self.status.lock().unwrap() = ConnectionStatus::Error;
-        *self.last_error.lock().unwrap() = Some(msg.to_string());
-        *self.error_category.lock().unwrap() = Some(crate::error::ErrorCategory::Connection);
+        *self.status.lock().expect("session mutex poisoned") = ConnectionStatus::Error;
+        *self.last_error.lock().expect("session mutex poisoned") = Some(msg.to_string());
+        *self.error_category.lock().expect("session mutex poisoned") = Some(crate::error::ErrorCategory::Connection);
         self.send_log(format!("Error|{}", msg));
     }
 
     fn clear_browser_pid(&self) {
-        *self.browser_pid.lock().unwrap() = None;
+        *self.browser_pid.lock().expect("session mutex poisoned") = None;
     }
 
     fn handle_login_error(&self, e: anyhow::Error) {
-        let mut status = self.status.lock().unwrap();
+        let mut status = self.status.lock().expect("session mutex poisoned");
         if *status == ConnectionStatus::Disconnecting {
             *status = ConnectionStatus::Disconnected;
         } else {
@@ -222,8 +224,8 @@ impl SessionThread {
                 .map(|ae| ae.category())
                 .unwrap_or(crate::error::ErrorCategory::Authentication);
             *status = ConnectionStatus::Error;
-            *self.last_error.lock().unwrap() = Some(e.to_string());
-            *self.error_category.lock().unwrap() = Some(category);
+            *self.last_error.lock().expect("session mutex poisoned") = Some(e.to_string());
+            *self.error_category.lock().expect("session mutex poisoned") = Some(category);
             self.send_log(format!("Error|{}", e));
         }
     }
@@ -256,17 +258,31 @@ impl SessionThread {
                 attempt += 1;
                 prev_duration = dropped_after;
                 self.set_status(ConnectionStatus::Connecting);
-                *self.last_error.lock().unwrap() = None;
-                *self.error_category.lock().unwrap() = None;
+                *self.last_error.lock().expect("session mutex poisoned") = None;
+                *self.error_category.lock().expect("session mutex poisoned") = None;
                 self.send_log(format!(
                     "Info|Reconnecting... (attempt {}/{})",
                     attempt, MAX_RETRIES
                 ));
+                // Brief delay before re-attempting so the gateway isn't hammered
+                // and the user has a visible window to cancel.
+                for _ in 0..30 {
+                    if self.cancel_token.is_cancelled() {
+                        break;
+                    }
+                    thread::sleep(Duration::from_millis(100));
+                }
                 continue;
+            }
+            if dropped_after.is_some() && attempt >= MAX_RETRIES {
+                self.send_log(format!(
+                    "Warn|All {} reconnect attempts exhausted. Giving up.",
+                    MAX_RETRIES
+                ));
             }
             break;
         }
-        self.cleanup();
+        self.cleanup(attempt);
     }
 
     fn is_vpn_connected(&self) -> bool {
@@ -277,6 +293,15 @@ impl SessionThread {
         &mut self,
         provider: &Arc<dyn CredentialsProvider>,
     ) -> Result<Option<VpnProcess>, ()> {
+        #[cfg(unix)]
+        if crate::openconnect::is_conflicting_vpn_active() {
+            self.set_conn_error(
+                "Another full-tunnel VPN is already routing all traffic \
+                 (e.g. a Tailscale exit node). Disable it before connecting.",
+            );
+            return Err(());
+        }
+
         self.send_log("Info|Accessing campus gateway...");
         let dsid = self.acquire_dsid(provider)?;
 
@@ -340,6 +365,12 @@ impl SessionThread {
                 Ok(path.clone())
             }
             TunnelMode::Full => {
+                // Drop any existing script handle first. Both the old and new
+                // TempScript use the same path (keyed on process PID which never
+                // changes across reconnects). If we let the old handle be dropped
+                // by the assignment below, its Drop impl deletes the file AFTER
+                // the new one has already been written to the same path.
+                self.active_script = None;
                 let script =
                     generate_vpnc_script().map_err(|e| self.set_conn_error(&e.to_string()))?;
                 let path = script.path_str().map(str::to_string);
@@ -480,7 +511,14 @@ impl SessionThread {
                 return None; // user-cancelled
             }
 
-            if self.is_vpn_connected() {
+            // Always gate on the actual interface being up — not just the process
+            // running.  openconnect starts well before the vpnc-script configures
+            // the interface, so using is_openconnect_running() here would fire
+            // Connected too early and leave get_vpn_interface_name() returning None.
+            // Early process death is caught below by p.is_process_alive().
+            let currently_up = is_vpn_interface_up(&self.config.interface_name);
+
+            if currently_up {
                 if !connected_detected {
                     connected_detected = true;
                     self.connected_at = Some(Instant::now());
@@ -508,6 +546,18 @@ impl SessionThread {
                     .connected_at
                     .map(|t| t.elapsed().as_secs())
                     .unwrap_or(0);
+                // If the tunnel dropped within 3 s of coming up it is almost
+                // certainly a routing conflict (e.g. Tailscale exit node, another
+                // full-tunnel VPN) rather than a genuine network drop. Retrying
+                // would just loop with the same result, so treat it as an error.
+                if duration < 3 {
+                    self.send_log(
+                        "Warn|VPN tunnel dropped immediately after connecting. \
+                         If another VPN or exit node is active (e.g. Tailscale \
+                         exit node), disable it before connecting.",
+                    );
+                    return None; // not eligible for reconnect
+                }
                 return Some(duration); // unexpected disconnect — eligible for reconnect
             } else if start_time.elapsed() > timeout {
                 self.set_conn_error("VPN tunnel failed to establish within timeout");
@@ -517,7 +567,10 @@ impl SessionThread {
                 return None;
             } else if let Some(ref mut p) = process {
                 if !p.is_process_alive() {
-                    self.set_conn_error("OpenConnect process exited before tunnel was established");
+                    let reason = p.failure_reason().unwrap_or_else(|| {
+                        "OpenConnect process exited before tunnel was established".to_string()
+                    });
+                    self.set_conn_error(&reason);
                     return None;
                 }
             }
@@ -525,7 +578,7 @@ impl SessionThread {
         }
     }
 
-    fn cleanup(&self) {
+    fn cleanup(&self, reconnect_attempts: u32) {
         if let Some(pid) = get_openconnect_pid() {
             let _ = kill_process(pid);
             thread::sleep(Duration::from_millis(500));
@@ -547,11 +600,18 @@ impl SessionThread {
             let mut event =
                 crate::history::ConnectionEvent::now(crate::history::EventKind::Disconnected);
             event.duration_secs = duration_secs;
+            if reconnect_attempts > 0 {
+                event.message = Some(format!(
+                    "after {} reconnect attempt{}",
+                    reconnect_attempts,
+                    if reconnect_attempts == 1 { "" } else { "s" }
+                ));
+            }
             let _ = crate::history::append_event(&event);
-        } else if *self.status.lock().unwrap() == ConnectionStatus::Error {
+        } else if *self.status.lock().expect("session mutex poisoned") == ConnectionStatus::Error {
             // An error occurred before ever connecting (auth failure, tunnel timeout, etc.)
             let mut event = crate::history::ConnectionEvent::now(crate::history::EventKind::Error);
-            event.message = self.last_error.lock().unwrap().clone();
+            event.message = self.last_error.lock().expect("session mutex poisoned").clone();
             let _ = crate::history::append_event(&event);
         } else {
             // Never reached the Connected state — record as cancelled, not disconnected.
@@ -588,15 +648,15 @@ impl VpnSession {
     }
 
     pub fn set_logs_tx(&self, tx: crossbeam_channel::Sender<String>) {
-        *self.logs_tx.lock().unwrap() = Some(tx);
+        *self.logs_tx.lock().expect("session mutex poisoned") = Some(tx);
     }
 
     fn take_browser_pid(&self) -> Option<u32> {
-        self.browser_pid.lock().unwrap().take()
+        self.browser_pid.lock().expect("session mutex poisoned").take()
     }
 
     fn transition_to_disconnecting(&self) {
-        let mut status = self.status.lock().unwrap();
+        let mut status = self.status.lock().expect("session mutex poisoned");
         if matches!(
             *status,
             ConnectionStatus::Connected | ConnectionStatus::Connecting
@@ -606,26 +666,26 @@ impl VpnSession {
     }
 
     fn try_begin_connect(&self) -> bool {
-        let mut s = self.status.lock().unwrap();
+        let mut s = self.status.lock().expect("session mutex poisoned");
         if *s != ConnectionStatus::Disconnected && *s != ConnectionStatus::Error {
             return false;
         }
         *s = ConnectionStatus::Connecting;
-        *self.last_error.lock().unwrap() = None;
-        *self.error_category.lock().unwrap() = None;
+        *self.last_error.lock().expect("session mutex poisoned") = None;
+        *self.error_category.lock().expect("session mutex poisoned") = None;
         true
     }
 
     pub fn status(&self) -> ConnectionStatus {
-        *self.status.lock().unwrap()
+        *self.status.lock().expect("session mutex poisoned")
     }
 
     pub fn last_error(&self) -> Option<String> {
-        self.last_error.lock().unwrap().clone()
+        self.last_error.lock().expect("session mutex poisoned").clone()
     }
 
     pub fn error_category(&self) -> Option<crate::error::ErrorCategory> {
-        *self.error_category.lock().unwrap()
+        *self.error_category.lock().expect("session mutex poisoned")
     }
 
     /// Returns true if the session has reached a terminal state.
