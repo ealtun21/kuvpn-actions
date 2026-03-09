@@ -511,14 +511,12 @@ impl SessionThread {
                 return None; // user-cancelled
             }
 
-            // During establishment: use the combined check (process OR interface).
-            // During monitoring: only trust the interface — openconnect can keep running
-            // while the tunnel is broken, which would mask the drop otherwise.
-            let currently_up = if connected_detected {
-                is_vpn_interface_up(&self.config.interface_name)
-            } else {
-                self.is_vpn_connected()
-            };
+            // Always gate on the actual interface being up — not just the process
+            // running.  openconnect starts well before the vpnc-script configures
+            // the interface, so using is_openconnect_running() here would fire
+            // Connected too early and leave get_vpn_interface_name() returning None.
+            // Early process death is caught below by p.is_process_alive().
+            let currently_up = is_vpn_interface_up(&self.config.interface_name);
 
             if currently_up {
                 if !connected_detected {
