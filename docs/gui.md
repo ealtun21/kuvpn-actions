@@ -13,7 +13,7 @@
 **Recommended:**
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.sh | bash
+wget -qO- https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.sh | bash
 ```
 
 The script will ask what to install — choose GUI. It also checks for OpenConnect and offers to install it.
@@ -21,7 +21,7 @@ The script will ask what to install — choose GUI. It also checks for OpenConne
 <details><summary>Non-interactive (for scripting / automation)</summary>
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.sh | bash -s -- --gui
+wget -qO- https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.sh | bash -s -- --gui
 ```
 
 </details>

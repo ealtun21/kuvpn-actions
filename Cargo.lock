@@ -1346,6 +1346,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "dlopen2"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09b4f5f101177ff01b8ec4ecc81eead416a8aa42819a2869311b3420fa114ffa"
+dependencies = [
+ "libc",
+ "once_cell",
+ "winapi",
+]
+
+[[package]]
 name = "document-features"
 version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2690,6 +2701,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ipnet"
+version = "2.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d98f6fed1fde3f8c21bc40a1abb88dd75e67924f9cffc3ef95607bad8017f8e2"
+
+[[package]]
 name = "is-docker"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2877,6 +2894,7 @@ dependencies = [
  "fd-lock",
  "headless_chrome",
  "log",
+ "netdev",
  "nix",
  "once_cell",
  "runas",
@@ -3121,6 +3139,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "mac-addr"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3d25b0e0b648a86960ac23b7ad4abb9717601dec6f66c165f5b037f3f03065f"
+
+[[package]]
 name = "malloc_buf"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3318,6 +3342,60 @@ dependencies = [
 ]
 
 [[package]]
+name = "netdev"
+version = "0.40.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b0a0096d9613ee878dba89bbe595f079d373e3f1960d882e4f2f78ff9c30a0a"
+dependencies = [
+ "block2 0.6.2",
+ "dispatch2",
+ "dlopen2",
+ "ipnet",
+ "libc",
+ "mac-addr",
+ "netlink-packet-core",
+ "netlink-packet-route",
+ "netlink-sys",
+ "objc2-core-foundation",
+ "objc2-system-configuration",
+ "once_cell",
+ "plist",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "netlink-packet-core"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3463cbb78394cb0141e2c926b93fc2197e473394b761986eca3b9da2c63ae0f4"
+dependencies = [
+ "paste",
+]
+
+[[package]]
+name = "netlink-packet-route"
+version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df9854ea6ad14e3f4698a7f03b65bce0833dd2d81d594a0e4a984170537146b6"
+dependencies = [
+ "bitflags 2.10.0",
+ "libc",
+ "log",
+ "netlink-packet-core",
+]
+
+[[package]]
+name = "netlink-sys"
+version = "0.8.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd6c30ed10fa69cc491d491b85cc971f6bdeb8e7367b7cde2ee6cc878d583fae"
+dependencies = [
+ "bytes",
+ "libc",
+ "log",
+]
+
+[[package]]
 name = "new_debug_unreachable"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3333,6 +3411,7 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
+ "memoffset",
 ]
 
 [[package]]
@@ -3582,7 +3661,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c10c2894a6fed806ade6027bcd50662746363a9589d3ec9d9bef30a4e4bc166"
 dependencies = [
  "bitflags 2.10.0",
+ "block2 0.6.2",
  "dispatch2",
+ "libc",
  "objc2 0.6.3",
 ]
 
@@ -3735,6 +3816,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "objc2-security"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1f8e0ef3ab66b08c42644dcb34dba6ec0a574bbd8adbb8bdbdc7a2779731a44"
+dependencies = [
+ "bitflags 2.10.0",
+ "objc2 0.6.3",
+ "objc2-core-foundation",
+]
+
+[[package]]
 name = "objc2-symbols"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3742,6 +3834,20 @@ checksum = "0a684efe3dec1b305badae1a28f6555f6ddd3bb2c2267896782858d5a78404dc"
 dependencies = [
  "objc2 0.5.2",
  "objc2-foundation 0.2.2",
+]
+
+[[package]]
+name = "objc2-system-configuration"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05b0f38b30eea7d3bac458ab93e830fcbff37abbfc35ccb823538a3eff941070"
+dependencies = [
+ "bitflags 2.10.0",
+ "dispatch2",
+ "libc",
+ "objc2 0.6.3",
+ "objc2-core-foundation",
+ "objc2-security",
 ]
 
 [[package]]
@@ -4004,6 +4110,19 @@ name = "pkg-config"
 version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7edddbd0b52d732b21ad9a5fab5c704c14cd949e5e9a1ec5929a24fded1b904c"
+
+[[package]]
+name = "plist"
+version = "1.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "740ebea15c5d1428f910cd1a5f52cebf8d25006245ed8ade92702f4943d91e07"
+dependencies = [
+ "base64",
+ "indexmap",
+ "quick-xml",
+ "serde",
+ "time",
+]
 
 [[package]]
 name = "png"
@@ -5234,10 +5353,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91e7d9e3bb61134e77bde20dd4825b97c010155709965fedf0f49bb138e52a9d"
 dependencies = [
  "deranged",
+ "itoa",
  "num-conv",
  "powerfmt",
  "serde",
  "time-core",
+ "time-macros",
 ]
 
 [[package]]
@@ -5245,6 +5366,16 @@ name = "time-core"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40868e7c1d2f0b8d73e4a8c7f0ff63af4f6d19be117e90bd73eb1d62cf831c6b"
+
+[[package]]
+name = "time-macros"
+version = "0.2.24"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30cfb0125f12d9c277f35663a0a33f8c30190f4e4574868a330595412d34ebf3"
+dependencies = [
+ "num-conv",
+ "time-core",
+]
 
 [[package]]
 name = "tiny-skia"

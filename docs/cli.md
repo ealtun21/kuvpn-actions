@@ -8,7 +8,13 @@
 
 ## Installation
 
-**Recommended:**
+**Recommended (Linux):**
+
+```bash
+wget -qO- https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.sh | bash
+```
+
+**Recommended (macOS):**
 
 ```bash
 curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.sh | bash
@@ -19,6 +25,10 @@ The script will ask what to install — choose CLI. It downloads the right stati
 <details><summary>Non-interactive (for scripting / automation)</summary>
 
 ```bash
+# Linux
+wget -qO- https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.sh | bash -s -- --cli
+
+# macOS
 curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.sh | bash -s -- --cli
 ```
 

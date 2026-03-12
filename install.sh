@@ -33,6 +33,20 @@ log_warn()    { printf "${COLOR_WARN}[WARN]${COLOR_RESET} %s\n" "$1"; }
 log_success() { printf "${COLOR_SUCCESS}[OK]${COLOR_RESET} %s\n" "$1"; }
 log_fail()    { printf "${COLOR_FAILURE}[FAIL]${COLOR_RESET} %s\n" "$1"; exit 1; }
 
+# --- Download helper ---
+# Prefers wget (pre-installed on Ubuntu/Debian). Falls back to curl (pre-installed on macOS).
+download_file() {
+    local url="$1"
+    local dest="$2"
+    if command -v wget >/dev/null 2>&1; then
+        wget -q -O "$dest" "$url"
+    elif command -v curl >/dev/null 2>&1; then
+        curl --proto '=https' --tlsv1.2 -sSfL "$url" -o "$dest"
+    else
+        log_fail "Neither wget nor curl is available. Please install wget and try again."
+    fi
+}
+
 # --- Prompt helper ---
 prompt_yn() {
     # Usage: prompt_yn "Question?" [default: y|n]
@@ -94,11 +108,14 @@ detect_platform() {
 resolve_version() {
     if [ "$VERSION" = "latest" ]; then
         log_info "Resolving latest version..."
-        LATEST_URL="https://github.com/$REPO/releases/latest"
-        if command -v curl >/dev/null 2>&1; then
-            TAG=$(curl -sL -o /dev/null -w '%{url_effective}' "$LATEST_URL" | rev | cut -d/ -f1 | rev)
+        local latest_url="https://github.com/$REPO/releases/latest"
+        if command -v wget >/dev/null 2>&1; then
+            TAG=$(wget -qO /dev/null --server-response "$latest_url" 2>&1 \
+                | grep -i 'Location:' | tail -1 | tr -d '[:space:]' | rev | cut -d/ -f1 | rev)
+        elif command -v curl >/dev/null 2>&1; then
+            TAG=$(curl -sL -o /dev/null -w '%{url_effective}' "$latest_url" | rev | cut -d/ -f1 | rev)
         else
-            log_fail "curl is required to resolve the latest version."
+            log_fail "Neither wget nor curl is available. Please install wget and try again."
         fi
     else
         TAG="$VERSION"
@@ -266,10 +283,20 @@ check_and_prompt_openconnect() {
 
 # --- FUSE Detection and Installation (Linux AppImage requirement) ---
 detect_fuse() {
-    # AppImages require FUSE 2 (fusermount). Check common locations.
-    command -v fusermount >/dev/null 2>&1 || \
-        [ -x /bin/fusermount ] || \
-        [ -x /usr/bin/fusermount ]
+    # AppImages require libfuse2 (FUSE 2 library) specifically.
+    # fuse3/fusermount3 on Ubuntu 22.04+ does NOT satisfy this requirement.
+    # Check the shared library via ldconfig, then fall back to known paths.
+    if ldconfig -p 2>/dev/null | grep -q 'libfuse\.so\.2'; then
+        return 0
+    fi
+    for f in \
+        /usr/lib/x86_64-linux-gnu/libfuse.so.2 \
+        /usr/lib/aarch64-linux-gnu/libfuse.so.2 \
+        /usr/lib/libfuse.so.2 \
+        /usr/lib64/libfuse.so.2; do
+        [ -f "$f" ] && return 0
+    done
+    return 1
 }
 
 install_fuse_linux() {
@@ -312,11 +339,12 @@ install_fuse_linux() {
             ;;
         none|*)
             log_warn "Could not detect a supported package manager."
-            echo "  Please install FUSE 2 manually:"
-            echo "    Ubuntu/Debian:    sudo apt-get install fuse  (or libfuse2 on 22.04+)"
+            echo "  Please install libfuse2 manually:"
+            echo "    Ubuntu 22.04+:    sudo apt-get install libfuse2"
+            echo "    Ubuntu <22.04:    sudo apt-get install fuse"
             echo "    Fedora/RHEL:      sudo dnf install fuse fuse-libs"
             echo "    Arch Linux:       sudo pacman -S fuse2"
-            echo "    openSUSE:         sudo zypper install fuse"
+            echo "    openSUSE:         sudo zypper install fuse libfuse2"
             ;;
     esac
 }
@@ -327,8 +355,9 @@ check_and_prompt_fuse() {
         return 0
     fi
 
-    log_warn "FUSE is not installed. The KUVPN AppImage requires FUSE to run."
-    echo "  Without FUSE, the GUI will not start."
+    log_warn "libfuse2 is not installed. The KUVPN AppImage requires libfuse2 (FUSE 2) to run."
+    echo "  Note: fuse3 (Ubuntu 22.04+ default) does NOT work — AppImages need libfuse2 specifically."
+    echo "  Without it, the GUI will not start."
     echo ""
 
     local pkg_mgr
@@ -342,9 +371,9 @@ check_and_prompt_fuse() {
                 log_warn "FUSE installation may not be complete. You may need to log out and back in."
             fi
         else
-            echo "  You can install FUSE later:"
+            echo "  You can install libfuse2 later:"
             case "$pkg_mgr" in
-                apt)     echo "    sudo apt-get install fuse  (or libfuse2 on Ubuntu 22.04+)" ;;
+                apt)     echo "    sudo apt-get install libfuse2  (use 'fuse' on Ubuntu older than 22.04)" ;;
                 dnf|yum) echo "    sudo $pkg_mgr install fuse fuse-libs" ;;
                 pacman)  echo "    sudo pacman -S fuse2" ;;
                 zypper)  echo "    sudo zypper install fuse" ;;
@@ -370,7 +399,7 @@ install_cli_binary() {
 
     log_info "Downloading CLI from: $download_url"
 
-    if ! curl --proto '=https' --tlsv1.2 -sSfL "$download_url" -o "$tmp_file"; then
+    if ! download_file "$download_url" "$tmp_file"; then
         rm -rf "$tmp_dir"
         log_fail "Download failed. Check your internet connection and try again."
     fi
@@ -391,7 +420,7 @@ install_gui_binary() {
         local dmg_path="$tmp_dir/${GUI_NAME}.dmg"
 
         log_info "Downloading macOS GUI (DMG) from: $dmg_url"
-        if ! curl --proto '=https' --tlsv1.2 -sSfL "$dmg_url" -o "$dmg_path"; then
+        if ! download_file "$dmg_url" "$dmg_path"; then
             rm -rf "$tmp_dir"
             log_fail "Download failed. Check your internet connection and try again."
         fi
@@ -441,7 +470,7 @@ install_gui_binary() {
         local dest="$INSTALL_DIR/${GUI_NAME}.AppImage"
         log_info "Downloading Linux GUI (AppImage) from: $appimage_url"
         mkdir -p "$INSTALL_DIR"
-        if ! curl --proto '=https' --tlsv1.2 -sSfL "$appimage_url" -o "$dest"; then
+        if ! download_file "$appimage_url" "$dest"; then
             log_fail "Download failed. Check your internet connection and try again."
         fi
         chmod +x "$dest"
@@ -454,9 +483,9 @@ install_gui_binary() {
         local icon_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
         local icon_file="$icon_dir/kuvpn.png"
         mkdir -p "$icon_dir"
-        if curl --proto '=https' --tlsv1.2 -sSfL \
+        if download_file \
             "https://raw.githubusercontent.com/$REPO/main/crates/kuvpn-gui/assets/icon-256.png" \
-            -o "$icon_file"; then
+            "$icon_file"; then
             log_success "Installed icon at $icon_file"
         else
             log_warn "Could not download KUVPN icon; desktop entry will use a fallback icon."
