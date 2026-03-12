@@ -511,12 +511,18 @@ impl SessionThread {
                 return None; // user-cancelled
             }
 
-            // Always gate on the actual interface being up — not just the process
-            // running.  openconnect starts well before the vpnc-script configures
-            // the interface, so using is_openconnect_running() here would fire
-            // Connected too early and leave get_vpn_interface_name() returning None.
-            // Early process death is caught below by p.is_process_alive().
+            // On Unix: gate on the interface being up, not just the process running.
+            // openconnect starts well before the vpnc-script configures the interface,
+            // so using is_openconnect_running() would fire Connected too early and leave
+            // get_vpn_interface_name() returning None.
+            // On Windows: the TAP adapter is not named by us (no --interface flag is
+            // passed to openconnect), so is_vpn_interface_up("kuvpn0") never matches.
+            // Gate on the process being alive instead; get_vpn_interface_name() returns
+            // None on Windows regardless. Early process death is caught below.
+            #[cfg(not(windows))]
             let currently_up = is_vpn_interface_up(&self.config.interface_name);
+            #[cfg(windows)]
+            let currently_up = is_openconnect_running();
 
             if currently_up {
                 if !connected_detected {
