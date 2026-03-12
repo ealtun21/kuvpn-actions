@@ -264,6 +264,97 @@ check_and_prompt_openconnect() {
     fi
 }
 
+# --- FUSE Detection and Installation (Linux AppImage requirement) ---
+detect_fuse() {
+    # AppImages require FUSE 2 (fusermount). Check common locations.
+    command -v fusermount >/dev/null 2>&1 || \
+        [ -x /bin/fusermount ] || \
+        [ -x /usr/bin/fusermount ]
+}
+
+install_fuse_linux() {
+    local pkg_mgr
+    pkg_mgr=$(detect_package_manager)
+    case "$pkg_mgr" in
+        apt)
+            log_warn "Sudo required: installing FUSE (required for AppImage) via apt."
+            log_info "You may be prompted for your password."
+            # Ubuntu 22.04+ ships fuse3 by default; AppImages need libfuse2 specifically.
+            local ver_id
+            ver_id=$(. /etc/os-release 2>/dev/null && echo "${VERSION_ID:-0}")
+            local ver_num
+            ver_num=$(echo "$ver_id" | tr -d '.')
+            if [ "${ver_num:-0}" -ge 2204 ] 2>/dev/null; then
+                sudo apt-get update -qq && sudo apt-get install -y libfuse2
+            else
+                sudo apt-get update -qq && sudo apt-get install -y fuse
+            fi
+            ;;
+        dnf)
+            log_warn "Sudo required: installing FUSE via dnf."
+            log_info "You may be prompted for your password."
+            sudo dnf install -y fuse fuse-libs
+            ;;
+        yum)
+            log_warn "Sudo required: installing FUSE via yum."
+            log_info "You may be prompted for your password."
+            sudo yum install -y fuse fuse-libs
+            ;;
+        pacman)
+            log_warn "Sudo required: installing FUSE via pacman."
+            log_info "You may be prompted for your password."
+            sudo pacman -Sy --noconfirm fuse2
+            ;;
+        zypper)
+            log_warn "Sudo required: installing FUSE via zypper."
+            log_info "You may be prompted for your password."
+            sudo zypper install -y fuse libfuse2
+            ;;
+        none|*)
+            log_warn "Could not detect a supported package manager."
+            echo "  Please install FUSE 2 manually:"
+            echo "    Ubuntu/Debian:    sudo apt-get install fuse  (or libfuse2 on 22.04+)"
+            echo "    Fedora/RHEL:      sudo dnf install fuse fuse-libs"
+            echo "    Arch Linux:       sudo pacman -S fuse2"
+            echo "    openSUSE:         sudo zypper install fuse"
+            ;;
+    esac
+}
+
+check_and_prompt_fuse() {
+    if detect_fuse; then
+        log_success "FUSE is available (required for AppImage)."
+        return 0
+    fi
+
+    log_warn "FUSE is not installed. The KUVPN AppImage requires FUSE to run."
+    echo "  Without FUSE, the GUI will not start."
+    echo ""
+
+    local pkg_mgr
+    pkg_mgr=$(detect_package_manager)
+    if [ "$pkg_mgr" != "none" ]; then
+        if prompt_yn "Would you like to install FUSE now?"; then
+            install_fuse_linux
+            if detect_fuse; then
+                log_success "FUSE installed successfully."
+            else
+                log_warn "FUSE installation may not be complete. You may need to log out and back in."
+            fi
+        else
+            echo "  You can install FUSE later:"
+            case "$pkg_mgr" in
+                apt)     echo "    sudo apt-get install fuse  (or libfuse2 on Ubuntu 22.04+)" ;;
+                dnf|yum) echo "    sudo $pkg_mgr install fuse fuse-libs" ;;
+                pacman)  echo "    sudo pacman -S fuse2" ;;
+                zypper)  echo "    sudo zypper install fuse" ;;
+            esac
+        fi
+    else
+        install_fuse_linux
+    fi
+}
+
 # --- Download Logic ---
 install_cli_binary() {
     local download_url
@@ -355,6 +446,9 @@ install_gui_binary() {
         fi
         chmod +x "$dest"
         log_success "GUI installed at $dest"
+
+        # Ensure FUSE is available (AppImage requirement)
+        check_and_prompt_fuse
 
         # Install icon to XDG icon directory
         local icon_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
