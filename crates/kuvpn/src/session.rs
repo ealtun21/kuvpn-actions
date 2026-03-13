@@ -623,12 +623,20 @@ impl SessionThread {
                     if let Some(ref mut p) = process {
                         let _ = p.kill();
                     }
-                    // On Windows the stop-file signal may not reach a helper whose
-                    // UAC prompt was still pending when we timed out.  Kill any
-                    // OpenConnect process that may have started in the background.
+                    // On Windows: give the stop-file mechanism a short window to kill
+                    // openconnect before falling back to UAC-elevated taskkill.
+                    // If the UAC prompt was still pending the helper may not have
+                    // seen the stop file yet, so we also keep the kill_process
+                    // fallback after the wait.
                     #[cfg(windows)]
-                    if let Some(pid) = get_openconnect_pid() {
-                        let _ = kill_process(pid);
+                    {
+                        let deadline = Instant::now() + Duration::from_secs(3);
+                        while is_openconnect_running() && Instant::now() < deadline {
+                            thread::sleep(Duration::from_millis(200));
+                        }
+                        if let Some(pid) = get_openconnect_pid() {
+                            let _ = kill_process(pid);
+                        }
                     }
                     return None;
                 } else if let Some(ref mut p) = process {
@@ -654,6 +662,16 @@ impl SessionThread {
     }
 
     fn cleanup(&self, reconnect_attempts: u32) {
+        // Windows: the stop-file signal was already sent; give the elevated helper
+        // up to 5 s to kill openconnect before falling back to UAC-elevated taskkill.
+        // In the normal case OC dies within ~200 ms and the loop exits immediately.
+        #[cfg(windows)]
+        {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while is_openconnect_running() && Instant::now() < deadline {
+                thread::sleep(Duration::from_millis(200));
+            }
+        }
         if let Some(pid) = get_openconnect_pid() {
             let _ = kill_process(pid);
             thread::sleep(Duration::from_millis(500));

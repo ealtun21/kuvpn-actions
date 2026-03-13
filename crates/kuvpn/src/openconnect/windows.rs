@@ -84,7 +84,8 @@ pub(super) fn execute(
         .arg(&stop_file)
         .arg(oc_path_str)
         .arg(&url)
-        .arg(&cookie_value);
+        .arg(&cookie_value)
+        .arg(std::process::id().to_string());
 
     if full_tunnel {
         cmd.arg("--full-tunnel");
