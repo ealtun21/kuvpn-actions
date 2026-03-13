@@ -73,19 +73,25 @@ pub(super) fn execute(
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("openconnect path contains invalid UTF-8"))?;
 
-    // Unique per-session stop-signal file in the user's temp directory.
-    let stop_file = std::env::temp_dir().join(format!("kuvpn-stop-{}.signal", unique_id()));
+    // Derive the stop-signal file path from the parent PID rather than passing
+    // the full path as an argument.  The runas crate doubles backslashes when
+    // quoting arguments that contain spaces, which corrupts any Windows path
+    // whose temp-dir component includes a space (e.g. "C:\Users\John Doe\...").
+    // Using only the PID — a plain integer with no separators — avoids that
+    // escaping bug entirely.  The helper derives the same path independently.
+    let parent_pid = std::process::id();
+    let stop_file = std::env::temp_dir()
+        .join(format!("kuvpn-stop-{}.signal", parent_pid));
 
     log::info!("Requesting Admin elevation for OpenConnect (single prompt)...");
 
     let mut cmd = AdminCommand::new(&helper_exe);
     cmd.show(false)
         .arg("--vpn-helper")
-        .arg(&stop_file)
         .arg(oc_path_str)
         .arg(&url)
         .arg(&cookie_value)
-        .arg(std::process::id().to_string());
+        .arg(parent_pid.to_string());
 
     if full_tunnel {
         cmd.arg("--full-tunnel");

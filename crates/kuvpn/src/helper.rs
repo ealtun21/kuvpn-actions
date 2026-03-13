@@ -9,12 +9,16 @@
 //! and exits cleanly.
 //!
 //! Argument layout (positional, after `--vpn-helper`):
-//!   1. stop-file  — path that the parent creates to request a disconnect
-//!   2. oc-path    — path to the openconnect executable
-//!   3. url        — VPN gateway URL
-//!   4. dsid       — DSID cookie value (without the "DSID=" prefix)
-//!   5. parent-pid — PID of the non-elevated parent; helper exits when it dies
-//!   6. (optional) `--full-tunnel` — inject 0/1 + 128/1 routes after connect
+//!   1. oc-path    — path to the openconnect executable
+//!   2. url        — VPN gateway URL
+//!   3. dsid       — DSID cookie value (without the "DSID=" prefix)
+//!   4. parent-pid — PID of the non-elevated parent; helper exits when it dies
+//!   5. (optional) `--full-tunnel` — inject 0/1 + 128/1 routes after connect
+//!
+//! The stop-signal file path is NOT passed as an argument.  Both the parent and
+//! the helper derive it independently as `%TEMP%\kuvpn-stop-<parent-pid>.signal`.
+//! This avoids the runas crate's backslash-doubling bug, which corrupts any path
+//! containing a space (e.g. `C:\Users\John Doe\...`).
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -38,12 +42,19 @@ pub fn run_vpn_helper_if_requested() -> Option<i32> {
         return None;
     }
 
-    let stop_file = Path::new(args.get(2)?);
-    let oc_path = args.get(3)?;
-    let url = args.get(4)?;
-    let dsid = args.get(5)?;
-    let parent_pid: u32 = args.get(6)?.parse().ok()?;
-    let full_tunnel = args.get(7).map(|s| s == "--full-tunnel").unwrap_or(false);
+    let oc_path = args.get(2)?;
+    let url = args.get(3)?;
+    let dsid = args.get(4)?;
+    let parent_pid: u32 = args.get(5)?.parse().ok()?;
+    let full_tunnel = args.get(6).map(|s| s == "--full-tunnel").unwrap_or(false);
+
+    // Derive the stop-signal file path from the parent PID — same formula the
+    // parent uses.  The path is never passed as an argument because the runas
+    // crate doubles backslashes inside quoted args, which corrupts any path
+    // whose temp-dir component contains a space (e.g. "C:\Users\John Doe\...").
+    let stop_file_buf = std::env::temp_dir()
+        .join(format!("kuvpn-stop-{}.signal", parent_pid));
+    let stop_file = stop_file_buf.as_path();
 
     Some(run_helper(stop_file, oc_path, url, dsid, parent_pid, full_tunnel))
 }
