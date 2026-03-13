@@ -100,6 +100,17 @@ impl VpnProcess {
         None
     }
 
+    /// Returns `true` once the Windows background helper thread has exited
+    /// (meaning the UAC prompt was either accepted or denied and the elevated
+    /// process has terminated).  Always `false` on Unix.
+    pub fn is_helper_thread_done(&self) -> bool {
+        #[cfg(windows)]
+        if let VpnProcess::Windows { thread_finished, .. } = self {
+            return thread_finished.load(Ordering::SeqCst);
+        }
+        false
+    }
+
     /// Waits for the process to finish (with a 5-second timeout on Windows).
     pub fn wait(&mut self) -> anyhow::Result<()> {
         match self {
@@ -108,11 +119,31 @@ impl VpnProcess {
                 Ok(())
             }
             VpnProcess::Windows {
-                thread_finished, ..
+                thread_finished,
+                stop_file,
+                ..
             } => {
-                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+                // Phase 1 (≤ 2 s): wait for the helper to acknowledge by deleting
+                // the stop file.  Until we see that ack we don't know whether the
+                // helper received the signal, so we don't commit to a long wait.
+                if stop_file.exists() {
+                    let ack_deadline =
+                        std::time::Instant::now() + std::time::Duration::from_secs(2);
+                    while stop_file.exists() && !thread_finished.load(Ordering::SeqCst) {
+                        if std::time::Instant::now() >= ack_deadline {
+                            // Helper didn't ack — bail out; cleanup() handles fallback.
+                            return Ok(());
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                }
+                // Phase 2 (≤ 10 s): helper acknowledged — wait for it to finish
+                // killing OC and exit.  Force-kill via TerminateProcess is instant
+                // so this should complete in milliseconds; the 10 s is a safety net.
+                let done_deadline =
+                    std::time::Instant::now() + std::time::Duration::from_secs(10);
                 while !thread_finished.load(Ordering::SeqCst) {
-                    if std::time::Instant::now() >= deadline {
+                    if std::time::Instant::now() >= done_deadline {
                         break;
                     }
                     std::thread::sleep(std::time::Duration::from_millis(200));

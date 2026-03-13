@@ -9,12 +9,20 @@
 //! and exits cleanly.
 //!
 //! Argument layout (positional, after `--vpn-helper`):
-//!   1. stop-file  — path that the parent creates to request a disconnect
-//!   2. oc-path    — path to the openconnect executable
-//!   3. url        — VPN gateway URL
-//!   4. dsid       — DSID cookie value (without the "DSID=" prefix)
+//!   1. oc-path    — path to the openconnect executable
+//!   2. url        — VPN gateway URL
+//!   3. dsid       — DSID cookie value (without the "DSID=" prefix)
+//!   4. parent-pid — PID of the non-elevated parent; helper exits when it dies
+//!   5. (optional) `--full-tunnel` — inject 0/1 + 128/1 routes after connect
+//!
+//! The stop-signal file path is NOT passed as an argument.  Both the parent and
+//! the helper derive it independently as `%TEMP%\kuvpn-stop-<parent-pid>.signal`.
+//! This avoids the runas crate's backslash-doubling bug, which corrupts any path
+//! containing a space (e.g. `C:\Users\John Doe\...`).
 
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -27,12 +35,6 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 /// Call this **before** any argument parser or GUI initialisation so the helper
 /// can run silently without touching GUI or CLI machinery.
 ///
-/// Argument layout (positional, after `--vpn-helper`):
-///   1. stop-file  — path that the parent creates to request a disconnect
-///   2. oc-path    — path to the openconnect executable
-///   3. url        — VPN gateway URL
-///   4. dsid       — DSID cookie value (without the "DSID=" prefix)
-///   5. (optional) `--full-tunnel` — inject 0/1 + 128/1 routes after connect
 #[cfg(windows)]
 pub fn run_vpn_helper_if_requested() -> Option<i32> {
     let args: Vec<String> = std::env::args().collect();
@@ -40,17 +42,25 @@ pub fn run_vpn_helper_if_requested() -> Option<i32> {
         return None;
     }
 
-    let stop_file = Path::new(args.get(2)?);
-    let oc_path = args.get(3)?;
-    let url = args.get(4)?;
-    let dsid = args.get(5)?;
+    let oc_path = args.get(2)?;
+    let url = args.get(3)?;
+    let dsid = args.get(4)?;
+    let parent_pid: u32 = args.get(5)?.parse().ok()?;
     let full_tunnel = args.get(6).map(|s| s == "--full-tunnel").unwrap_or(false);
 
-    Some(run_helper(stop_file, oc_path, url, dsid, full_tunnel))
+    // Derive the stop-signal file path from the parent PID — same formula the
+    // parent uses.  The path is never passed as an argument because the runas
+    // crate doubles backslashes inside quoted args, which corrupts any path
+    // whose temp-dir component contains a space (e.g. "C:\Users\John Doe\...").
+    let stop_file_buf = std::env::temp_dir()
+        .join(format!("kuvpn-stop-{}.signal", parent_pid));
+    let stop_file = stop_file_buf.as_path();
+
+    Some(run_helper(stop_file, oc_path, url, dsid, parent_pid, full_tunnel))
 }
 
 #[cfg(windows)]
-fn run_helper(stop_file: &Path, oc_path: &str, url: &str, dsid: &str, full_tunnel: bool) -> i32 {
+fn run_helper(stop_file: &Path, oc_path: &str, url: &str, dsid: &str, parent_pid: u32, full_tunnel: bool) -> i32 {
     use std::os::windows::process::CommandExt;
 
     // Start openconnect directly — we're already elevated, so it inherits our
@@ -85,12 +95,26 @@ fn run_helper(stop_file: &Path, oc_path: &str, url: &str, dsid: &str, full_tunne
         }
     }
 
-    // Monitor: stop when signalled by parent or when openconnect exits on its own.
+    // Spawn a thread that blocks on the parent process handle.  When the parent
+    // exits for any reason (clean exit, crash, kill), WaitForSingleObject returns
+    // and we set the flag so the loop below cleans up without a second UAC prompt.
+    let parent_died = Arc::new(AtomicBool::new(false));
+    let parent_died_clone = Arc::clone(&parent_died);
+    std::thread::spawn(move || {
+        wait_for_process_exit(parent_pid);
+        parent_died_clone.store(true, Ordering::SeqCst);
+    });
+
+    // Monitor: stop when signalled by parent (stop-file), when the parent process
+    // dies unexpectedly, or when openconnect exits on its own.
     loop {
-        if stop_file.exists() {
+        if stop_file.exists() || parent_died.load(Ordering::SeqCst) {
+            // Acknowledge by removing the stop file *before* killing OC.
+            // The parent watches for this deletion to know the disconnect is
+            // in progress, so it doesn't fall back to an elevated kill prematurely.
+            let _ = std::fs::remove_file(stop_file);
             let _ = child.kill();
             let _ = child.wait();
-            let _ = std::fs::remove_file(stop_file);
             return 0;
         }
 
@@ -104,6 +128,23 @@ fn run_helper(stop_file: &Path, oc_path: &str, url: &str, dsid: &str, full_tunne
         }
 
         sleep(Duration::from_millis(200));
+    }
+}
+
+/// Blocks until the process with the given PID exits.
+/// Uses a kernel wait (zero CPU) so there is no polling overhead.
+#[cfg(windows)]
+fn wait_for_process_exit(pid: u32) {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE};
+    unsafe {
+        match OpenProcess(PROCESS_SYNCHRONIZE, false, pid) {
+            Ok(handle) if !handle.is_invalid() => {
+                WaitForSingleObject(handle, u32::MAX); // INFINITE = 0xFFFFFFFF
+                let _ = CloseHandle(handle);
+            }
+            _ => {} // process already gone — treat as exited
+        }
     }
 }
 
