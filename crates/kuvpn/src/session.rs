@@ -501,6 +501,22 @@ impl SessionThread {
         let mut connected_detected = process.is_none();
         let timeout = Duration::from_secs(30);
 
+        // Windows: separate the UAC-waiting phase from the connection-establishment
+        // phase so the 30-second connection timeout doesn't fire while the user is
+        // still looking at the UAC elevation dialog.
+        //
+        // `None`     = UAC prompt may still be showing (helper thread not yet done,
+        //              openconnect not yet running).
+        // `Some(t)`  = UAC accepted / helper alive; `t` is when this phase began,
+        //              and the 30-second connection timeout counts from `t`.
+        //
+        // Initialised to `Some(now)` when there is no process (already-up shortcut).
+        #[cfg(windows)]
+        let mut connect_phase_start: Option<Instant> =
+            if process.is_none() { Some(Instant::now()) } else { None };
+        #[cfg(windows)]
+        let mut uac_logged = false;
+
         loop {
             if self.cancel_token.is_cancelled() {
                 if let Some(ref mut p) = process {
@@ -523,6 +539,26 @@ impl SessionThread {
             let currently_up = is_vpn_interface_up(&self.config.interface_name);
             #[cfg(windows)]
             let currently_up = is_openconnect_running();
+
+            // Windows: advance out of UAC-pending phase once openconnect is running
+            // (UAC accepted) or the helper thread has finished (UAC denied / failed).
+            #[cfg(windows)]
+            if connect_phase_start.is_none() {
+                let past_uac = currently_up
+                    || process
+                        .as_ref()
+                        .map(|p| p.is_helper_thread_done())
+                        .unwrap_or(false);
+                if past_uac {
+                    connect_phase_start = Some(Instant::now());
+                } else if !uac_logged && start_time.elapsed() > Duration::from_secs(3) {
+                    uac_logged = true;
+                    self.send_log(
+                        "Info|Waiting for UAC elevation prompt — please accept or deny."
+                            .to_string(),
+                    );
+                }
+            }
 
             if currently_up {
                 if !connected_detected {
@@ -565,22 +601,55 @@ impl SessionThread {
                     return None; // not eligible for reconnect
                 }
                 return Some(duration); // unexpected disconnect — eligible for reconnect
-            } else if start_time.elapsed() > timeout {
-                self.set_conn_error("VPN tunnel failed to establish within timeout");
-                if let Some(ref mut p) = process {
-                    let _ = p.kill();
-                }
-                return None;
-            } else if let Some(ref mut p) = process {
-                if !p.is_process_alive() {
-                    let reason = p.failure_reason().unwrap_or_else(|| {
-                        "OpenConnect process exited before tunnel was established".to_string()
-                    });
-                    self.set_conn_error(&reason);
+            } else {
+                // Still in connecting phase — check timeouts and process health.
+
+                // On Windows, use a two-stage timeout:
+                //   • UAC pending (connect_phase_start == None): up to 5 minutes,
+                //     so patient users who eventually click Yes are handled correctly.
+                //   • Post-UAC (connect_phase_start == Some): normal 30-second window
+                //     for openconnect to establish the tunnel.
+                // On Unix there is no UAC, so the plain 30-second timeout applies.
+                #[cfg(windows)]
+                let timed_out = match connect_phase_start {
+                    Some(ref t) => t.elapsed() > timeout,
+                    None => start_time.elapsed() > Duration::from_secs(5 * 60),
+                };
+                #[cfg(not(windows))]
+                let timed_out = start_time.elapsed() > timeout;
+
+                if timed_out {
+                    self.set_conn_error("VPN tunnel failed to establish within timeout");
+                    if let Some(ref mut p) = process {
+                        let _ = p.kill();
+                    }
+                    // On Windows the stop-file signal may not reach a helper whose
+                    // UAC prompt was still pending when we timed out.  Kill any
+                    // OpenConnect process that may have started in the background.
+                    #[cfg(windows)]
+                    if let Some(pid) = get_openconnect_pid() {
+                        let _ = kill_process(pid);
+                    }
                     return None;
+                } else if let Some(ref mut p) = process {
+                    if !p.is_process_alive() {
+                        let reason = p.failure_reason().unwrap_or_else(|| {
+                            "OpenConnect process exited before tunnel was established".to_string()
+                        });
+                        self.set_conn_error(&reason);
+                        return None;
+                    }
                 }
             }
-            thread::sleep(Duration::from_millis(1000));
+
+            // Poll in 250 ms increments so user-initiated cancellation is noticed
+            // quickly instead of waiting up to a full second.
+            for _ in 0..4 {
+                if self.cancel_token.is_cancelled() {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(250));
+            }
         }
     }
 

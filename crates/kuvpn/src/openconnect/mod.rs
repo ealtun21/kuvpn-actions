@@ -100,6 +100,17 @@ impl VpnProcess {
         None
     }
 
+    /// Returns `true` once the Windows background helper thread has exited
+    /// (meaning the UAC prompt was either accepted or denied and the elevated
+    /// process has terminated).  Always `false` on Unix.
+    pub fn is_helper_thread_done(&self) -> bool {
+        #[cfg(windows)]
+        if let VpnProcess::Windows { thread_finished, .. } = self {
+            return thread_finished.load(Ordering::SeqCst);
+        }
+        false
+    }
+
     /// Waits for the process to finish (with a 5-second timeout on Windows).
     pub fn wait(&mut self) -> anyhow::Result<()> {
         match self {
