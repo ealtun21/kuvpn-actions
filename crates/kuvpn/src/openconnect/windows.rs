@@ -11,18 +11,6 @@ use super::VpnProcess;
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-// ── Private helpers ───────────────────────────────────────────────────────────
-
-/// Returns a string unique within this process lifetime (PID + nanosecond timestamp).
-fn unique_id() -> String {
-    use std::time::SystemTime;
-    let t = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    format!("{}-{}", std::process::id(), t)
-}
-
 // ── Platform implementations ──────────────────────────────────────────────────
 
 /// Signals the elevated helper to stop OpenConnect by creating the stop-signal file.
@@ -55,10 +43,10 @@ pub(super) fn vpn_process_alive(
 /// Starts OpenConnect on Windows via an elevated helper process (single UAC prompt).
 ///
 /// Instead of elevating openconnect directly, we elevate a copy of ourselves with
-/// `--vpn-helper <stop-file> <oc-path> <url> <dsid>`.  The helper starts openconnect
-/// as its own child (inheriting the elevated token) and monitors the stop-signal file.
-/// When the parent creates that file, the helper kills openconnect and exits — all
-/// without a second UAC prompt.
+/// `--vpn-helper <oc-path> <url> <dsid> <parent-pid> <stop-file>`.  The helper
+/// starts openconnect as its own child (inheriting the elevated token) and monitors
+/// the stop-signal file.  When the parent creates that file, the helper kills
+/// openconnect and exits — all without a second UAC prompt.
 pub(super) fn execute(
     cookie_value: String,
     url: String,
@@ -73,15 +61,16 @@ pub(super) fn execute(
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("openconnect path contains invalid UTF-8"))?;
 
-    // Derive the stop-signal file path from the parent PID rather than passing
-    // the full path as an argument.  The runas crate doubles backslashes when
-    // quoting arguments that contain spaces, which corrupts any Windows path
-    // whose temp-dir component includes a space (e.g. "C:\Users\John Doe\...").
-    // Using only the PID — a plain integer with no separators — avoids that
-    // escaping bug entirely.  The helper derives the same path independently.
     let parent_pid = std::process::id();
-    let stop_file = std::env::temp_dir()
-        .join(format!("kuvpn-stop-{}.signal", parent_pid));
+    let stop_file = std::env::temp_dir().join(format!("kuvpn-stop-{}.signal", parent_pid));
+
+    // Pass the stop-file path to the helper using forward slashes instead of
+    // backslashes.  The runas crate doubles every backslash inside quoted
+    // arguments (to satisfy CommandLineToArgvW), which corrupts Windows paths
+    // that contain spaces (e.g. "C:\Users\John Doe\...").  Forward slashes are
+    // left untouched and are accepted by all Windows file-system APIs, so the
+    // helper can reconstruct the exact path from the argument.
+    let stop_file_arg = stop_file.to_string_lossy().replace('\\', "/");
 
     log::info!("Requesting Admin elevation for OpenConnect (single prompt)...");
 
@@ -91,7 +80,8 @@ pub(super) fn execute(
         .arg(oc_path_str)
         .arg(&url)
         .arg(&cookie_value)
-        .arg(parent_pid.to_string());
+        .arg(parent_pid.to_string())
+        .arg(&stop_file_arg);
 
     if full_tunnel {
         cmd.arg("--full-tunnel");

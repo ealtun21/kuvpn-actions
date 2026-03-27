@@ -13,12 +13,14 @@
 //!   2. url        — VPN gateway URL
 //!   3. dsid       — DSID cookie value (without the "DSID=" prefix)
 //!   4. parent-pid — PID of the non-elevated parent; helper exits when it dies
-//!   5. (optional) `--full-tunnel` — inject 0/1 + 128/1 routes after connect
+//!   5. stop-file  — path to the stop-signal file, in forward-slash form
+//!   6. (optional) `--full-tunnel` — inject 0/1 + 128/1 routes after connect
 //!
-//! The stop-signal file path is NOT passed as an argument.  Both the parent and
-//! the helper derive it independently as `%TEMP%\kuvpn-stop-<parent-pid>.signal`.
-//! This avoids the runas crate's backslash-doubling bug, which corrupts any path
-//! containing a space (e.g. `C:\Users\John Doe\...`).
+//! The stop-signal file path is passed using forward slashes (e.g.
+//! `C:/Users/John Doe/AppData/Local/Temp/kuvpn-stop-1234.signal`).  The runas
+//! crate doubles backslashes inside quoted args, which corrupts Windows paths
+//! that contain spaces; forward slashes are left untouched and are accepted by
+//! all Windows file-system APIs.
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -46,21 +48,34 @@ pub fn run_vpn_helper_if_requested() -> Option<i32> {
     let url = args.get(3)?;
     let dsid = args.get(4)?;
     let parent_pid: u32 = args.get(5)?.parse().ok()?;
-    let full_tunnel = args.get(6).map(|s| s == "--full-tunnel").unwrap_or(false);
+    let stop_file_str = args.get(6)?;
+    let full_tunnel = args.get(7).map(|s| s == "--full-tunnel").unwrap_or(false);
 
-    // Derive the stop-signal file path from the parent PID — same formula the
-    // parent uses.  The path is never passed as an argument because the runas
-    // crate doubles backslashes inside quoted args, which corrupts any path
-    // whose temp-dir component contains a space (e.g. "C:\Users\John Doe\...").
-    let stop_file_buf = std::env::temp_dir()
-        .join(format!("kuvpn-stop-{}.signal", parent_pid));
+    // The stop-file path is passed in forward-slash form to survive the runas
+    // crate's backslash-doubling escaping.  Windows file APIs accept forward
+    // slashes, so PathBuf::from works correctly here.
+    let stop_file_buf = std::path::PathBuf::from(stop_file_str);
     let stop_file = stop_file_buf.as_path();
 
-    Some(run_helper(stop_file, oc_path, url, dsid, parent_pid, full_tunnel))
+    Some(run_helper(
+        stop_file,
+        oc_path,
+        url,
+        dsid,
+        parent_pid,
+        full_tunnel,
+    ))
 }
 
 #[cfg(windows)]
-fn run_helper(stop_file: &Path, oc_path: &str, url: &str, dsid: &str, parent_pid: u32, full_tunnel: bool) -> i32 {
+fn run_helper(
+    stop_file: &Path,
+    oc_path: &str,
+    url: &str,
+    dsid: &str,
+    parent_pid: u32,
+    full_tunnel: bool,
+) -> i32 {
     use std::os::windows::process::CommandExt;
 
     // Start openconnect directly — we're already elevated, so it inherits our
@@ -136,7 +151,9 @@ fn run_helper(stop_file: &Path, oc_path: &str, url: &str, dsid: &str, parent_pid
 #[cfg(windows)]
 fn wait_for_process_exit(pid: u32) {
     use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::System::Threading::{OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE};
+    use windows::Win32::System::Threading::{
+        OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
+    };
     unsafe {
         match OpenProcess(PROCESS_SYNCHRONIZE, false, pid) {
             Ok(handle) if !handle.is_invalid() => {
