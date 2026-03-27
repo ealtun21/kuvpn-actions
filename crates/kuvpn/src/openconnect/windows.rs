@@ -13,14 +13,27 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 // ── Platform implementations ──────────────────────────────────────────────────
 
-/// Signals the elevated helper to stop OpenConnect by creating the stop-signal file.
-/// The helper polls for this file every 200 ms and terminates OpenConnect when it appears.
+/// Signals the elevated helper to stop OpenConnect by setting the named kernel event.
+/// The helper waits on this event and terminates OpenConnect when it fires.
 /// No second UAC prompt is needed because the helper owns the OpenConnect child process.
-pub(super) fn kill_vpn_process(stop_file: &Path) -> anyhow::Result<()> {
-    log::info!("Sending stop signal to VPN helper...");
-    std::fs::File::create(stop_file)
-        .map_err(|e| anyhow::anyhow!("Failed to create stop signal file: {}", e))?;
+pub(super) fn kill_vpn_process(handle: usize) -> anyhow::Result<()> {
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::System::Threading::SetEvent;
+    log::info!("Sending stop signal to VPN helper via named event...");
+    unsafe {
+        SetEvent(HANDLE(handle as *mut _))
+            .map_err(|e| anyhow::anyhow!("Failed to signal stop event: {}", e))?;
+    }
     Ok(())
+}
+
+/// Closes the raw Windows event handle stored in `VpnProcess::Windows`.
+/// Called from `mod.rs` which cannot reference `windows::Win32` types directly.
+pub(super) fn close_stop_event_handle(handle: usize) {
+    use windows::Win32::Foundation::{CloseHandle, HANDLE};
+    unsafe {
+        let _ = CloseHandle(HANDLE(handle as *mut _));
+    }
 }
 
 pub(super) fn vpn_process_alive(
@@ -43,9 +56,9 @@ pub(super) fn vpn_process_alive(
 /// Starts OpenConnect on Windows via an elevated helper process (single UAC prompt).
 ///
 /// Instead of elevating openconnect directly, we elevate a copy of ourselves with
-/// `--vpn-helper <oc-path> <url> <dsid> <parent-pid> <stop-file>`.  The helper
-/// starts openconnect as its own child (inheriting the elevated token) and monitors
-/// the stop-signal file.  When the parent creates that file, the helper kills
+/// `--vpn-helper <oc-path> <url> <dsid> <parent-pid>`.  The helper starts openconnect
+/// as its own child (inheriting the elevated token) and waits on a named kernel event
+/// `Local\kuvpn-stop-<pid>`.  When the parent signals that event, the helper kills
 /// openconnect and exits — all without a second UAC prompt.
 pub(super) fn execute(
     cookie_value: String,
@@ -53,6 +66,8 @@ pub(super) fn execute(
     openconnect_path: &Path,
     full_tunnel: bool,
 ) -> anyhow::Result<VpnProcess> {
+    use windows::Win32::System::Threading::CreateEventW;
+
     // Path to this binary — used as the helper executable.
     let helper_exe = std::env::current_exe()
         .map_err(|e| anyhow::anyhow!("Cannot locate helper binary: {}", e))?;
@@ -62,15 +77,26 @@ pub(super) fn execute(
         .ok_or_else(|| anyhow::anyhow!("openconnect path contains invalid UTF-8"))?;
 
     let parent_pid = std::process::id();
-    let stop_file = std::env::temp_dir().join(format!("kuvpn-stop-{}.signal", parent_pid));
 
-    // Pass the stop-file path to the helper using forward slashes instead of
-    // backslashes.  The runas crate doubles every backslash inside quoted
-    // arguments (to satisfy CommandLineToArgvW), which corrupts Windows paths
-    // that contain spaces (e.g. "C:\Users\John Doe\...").  Forward slashes are
-    // left untouched and are accepted by all Windows file-system APIs, so the
-    // helper can reconstruct the exact path from the argument.
-    let stop_file_arg = stop_file.to_string_lossy().replace('\\', "/");
+    // Create a named kernel event that the elevated helper will open and wait on.
+    // "Local\" scopes the event to the current login session so both the
+    // non-elevated parent and the elevated helper can see it — unlike temp files,
+    // which may resolve to different directories across elevation levels.
+    let event_name = format!("Local\\kuvpn-stop-{}", parent_pid);
+    let event_name_wide: Vec<u16> = event_name
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let stop_event = unsafe {
+        CreateEventW(
+            None,  // default security — accessible by same user regardless of elevation
+            false, // auto-reset: resets automatically after WaitForSingleObject wakes
+            false, // initially non-signalled
+            windows::core::PCWSTR(event_name_wide.as_ptr()),
+        )
+        .map_err(|e| anyhow::anyhow!("Failed to create stop event: {}", e))?
+    };
+    let stop_event_handle = stop_event.0 as usize; // stored in VpnProcess, closed after wait()
 
     log::info!("Requesting Admin elevation for OpenConnect (single prompt)...");
 
@@ -80,8 +106,7 @@ pub(super) fn execute(
         .arg(oc_path_str)
         .arg(&url)
         .arg(&cookie_value)
-        .arg(parent_pid.to_string())
-        .arg(&stop_file_arg);
+        .arg(parent_pid.to_string());
 
     if full_tunnel {
         cmd.arg("--full-tunnel");
@@ -112,7 +137,7 @@ pub(super) fn execute(
     Ok(VpnProcess::Windows {
         thread_finished,
         thread_failed_reason,
-        stop_file,
+        stop_event_handle,
     })
 }
 

@@ -4,25 +4,24 @@
 //! as the first argument so the elevated copy acts as a thin lifecycle manager
 //! rather than a full GUI/CLI session.  This keeps the UAC prompt count to one
 //! per connection: the helper starts OpenConnect as its own child (inheriting
-//! the elevated token) and then waits for a stop-signal file to be created by
-//! the non-elevated parent.  When the file appears the helper kills the child
-//! and exits cleanly.
+//! the elevated token) and then waits for a named Windows kernel event to be
+//! signalled by the non-elevated parent.  When the event fires the helper kills
+//! the child and exits cleanly.
 //!
 //! Argument layout (positional, after `--vpn-helper`):
 //!   1. oc-path    — path to the openconnect executable
 //!   2. url        — VPN gateway URL
 //!   3. dsid       — DSID cookie value (without the "DSID=" prefix)
-//!   4. parent-pid — PID of the non-elevated parent; helper exits when it dies
-//!   5. stop-file  — path to the stop-signal file, in forward-slash form
-//!   6. (optional) `--full-tunnel` — inject 0/1 + 128/1 routes after connect
+//!   4. parent-pid — PID of the non-elevated parent; helper exits when it dies.
+//!      Also used to construct the stop-event name `Local\kuvpn-stop-<pid>`.
+//!   5. (optional) `--full-tunnel` — inject 0/1 + 128/1 routes after connect
 //!
-//! The stop-signal file path is passed using forward slashes (e.g.
-//! `C:/Users/John Doe/AppData/Local/Temp/kuvpn-stop-1234.signal`).  The runas
-//! crate doubles backslashes inside quoted args, which corrupts Windows paths
-//! that contain spaces; forward slashes are left untouched and are accepted by
-//! all Windows file-system APIs.
+//! The stop signal is delivered via a named kernel event
+//! `Local\kuvpn-stop-<parent-pid>` created by the parent before spawning the
+//! helper.  Named events are visible across UAC elevation levels within the
+//! same login session, making them far more reliable than temp files whose
+//! paths can diverge between non-elevated and elevated processes on Windows 11.
 
-use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::sleep;
@@ -48,35 +47,40 @@ pub fn run_vpn_helper_if_requested() -> Option<i32> {
     let url = args.get(3)?;
     let dsid = args.get(4)?;
     let parent_pid: u32 = args.get(5)?.parse().ok()?;
-    let stop_file_str = args.get(6)?;
-    let full_tunnel = args.get(7).map(|s| s == "--full-tunnel").unwrap_or(false);
+    let full_tunnel = args.get(6).map(|s| s == "--full-tunnel").unwrap_or(false);
 
-    // The stop-file path is passed in forward-slash form to survive the runas
-    // crate's backslash-doubling escaping.  Windows file APIs accept forward
-    // slashes, so PathBuf::from works correctly here.
-    let stop_file_buf = std::path::PathBuf::from(stop_file_str);
-    let stop_file = stop_file_buf.as_path();
-
-    Some(run_helper(
-        stop_file,
-        oc_path,
-        url,
-        dsid,
-        parent_pid,
-        full_tunnel,
-    ))
+    Some(run_helper(oc_path, url, dsid, parent_pid, full_tunnel))
 }
 
 #[cfg(windows)]
-fn run_helper(
-    stop_file: &Path,
-    oc_path: &str,
-    url: &str,
-    dsid: &str,
-    parent_pid: u32,
-    full_tunnel: bool,
-) -> i32 {
+fn run_helper(oc_path: &str, url: &str, dsid: &str, parent_pid: u32, full_tunnel: bool) -> i32 {
     use std::os::windows::process::CommandExt;
+    use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+    use windows::Win32::System::Threading::{
+        OpenEventW, WaitForSingleObject, SYNCHRONIZATION_SYNCHRONIZE,
+    };
+
+    // Open the named event the non-elevated parent created before launching us.
+    // "Local\" scopes the event to this login session; both elevation levels
+    // share the same session namespace.
+    let event_name = format!("Local\\kuvpn-stop-{}", parent_pid);
+    let event_name_wide: Vec<u16> = event_name
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let stop_event = unsafe {
+        match OpenEventW(
+            SYNCHRONIZATION_SYNCHRONIZE,
+            false,
+            windows::core::PCWSTR(event_name_wide.as_ptr()),
+        ) {
+            Ok(h) => h,
+            Err(e) => {
+                eprintln!("vpn-helper: failed to open stop event: {}", e);
+                return 1;
+            }
+        }
+    };
 
     // Start openconnect directly — we're already elevated, so it inherits our
     // token without a second UAC prompt.  CREATE_NO_WINDOW suppresses the console.
@@ -92,6 +96,9 @@ fn run_helper(
         Ok(c) => c,
         Err(e) => {
             eprintln!("vpn-helper: failed to start openconnect: {}", e);
+            unsafe {
+                let _ = CloseHandle(stop_event);
+            }
             return 1;
         }
     };
@@ -120,24 +127,34 @@ fn run_helper(
         parent_died_clone.store(true, Ordering::SeqCst);
     });
 
-    // Monitor: stop when signalled by parent (stop-file), when the parent process
-    // dies unexpectedly, or when openconnect exits on its own.
+    // Monitor: stop when signalled by parent (named event), when the parent
+    // process dies unexpectedly, or when openconnect exits on its own.
     loop {
-        if stop_file.exists() || parent_died.load(Ordering::SeqCst) {
-            // Acknowledge by removing the stop file *before* killing OC.
-            // The parent watches for this deletion to know the disconnect is
-            // in progress, so it doesn't fall back to an elevated kill prematurely.
-            let _ = std::fs::remove_file(stop_file);
+        // Non-blocking check: WAIT_OBJECT_0 means the event was signalled.
+        let signalled = unsafe { WaitForSingleObject(stop_event, 0) } == WAIT_OBJECT_0;
+
+        if signalled || parent_died.load(Ordering::SeqCst) {
             let _ = child.kill();
             let _ = child.wait();
+            unsafe {
+                let _ = CloseHandle(stop_event);
+            }
             return 0;
         }
 
         match child.try_wait() {
-            Ok(Some(status)) => return if status.success() { 0 } else { 1 },
+            Ok(Some(status)) => {
+                unsafe {
+                    let _ = CloseHandle(stop_event);
+                }
+                return if status.success() { 0 } else { 1 };
+            }
             Ok(None) => {}
             Err(e) => {
                 eprintln!("vpn-helper: error waiting for child: {}", e);
+                unsafe {
+                    let _ = CloseHandle(stop_event);
+                }
                 return 1;
             }
         }
