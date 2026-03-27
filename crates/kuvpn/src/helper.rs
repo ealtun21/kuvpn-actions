@@ -4,18 +4,26 @@
 //! as the first argument so the elevated copy acts as a thin lifecycle manager
 //! rather than a full GUI/CLI session.  This keeps the UAC prompt count to one
 //! per connection: the helper starts OpenConnect as its own child (inheriting
-//! the elevated token) and then waits for a stop-signal file to be created by
-//! the non-elevated parent.  When the file appears the helper kills the child
-//! and exits cleanly.
+//! the elevated token) and then waits for a named Windows kernel event to be
+//! signalled by the non-elevated parent.  When the event fires the helper kills
+//! the child and exits cleanly.
 //!
 //! Argument layout (positional, after `--vpn-helper`):
-//!   1. stop-file  — path that the parent creates to request a disconnect
-//!   2. oc-path    — path to the openconnect executable
-//!   3. url        — VPN gateway URL
-//!   4. dsid       — DSID cookie value (without the "DSID=" prefix)
+//!   1. oc-path    — path to the openconnect executable
+//!   2. url        — VPN gateway URL
+//!   3. dsid       — DSID cookie value (without the "DSID=" prefix)
+//!   4. parent-pid — PID of the non-elevated parent; helper exits when it dies.
+//!      Also used to construct the stop-event name `Local\kuvpn-stop-<pid>`.
+//!   5. (optional) `--full-tunnel` — inject 0/1 + 128/1 routes after connect
+//!
+//! The stop signal is delivered via a named kernel event
+//! `Local\kuvpn-stop-<parent-pid>` created by the parent before spawning the
+//! helper.  Named events are visible across UAC elevation levels within the
+//! same login session, making them far more reliable than temp files whose
+//! paths can diverge between non-elevated and elevated processes on Windows 11.
 
-use std::path::Path;
-use std::thread::sleep;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 #[cfg(windows)]
@@ -27,12 +35,6 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 /// Call this **before** any argument parser or GUI initialisation so the helper
 /// can run silently without touching GUI or CLI machinery.
 ///
-/// Argument layout (positional, after `--vpn-helper`):
-///   1. stop-file  — path that the parent creates to request a disconnect
-///   2. oc-path    — path to the openconnect executable
-///   3. url        — VPN gateway URL
-///   4. dsid       — DSID cookie value (without the "DSID=" prefix)
-///   5. (optional) `--full-tunnel` — inject 0/1 + 128/1 routes after connect
 #[cfg(windows)]
 pub fn run_vpn_helper_if_requested() -> Option<i32> {
     let args: Vec<String> = std::env::args().collect();
@@ -40,21 +42,84 @@ pub fn run_vpn_helper_if_requested() -> Option<i32> {
         return None;
     }
 
-    let stop_file = Path::new(args.get(2)?);
-    let oc_path = args.get(3)?;
-    let url = args.get(4)?;
-    let dsid = args.get(5)?;
+    let oc_path = args.get(2)?;
+    let url = args.get(3)?;
+    let dsid = args.get(4)?;
+    let parent_pid: u32 = args.get(5)?.parse().ok()?;
     let full_tunnel = args.get(6).map(|s| s == "--full-tunnel").unwrap_or(false);
 
-    Some(run_helper(stop_file, oc_path, url, dsid, full_tunnel))
+    Some(run_helper(oc_path, url, dsid, parent_pid, full_tunnel))
 }
 
 #[cfg(windows)]
-fn run_helper(stop_file: &Path, oc_path: &str, url: &str, dsid: &str, full_tunnel: bool) -> i32 {
+fn run_helper(oc_path: &str, url: &str, dsid: &str, parent_pid: u32, full_tunnel: bool) -> i32 {
+    use std::io::Write as _;
     use std::os::windows::process::CommandExt;
+    use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+    use windows::Win32::System::Threading::{
+        OpenEventW, WaitForSingleObject, SYNCHRONIZATION_SYNCHRONIZE,
+    };
+
+    // Diagnostic log — written by the elevated helper so we can see exactly what
+    // happens even when stdout/stderr are not visible.
+    let log_path = std::path::Path::new("C:\\ProgramData\\kuvpn-helper.log");
+    let mut log = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_path)
+        .ok();
+
+    macro_rules! hlog {
+        ($($arg:tt)*) => {
+            if let Some(ref mut f) = log {
+                let ts = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                let _ = writeln!(f, "[{}] {}", ts, format!($($arg)*));
+                let _ = f.flush();
+            }
+        };
+    }
+
+    hlog!(
+        "helper started: oc_path={:?} url={:?} parent_pid={} full_tunnel={}",
+        oc_path,
+        url,
+        parent_pid,
+        full_tunnel
+    );
+
+    // Open the named event the non-elevated parent created before launching us.
+    // "Local\" scopes the event to this login session; both elevation levels
+    // share the same session namespace.
+    let event_name = format!("Local\\kuvpn-stop-{}", parent_pid);
+    hlog!("opening event: {}", event_name);
+    let event_name_wide: Vec<u16> = event_name
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let stop_event = unsafe {
+        match OpenEventW(
+            SYNCHRONIZATION_SYNCHRONIZE,
+            false,
+            windows::core::PCWSTR(event_name_wide.as_ptr()),
+        ) {
+            Ok(h) => {
+                hlog!("OpenEventW OK, handle={:?}", h.0);
+                h
+            }
+            Err(e) => {
+                hlog!("OpenEventW FAILED: {}", e);
+                eprintln!("vpn-helper: failed to open stop event: {}", e);
+                return 1;
+            }
+        }
+    };
 
     // Start openconnect directly — we're already elevated, so it inherits our
     // token without a second UAC prompt.  CREATE_NO_WINDOW suppresses the console.
+    hlog!("spawning openconnect");
     let mut child = match std::process::Command::new(oc_path)
         .creation_flags(CREATE_NO_WINDOW)
         .arg("--protocol")
@@ -64,9 +129,16 @@ fn run_helper(stop_file: &Path, oc_path: &str, url: &str, dsid: &str, full_tunne
         .arg(url)
         .spawn()
     {
-        Ok(c) => c,
+        Ok(c) => {
+            hlog!("openconnect spawned, child_pid={:?}", c.id());
+            c
+        }
         Err(e) => {
+            hlog!("openconnect spawn FAILED: {}", e);
             eprintln!("vpn-helper: failed to start openconnect: {}", e);
+            unsafe {
+                let _ = CloseHandle(stop_event);
+            }
             return 1;
         }
     };
@@ -76,34 +148,113 @@ fn run_helper(stop_file: &Path, oc_path: &str, url: &str, dsid: &str, full_tunne
     // the system default route and are automatically removed when the TAP
     // adapter goes down.
     if full_tunnel {
+        hlog!("waiting for TAP interface (full tunnel)");
         if wait_for_tap_interface(30) {
+            hlog!("TAP interface up, injecting routes");
             inject_full_tunnel_routes();
         } else {
+            hlog!("timed out waiting for TAP interface");
             eprintln!(
                 "vpn-helper: timed out waiting for TAP interface; full tunnel routes not applied"
             );
         }
     }
 
-    // Monitor: stop when signalled by parent or when openconnect exits on its own.
+    // Spawn a thread that blocks on the parent process handle.  When the parent
+    // exits for any reason (clean exit, crash, kill), WaitForSingleObject returns
+    // and we set the flag so the loop below cleans up without a second UAC prompt.
+    let parent_died = Arc::new(AtomicBool::new(false));
+    let parent_died_clone = Arc::clone(&parent_died);
+    std::thread::spawn(move || {
+        wait_for_process_exit(parent_pid);
+        parent_died_clone.store(true, Ordering::SeqCst);
+    });
+
+    hlog!("entering monitor loop");
+
+    // Monitor: stop when signalled by parent (named event, 200 ms blocking wait),
+    // when the parent process dies unexpectedly, or when openconnect exits on its own.
+    let mut iteration: u64 = 0;
     loop {
-        if stop_file.exists() {
+        iteration += 1;
+
+        // Block up to 200 ms waiting for the stop event.  Returns WAIT_OBJECT_0
+        // immediately when the parent calls SetEvent; WAIT_TIMEOUT after 200 ms
+        // if not signalled.  This replaces the previous non-blocking poll +
+        // sleep(200 ms) combination and wakes faster on the stop signal.
+        let wait_result = unsafe { WaitForSingleObject(stop_event, 200) };
+        let signalled = wait_result == WAIT_OBJECT_0;
+
+        if iteration <= 3 || iteration.is_multiple_of(300) {
+            hlog!(
+                "loop iter={} wait_result={:?} signalled={} parent_died={}",
+                iteration,
+                wait_result.0,
+                signalled,
+                parent_died.load(Ordering::SeqCst)
+            );
+        }
+
+        if signalled {
+            hlog!("STOP: named event signalled by parent — killing openconnect");
             let _ = child.kill();
             let _ = child.wait();
-            let _ = std::fs::remove_file(stop_file);
+            unsafe {
+                let _ = CloseHandle(stop_event);
+            }
+            return 0;
+        }
+
+        if parent_died.load(Ordering::SeqCst) {
+            hlog!("STOP: parent process died — killing openconnect");
+            let _ = child.kill();
+            let _ = child.wait();
+            unsafe {
+                let _ = CloseHandle(stop_event);
+            }
             return 0;
         }
 
         match child.try_wait() {
-            Ok(Some(status)) => return if status.success() { 0 } else { 1 },
+            Ok(Some(status)) => {
+                hlog!(
+                    "openconnect exited on its own: success={}",
+                    status.success()
+                );
+                unsafe {
+                    let _ = CloseHandle(stop_event);
+                }
+                return if status.success() { 0 } else { 1 };
+            }
             Ok(None) => {}
             Err(e) => {
+                hlog!("try_wait error: {}", e);
                 eprintln!("vpn-helper: error waiting for child: {}", e);
+                unsafe {
+                    let _ = CloseHandle(stop_event);
+                }
                 return 1;
             }
         }
+    }
+}
 
-        sleep(Duration::from_millis(200));
+/// Blocks until the process with the given PID exits.
+/// Uses a kernel wait (zero CPU) so there is no polling overhead.
+#[cfg(windows)]
+fn wait_for_process_exit(pid: u32) {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{
+        OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
+    };
+    unsafe {
+        match OpenProcess(PROCESS_SYNCHRONIZE, false, pid) {
+            Ok(handle) if !handle.is_invalid() => {
+                WaitForSingleObject(handle, u32::MAX); // INFINITE = 0xFFFFFFFF
+                let _ = CloseHandle(handle);
+            }
+            _ => {} // process already gone — treat as exited
+        }
     }
 }
 
@@ -134,7 +285,7 @@ fn wait_for_tap_interface(timeout_secs: u64) -> bool {
         if ready {
             return true;
         }
-        sleep(Duration::from_millis(500));
+        std::thread::sleep(Duration::from_millis(500));
     }
 }
 
