@@ -77,17 +77,6 @@ curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install
 
 </details>
 
----
-
-## Prerequisites
-
-- **OpenConnect** must be installed to establish VPN connections.
-  - The installer will offer to install it for you.
-  - On Windows it is bundled inside the installer — nothing extra needed.
-  - On Linux/macOS you can also install it manually: `sudo apt install openconnect` / `brew install openconnect`.
-
----
-
 ## Features
 
 - Modern GUI with system tray and status icons
