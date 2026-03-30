@@ -51,9 +51,13 @@ curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install
 
 The script will ask what to install (GUI, CLI, or both), set up your PATH, and check for OpenConnect.
 
-**Windows:** 
+**Windows** (run in PowerShell):
 
-Download and run [`KUVPN-Setup-windows-x86_64.exe`](https://github.com/ealtun21/kuvpn-actions/releases/latest) from the Releases page.
+```powershell
+irm https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.ps1 | iex
+```
+
+Or download and run [`KUVPN-Setup-windows-x86_64.exe`](https://github.com/ealtun21/kuvpn-actions/releases/latest) manually from the Releases page.
 
 <details><summary>Non-interactive flags (for scripting / automation)</summary>
 
