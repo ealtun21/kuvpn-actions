@@ -49,8 +49,10 @@ pub enum VpnProcess {
         /// Stores the failure reason when the helper fails (e.g. UAC denied, binary missing).
         /// `None` means still running or succeeded cleanly.
         thread_failed_reason: Arc<Mutex<Option<String>>>,
-        /// Creating this file signals the elevated helper to stop OpenConnect.
-        stop_file: std::path::PathBuf,
+        /// Raw Windows HANDLE (stored as `usize` for cross-platform compilation) to
+        /// the named kernel event used to signal the elevated helper to stop OpenConnect.
+        /// Signalled by `kill()`, closed by `wait()`.
+        stop_event_handle: usize,
     },
 }
 
@@ -61,7 +63,9 @@ impl VpnProcess {
             VpnProcess::Unix(child) => unix::kill_vpn_process(child),
 
             #[cfg(windows)]
-            VpnProcess::Windows { stop_file, .. } => windows::kill_vpn_process(stop_file),
+            VpnProcess::Windows {
+                stop_event_handle, ..
+            } => windows::kill_vpn_process(*stop_event_handle),
 
             #[allow(unreachable_patterns)]
             _ => Ok(()),
@@ -100,6 +104,20 @@ impl VpnProcess {
         None
     }
 
+    /// Returns `true` once the Windows background helper thread has exited
+    /// (meaning the UAC prompt was either accepted or denied and the elevated
+    /// process has terminated).  Always `false` on Unix.
+    pub fn is_helper_thread_done(&self) -> bool {
+        #[cfg(windows)]
+        if let VpnProcess::Windows {
+            thread_finished, ..
+        } = self
+        {
+            return thread_finished.load(Ordering::SeqCst);
+        }
+        false
+    }
+
     /// Waits for the process to finish (with a 5-second timeout on Windows).
     pub fn wait(&mut self) -> anyhow::Result<()> {
         match self {
@@ -108,15 +126,26 @@ impl VpnProcess {
                 Ok(())
             }
             VpnProcess::Windows {
-                thread_finished, ..
+                thread_finished,
+                stop_event_handle,
+                ..
             } => {
-                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+                // Wait up to 10 s for the elevated helper to kill OC and exit.
+                // The helper wakes immediately when the named event is signalled
+                // (SetEvent in kill()), so this typically completes in milliseconds;
+                // the 10 s limit is purely a safety net.
+                let done_deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
                 while !thread_finished.load(Ordering::SeqCst) {
-                    if std::time::Instant::now() >= deadline {
+                    if std::time::Instant::now() >= done_deadline {
                         break;
                     }
                     std::thread::sleep(std::time::Duration::from_millis(200));
                 }
+                // Close the kernel event handle now that signalling is complete.
+                #[cfg(windows)]
+                windows::close_stop_event_handle(*stop_event_handle);
+                #[cfg(not(windows))]
+                let _ = stop_event_handle;
                 Ok(())
             }
         }
