@@ -49,6 +49,19 @@ pub fn create_browser(
             if manual_mode { "manual mode" } else { "headless mode" }
         );
 
+        // --new-window on Windows causes Chrome to open a window that is not
+        // attached to the CDP session; headless_chrome then controls a blank
+        // internal tab while the visible window is unreachable.
+        let mut args: Vec<&OsStr> = vec![
+            user_agent.as_os_str(),
+            OsStr::new("--no-first-run"),
+            OsStr::new("--no-default-browser-check"),
+            OsStr::new("--disable-session-crashed-bubble"),
+            OsStr::new("--lang=en-US"),
+        ];
+        #[cfg(not(target_os = "windows"))]
+        args.push(OsStr::new("--new-window"));
+
         let mut options = LaunchOptions::default_builder();
         let mut launch_options = options
             .headless(headless)
@@ -56,14 +69,7 @@ pub fn create_browser(
             .idle_browser_timeout(idle_timeout)
             .window_size(Some((800, 800)))
             .enable_gpu(false)
-            .args(vec![
-                OsStr::new("--new-window"),
-                user_agent.as_os_str(),
-                OsStr::new("--no-first-run"),
-                OsStr::new("--no-default-browser-check"),
-                OsStr::new("--disable-session-crashed-bubble"),
-                OsStr::new("--lang=en-US"),
-            ])
+            .args(args)
             .user_data_dir(Some(user_data_dir));
 
         if let Ok(path) = std::env::var("KUVPN_CHROME_PATH") {

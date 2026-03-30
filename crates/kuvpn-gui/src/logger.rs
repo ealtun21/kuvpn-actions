@@ -32,8 +32,10 @@ impl log::Log for GuiLogger {
         metadata.level() <= log::Level::Trace
     }
     fn log(&self, record: &log::Record) {
-        // Suppress Iced/wgpu/winit internal logs — only forward kuvpn crate output.
-        if !record.target().starts_with("kuvpn") {
+        // Suppress Iced/wgpu/winit internal logs.
+        // Forward kuvpn crate output and headless_chrome (browser automation) logs.
+        let target = record.target();
+        if !target.starts_with("kuvpn") && !target.starts_with("headless_chrome") {
             return;
         }
         let Ok(guard) = self.tx.lock() else { return };
