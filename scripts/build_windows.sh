@@ -18,6 +18,7 @@ if [ "$1" != "--no-container" ] && [ ! -f /.containerenv ]; then
         mkdir -p dist/windows
         podman cp "$CONTAINER_ID":/build/packaging/windows/KUVPN-Setup.exe dist/windows/
         podman cp "$CONTAINER_ID":/build/target/x86_64-pc-windows-gnu/release/kuvpn-gui.exe dist/windows/
+        podman cp "$CONTAINER_ID":/build/target/x86_64-pc-windows-gnu/release/kuvpn-cli.exe dist/windows/
         podman rm "$CONTAINER_ID"
         
         echo "Successfully built Windows installer in dist/windows/KUVPN-Setup.exe"
@@ -34,6 +35,7 @@ echo "Building $APP_NAME for Windows..."
 # 1. Cross-compile Rust binaries
 rustup target add x86_64-pc-windows-gnu
 cargo build -p kuvpn-gui --release --target x86_64-pc-windows-gnu
+cargo build -p kuvpn-cli --release --target x86_64-pc-windows-gnu
 
 # 2. Download and prepare OpenConnect
 echo "Preparing OpenConnect binaries..."

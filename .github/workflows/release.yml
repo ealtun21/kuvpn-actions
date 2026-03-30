@@ -147,6 +147,7 @@ jobs:
           # Copy the binaries so the ISS file can find them
           mkdir -p target/x86_64-pc-windows-gnu/release
           cp target/release/kuvpn-gui.exe target/x86_64-pc-windows-gnu/release/kuvpn-gui.exe
+          cp target/release/kuvpn-cli.exe target/x86_64-pc-windows-gnu/release/kuvpn-cli.exe
 
       - name: Build Installer
         run: iscc packaging/windows/kuvpn.iss
