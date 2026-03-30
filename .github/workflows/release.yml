@@ -122,7 +122,7 @@ jobs:
         run: |
           OC_DIR="packaging/windows/openconnect"
           mkdir -p "$OC_DIR"
-          curl -L -o /tmp/oc_setup.exe "https://github.com/openconnect/openconnect-gui/releases/download/v1.5.3/openconnect-gui-1.5.3-win32.exe"
+          curl -L -o /tmp/oc_setup.exe "https://www.infradead.org/openconnect-gui/download/openconnect-gui-1.6.2-win64.exe"
           7z x -y /tmp/oc_setup.exe -o/tmp/oc_extract > /dev/null || true
           find /tmp/oc_extract -name "openconnect.exe" -exec cp {} "$OC_DIR/" \; || true
           find /tmp/oc_extract -name "*.dll" -exec cp {} "$OC_DIR/" \; || true
