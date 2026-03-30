@@ -143,21 +143,18 @@ fn run_helper(oc_path: &str, url: &str, dsid: &str, parent_pid: u32, full_tunnel
         }
     };
 
-    // When full tunnel is requested, wait for the TAP adapter to come up then
-    // inject 0.0.0.0/1 and 128.0.0.0/1 routes.  These are more-specific than
-    // the system default route and are automatically removed when the TAP
-    // adapter goes down.
+    // When full tunnel is requested, wait for the TAP adapter on a background
+    // thread so the stop-event monitoring loop below starts immediately.
+    // The routes are injected as soon as the TAP interface comes up; if the
+    // helper is asked to stop first the thread is abandoned (it dies with the
+    // process when the helper exits).
     if full_tunnel {
-        hlog!("waiting for TAP interface (full tunnel)");
-        if wait_for_tap_interface(30) {
-            hlog!("TAP interface up, injecting routes");
-            inject_full_tunnel_routes();
-        } else {
-            hlog!("timed out waiting for TAP interface");
-            eprintln!(
-                "vpn-helper: timed out waiting for TAP interface; full tunnel routes not applied"
-            );
-        }
+        hlog!("spawning TAP-route background thread (full tunnel)");
+        std::thread::spawn(move || {
+            if wait_for_tap_interface(30) {
+                inject_full_tunnel_routes();
+            }
+        });
     }
 
     // Spawn a thread that blocks on the parent process handle.  When the parent
