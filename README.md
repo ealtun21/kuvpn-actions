@@ -93,6 +93,47 @@ curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install
 
 ---
 
+## Screenshots
+
+### Graphical Interface (KUVPN)
+
+| Main Window | History | Settings |
+|:---:|:---:|:---:|
+| <img src="docs/screenshots/connected.png" width="300"> | <img src="docs/screenshots/gui-history.png" width="300"> | <img src="docs/screenshots/settings.png" width="300"> |
+
+| MFA Authentication | Email Automation | Live Logs |
+|:---:|:---:|:---:|
+| <img src="docs/screenshots/connecting-mfa.png" width="300"> | <img src="docs/screenshots/connecting-email.png" width="300"> | <img src="docs/screenshots/session-logger.png" width="300"> |
+
+### Command Line Interface (kuvpn)
+
+| Connected | Connecting | MFA Prompt |
+|:---:|:---:|:---:|
+| <img src="docs/screenshots/cli-connected.png" width="300"> | <img src="docs/screenshots/cli-connecting.png" width="300"> | <img src="docs/screenshots/cli-mfa.png" width="300"> |
+
+| History | Session Management | Disconnected |
+|:---:|:---:|:---:|
+| <img src="docs/screenshots/cli-history.png" width="300"> | <img src="docs/screenshots/cli-clear-session.png" width="300"> | <img src="docs/screenshots/cli-disconnected.png" width="300"> |
+
+### Themes
+
+KUVPN features 10 unique color families, each with Light and Dark modes (20 themes total).
+
+| | Dark | Light |
+| --- | :---: | :---: |
+| **Crimson (Default)** | <img src="docs/screenshots/gui-theme-dark.png" width="300"> | <img src="docs/screenshots/gui-theme-light.png" width="300"> |
+| **Slate** | <img src="docs/screenshots/slate-theme-dark.png" width="300"> | <img src="docs/screenshots/slate-theme-light.png" width="300"> |
+| **Ocean** | <img src="docs/screenshots/ocean-theme-dark.png" width="300"> | <img src="docs/screenshots/ocean-theme-light.png" width="300"> |
+| **Forest** | <img src="docs/screenshots/forest-theme-dark.png" width="300"> | <img src="docs/screenshots/forest-theme-light.png" width="300"> |
+| **Rose** | <img src="docs/screenshots/rose-theme-dark.png" width="300"> | <img src="docs/screenshots/rose-theme-light.png" width="300"> |
+| **Violet** | <img src="docs/screenshots/violet-theme-dark.png" width="300"> | <img src="docs/screenshots/violet-theme-light.png" width="300"> |
+| **Ember** | <img src="docs/screenshots/ember-theme-dark.png" width="300"> | <img src="docs/screenshots/ember-theme-light.png" width="300"> |
+| **Frost** | <img src="docs/screenshots/frost-theme-dark.png" width="300"> | <img src="docs/screenshots/frost-theme-light.png" width="300"> |
+| **Sand** | <img src="docs/screenshots/sand-theme-dark.png" width="300"> | <img src="docs/screenshots/sand-theme-light.png" width="300"> |
+| **Pebble** | <img src="docs/screenshots/pebble-theme-dark.png" width="300"> | <img src="docs/screenshots/pebble-theme-light.png" width="300"> |
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
