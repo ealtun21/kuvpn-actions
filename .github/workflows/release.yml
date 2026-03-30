@@ -380,7 +380,15 @@ jobs:
             ## Installation
 
             ### Windows
+            **Recommended** — one-line terminal installer (run in PowerShell):
+            ```powershell
+            irm https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.ps1 | iex
+            ```
+
+            <details><summary>Manual install</summary>
+
             Download and run **`KUVPN-Setup-windows-x86_64.exe`** — the installer bundles OpenConnect and the CLI, and sets everything up.
+            </details>
 
             ### Linux (GUI — `KUVPN`)
             **Recommended** — one-line installer (also sets up openconnect):

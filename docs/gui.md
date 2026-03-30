@@ -70,7 +70,19 @@ This removes the macOS quarantine flag that would otherwise block the app from o
 
 ### Windows
 
+**Recommended** — one-line terminal installer (run in PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install.ps1 | iex
+```
+
+The script downloads and runs the latest installer silently. OpenConnect and Wintun are bundled — no extra setup required.
+
+<details><summary>Manual install</summary>
+
 Download and run **`KUVPN-Setup-windows-x86_64.exe`** from the [Releases](https://github.com/ealtun21/kuvpn-actions/releases/latest) page. The installer bundles OpenConnect and Wintun — no extra setup required.
+
+</details>
 
 ---
 
