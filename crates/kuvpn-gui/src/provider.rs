@@ -19,10 +19,13 @@ pub struct GuiProvider {
 
 impl CredentialsProvider for GuiProvider {
     fn request_text(&self, msg: &str) -> Option<String> {
-        self.request(msg, false)
+        self.request(msg, false, false)
     }
     fn request_password(&self, msg: &str) -> Option<String> {
-        self.request(msg, true)
+        self.request(msg, true, false)
+    }
+    fn request_email(&self, msg: &str) -> Option<String> {
+        self.request(msg, false, true)
     }
     fn on_mfa_push(&self, code: &str) {
         let _ = self
@@ -47,11 +50,12 @@ impl CredentialsProvider for GuiProvider {
 }
 
 impl GuiProvider {
-    fn request(&self, msg: &str, is_password: bool) -> Option<String> {
+    fn request(&self, msg: &str, is_password: bool, is_email: bool) -> Option<String> {
         let (tx, mut rx) = oneshot::channel();
         let request = InputRequest {
             msg: msg.to_string(),
             is_password,
+            is_email,
             response_tx: tx,
         };
 

@@ -70,16 +70,15 @@ Press **Ctrl+C** to disconnect.
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--url` | `-u` | `https://vpn.ku.edu.tr` | VPN portal URL |
+| `--mode` | `-m` | `full-auto` | Login mode: `full-auto`, `visual`, or `manual` — see [Login Modes](#login-modes) |
+| `--url` | | `https://vpn.ku.edu.tr` | VPN portal URL |
 | `--domain` | | `vpn.ku.edu.tr` | Domain used for DSID cookie matching |
-| `--email` | | *(none)* | Pre-fill your university email to speed up login |
-| `--level` | `-l` | `error` | Log level: `off`, `error`, `warn`, `info`, `debug`, `trace` |
-| `--disable-headless` | `-d` | `false` | Show the browser window instead of running headlessly |
-| `--no-auto-login` | | `false` | Disable automation — poll for DSID in a visible browser you control |
-| `--get-dsid` | `-g` | `false` | Print the DSID cookie and exit without starting OpenConnect |
+| `--email` | `-e` | *(none)* | Pre-fill your university email to speed up login |
+| `--log` | `-l` | `error` | Log level: `off`, `error`, `warn`, `info`, `debug`, `trace` |
+| `--dsid` | `-d` | `false` | Print the DSID cookie and exit without starting OpenConnect |
 | `--history` | | `false` | Print connection history and exit |
 | `--clean` | `-c` | `false` | Delete saved session data and exit |
-| `--run-command` | `-r` | *(auto-detected)* | Override the privilege escalation tool (`sudo`, `pkexec`, or a custom script) |
+| `--run-command` | | *(auto-detected)* | Override the privilege escalation tool (`sudo`, `pkexec`, or a custom script) |
 | `--openconnect-path` | | `openconnect` | Path or command name for the OpenConnect binary |
 | `--interface-name` | | `kuvpn0` | Name for the TUN interface created by OpenConnect |
 | `--tunnel-mode` | | `full` | Tunnel mode: `full` (all traffic via VPN) or `manual` (custom vpnc-script) |
@@ -102,14 +101,14 @@ Displays a timestamped list of past connection events (Connected, Reconnected, D
 ### Full Auto (default)
 The browser runs headlessly. KUVPN detects each page of the login flow and fills in fields automatically. Works for most users who have their session cached.
 
-### Visual Auto (`--disable-headless`)
+### Visual Auto (`--mode visual`)
 Opens a visible browser window but still attempts to automate the login. Useful for debugging or when a CAPTCHA appears.
 
-### Manual (`--no-auto-login --disable-headless`)
+### Manual (`--mode manual`)
 Opens a visible browser and does nothing — you complete the login yourself. KUVPN waits until it detects the DSID cookie, then takes over and starts OpenConnect.
 
 ```bash
-kuvpn --no-auto-login --disable-headless
+kuvpn --mode manual
 ```
 
 After you log in once this way, the session is saved and future runs can use Full Auto again.
@@ -147,7 +146,7 @@ If the download fails repeatedly, install Chrome or Chromium via your package ma
 Try Manual mode so you can see what's happening:
 
 ```bash
-kuvpn --no-auto-login --disable-headless
+kuvpn --mode manual
 ```
 
 Once you complete the login manually, the session is saved for future runs.

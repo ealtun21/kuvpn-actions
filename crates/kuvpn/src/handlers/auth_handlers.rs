@@ -11,6 +11,7 @@ impl AuthTab {
         msg: &str,
         button_selector: &str,
         is_password: bool,
+        is_email: bool,
         value: Option<&String>,
         provider: &dyn CredentialsProvider,
     ) -> anyhow::Result<()> {
@@ -25,6 +26,8 @@ impl AuthTab {
 
                 let result = if is_password {
                     provider.request_password(msg)
+                } else if is_email {
+                    provider.request_email(msg)
                 } else {
                     provider.request_text(msg)
                 };

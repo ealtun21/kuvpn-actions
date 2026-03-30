@@ -78,19 +78,16 @@ Download and run **`KUVPN-Setup-windows-x86_64.exe`** from the [Releases](https:
 
 When KUVPN opens you will see four tabs: **Connection**, **History**, **Console**, and **Settings**.
 
-Before connecting, go to **Settings** and verify:
+You can connect right away — just switch to the **Connection** tab and click **Join Network**. On the first run KUVPN will ask for your university email during login and save it automatically for future connections.
 
-- **OpenConnect path** — the app auto-detects it on startup and shows a green checkmark if found. If it is red, install OpenConnect or enter the full path manually.
-- **Email** — entering your university email allows the auto-login to skip the email field.
-- **Login mode** — see [Login Modes](#login-modes) below.
-- **Escalation tool** (Linux/macOS) — the tool used to run OpenConnect as root (`sudo` or `pkexec`). The app picks one automatically but you can override it.
+If you'd like to review or change settings (login mode, theme, advanced options) you can do so in the **Settings** tab at any time. For options beyond the basics (OpenConnect path, escalation tool, tunnel mode, etc.) switch the **Basic / Advanced** toggle in the top-right corner of the Settings tab.
 
 ---
 
 ## Connecting
 
 1. Switch to the **Connection** tab.
-2. Click **Connect**.
+2. Click **Join Network**.
 3. The status changes to *Connecting* and the Console tab will show live log output.
 4. If MFA is required, KUVPN brings the window to the front so you can respond.
 5. Once connected, the status shows *Connected* and the tray icon turns green.
@@ -101,7 +98,7 @@ To disconnect, click **Disconnect** or use the tray menu.
 
 ## Login Modes
 
-The slider in Settings controls how much KUVPN automates the login:
+The segmented control in Settings → **Login Mode** controls how much KUVPN automates the login:
 
 | Mode | Description |
 |------|-------------|
@@ -115,7 +112,7 @@ After a successful manual login the session is saved, so Full Auto will work on 
 
 ## System Tray
 
-KUVPN minimises to the system tray when you close the window (if **Close to tray** is enabled in Settings).
+KUVPN minimises to the system tray when you close the window (if **Close to Tray** is set to Yes in Settings).
 
 The tray icon reflects the current connection state:
 
@@ -131,21 +128,40 @@ Right-clicking the tray icon gives you a menu to show/hide the window, connect, 
 
 ## Settings Reference
 
+Settings are divided into **Basic** and **Advanced** sections. Use the **Basic / Advanced** toggle in the Settings tab header to switch between them.
+
+### Basic settings (always visible)
+
 | Setting | Description |
 |---------|-------------|
-| VPN URL | The portal URL. Default: `https://vpn.ku.edu.tr` |
-| Domain | Domain for DSID matching. Default: `vpn.ku.edu.tr` |
-| Email | Pre-fill your university email for faster auto-login |
-| Login mode | Full Auto / Visual Auto / Manual (slider) |
-| OpenConnect path | Path to the `openconnect` binary. Leave blank to auto-detect. |
-| Escalation tool | `sudo` or `pkexec` (Linux/macOS only) |
-| Log level | Controls how much is shown in the Console tab |
-| Close to tray | Minimise to tray instead of quitting when the window is closed |
-| Client-side decorations | Use custom window chrome instead of the OS title bar |
-| Tunnel mode | `Full` routes all traffic through the VPN. `Manual` lets you supply a custom vpnc-script for advanced routing. |
-| VPN Script | Path to a custom vpnc-script (only shown in Manual tunnel mode). Click **Test** to validate before connecting. |
+| Family | Color palette for the app theme (e.g. Default, Ocean, Rose) |
+| Tone | Dark or Light variant of the selected color family |
+| KU Email | Pre-fill your university email for faster auto-login |
+| Login Mode | Full Auto / Visual Auto / Manual (see [Login Modes](#login-modes)) |
+| Close to Tray | **Yes**: closing the window minimises to tray and keeps the VPN running. **No**: closing the window exits the app and disconnects. |
+| Auto-hide | **Yes**: the window hides automatically after a login prompt resolves, if it was brought up from the tray to show that prompt. |
+| Window Style | **System**: native OS window borders. **Custom**: frameless window with a built-in titlebar that matches the app theme. |
 
-Click **Reset to defaults** to restore all settings.
+### Advanced settings (visible when Advanced mode is on)
+
+| Setting | Description |
+|---------|-------------|
+| Rounding | Corner radius style for buttons and cards (Square → Pill) |
+| Shadow | Drop-shadow depth for cards and buttons (None → Elevated) |
+| Gateway URL | The VPN portal URL. Default: `https://vpn.ku.edu.tr` |
+| DSID Domain | Domain for DSID cookie matching. Default: `vpn.ku.edu.tr` |
+| OC Path | Path to the `openconnect` binary. Leave blank to auto-detect. Click **Test** to verify. |
+| Tunnel Mode | `Full` routes all traffic through the VPN. `Manual` lets you supply a custom vpnc-script for advanced routing. |
+| VPN Script | Path to a custom vpnc-script (only shown in Manual tunnel mode). Click **Test** to validate before connecting. |
+| Log Level | Controls how much is shown in the Console tab |
+| Elevation | Privilege escalation tool: `sudo` or `pkexec` (Linux/macOS only) |
+
+### Actions
+
+At the bottom of the Settings tab:
+
+- **Wipe Session** — deletes the saved login session. Use this if you get a "Cookie was rejected" error.
+- **Reset Defaults** — restores all settings to their defaults.
 
 ---
 
@@ -177,21 +193,21 @@ When a stale session causes the initial tunnel to fail, KUVPN detects it, clears
 
 ### "Cookie was rejected by server"
 
-Your saved session has expired. Click **Wipe Session** in the Connection tab, then reconnect.
+Your saved session has expired. Go to **Settings → Wipe Session**, then reconnect.
 
 ### Auto-login fails / stuck in a login loop
 
-Switch to **Manual** mode in Settings, connect, and complete the login yourself. Once the session is saved, switch back to Full Auto.
+Switch to **Manual** mode in Settings → Login Mode, connect, and complete the login yourself. Once the session is saved, switch back to Full Auto.
 
-### OpenConnect shows a red X in Settings
+### OpenConnect not found (red ✗ on Test button)
 
-OpenConnect is not installed or is not in the expected location. Install it:
+OpenConnect is not installed or is not in the expected location. Enable **Advanced** mode in Settings and check the **OC Path** field. Install OpenConnect:
 
 - **Linux:** `sudo apt install openconnect` (or `dnf`, `pacman`, etc.)
 - **macOS:** `brew install openconnect`
 - **Windows:** Reinstall using the Setup installer from the Releases page.
 
-Or enter the full path to your `openconnect` binary in the OpenConnect path field and click **Test**.
+Or enter the full path to your `openconnect` binary in the OC Path field and click **Test**.
 
 ### App won't open on macOS ("app is damaged")
 
@@ -209,4 +225,4 @@ This should be automatically detected and trigger a reconnect. If it persists, c
 
 ### Logs
 
-The **Console** tab shows real-time output from the login and VPN process. Increase the log level slider in Settings to `debug` or `trace` for more detail. Use **Copy Logs** to copy everything to your clipboard for bug reports.
+The **Console** tab shows real-time output from the login and VPN process. Enable **Advanced** mode in Settings and increase the **Log Level** to `debug` or `trace` for more detail. Use **Copy Logs** to copy everything to your clipboard for bug reports.

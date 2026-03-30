@@ -30,6 +30,12 @@ impl CancellationToken {
 pub trait CredentialsProvider: Send + Sync {
     fn request_text(&self, msg: &str) -> Option<String>;
     fn request_password(&self, msg: &str) -> Option<String>;
+    /// Request the user's email/username. Defaults to `request_text`.
+    /// Implementations may override this to distinguish the email prompt from
+    /// generic text prompts (e.g. to auto-save the entered address).
+    fn request_email(&self, msg: &str) -> Option<String> {
+        self.request_text(msg)
+    }
     fn on_mfa_push(&self, _code: &str) {}
     fn on_mfa_complete(&self) {}
 

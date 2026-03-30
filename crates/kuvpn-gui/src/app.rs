@@ -39,6 +39,7 @@ pub struct KuVpnGui {
     pub logs: Vec<String>,
     pub status: ConnectionStatus,
     pub pending_request: Option<InputRequest>,
+    pub pending_email: Option<String>,
     pub current_input: String,
     pub show_password_held: bool,
     pub mfa_info: Option<String>,
@@ -375,6 +376,8 @@ impl KuVpnGui {
         self.mfa_info = None;
         self.connection_start = None;
         self.active_interface = None;
+        // Discard any staged email — it was never confirmed by a successful connection.
+        self.pending_email = None;
 
         if let Some(tray) = &self.tray_icon {
             crate::tray::update_tray_icon(tray, self.status);
@@ -453,6 +456,11 @@ impl KuVpnGui {
 
         if status == ConnectionStatus::Connected {
             self.connection_start = Some(Instant::now());
+            // Connection succeeded — persist the staged email if one was captured.
+            if let Some(email) = self.pending_email.take() {
+                self.settings.email = email;
+                self.save_settings();
+            }
             #[cfg(unix)]
             {
                 self.active_interface = kuvpn::get_vpn_interface_name("kuvpn0");
@@ -789,6 +797,11 @@ impl KuVpnGui {
             }
             Message::SubmitInput => {
                 if let Some(req) = self.pending_request.take() {
+                    // Stage the email for saving — it will be persisted to
+                    // settings only if the connection succeeds (Connected status).
+                    if req.is_email && self.settings.email.is_empty() {
+                        self.pending_email = Some(self.current_input.clone());
+                    }
                     let _ = req.response_tx.send(self.current_input.clone());
                     self.current_input = String::new();
                     self.show_password_held = false;
@@ -1167,6 +1180,7 @@ impl Default for KuVpnGui {
             logs: vec!["Ready for secure campus access.".to_string()],
             status: ConnectionStatus::Disconnected,
             pending_request: None,
+            pending_email: None,
             current_input: String::new(),
             show_password_held: false,
             mfa_info: None,

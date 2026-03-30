@@ -165,6 +165,7 @@ impl BrowserSession {
                 "Username (email): ",
                 "#idSIButton9",
                 false,
+                true,
                 email,
                 provider,
             )?;
@@ -199,6 +200,7 @@ impl BrowserSession {
                 "KU Password: ",
                 "#idSIButton9",
                 true,
+                false,
                 None,
                 provider,
             )?;

@@ -122,6 +122,7 @@ pub enum Message {
 pub struct InputRequest {
     pub msg: String,
     pub is_password: bool,
+    pub is_email: bool,
     pub response_tx: oneshot::Sender<String>,
 }
 
