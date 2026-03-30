@@ -42,7 +42,11 @@ Write-Ok "Downloaded to $TempFile"
 
 # --- Run installer ---
 Write-Info "Installing silently (this may take a moment)..."
-Start-Process -FilePath $TempFile -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
+$proc = Start-Process -FilePath $TempFile -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru
+
+if ($proc.ExitCode -ne 0) {
+    Write-Fail "Installer exited with code $($proc.ExitCode). Installation may have failed or been cancelled."
+}
 
 Write-Host ""
 Write-Ok "Done! KUVPN has been installed."

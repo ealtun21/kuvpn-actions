@@ -353,12 +353,8 @@ jobs:
           cp artifacts/kuvpn-appimage-aarch64/KUVPN-minimal-aarch64.AppImage release/KUVPN-linux-aarch64.AppImage
           chmod +x release/KUVPN-linux-aarch64.AppImage
 
-          # Windows GUI installer  →  KUVPN-Setup-windows-x86_64.exe  (primary download)
-          # Windows CLI exe bundled into a zip for users who want the standalone binary
+          # Windows GUI installer  →  KUVPN-Setup-windows-x86_64.exe  (bundles CLI + OpenConnect)
           cp artifacts/kuvpn-windows-x64/packaging/windows/KUVPN-Setup.exe release/KUVPN-Setup-windows-x86_64.exe
-          mkdir -p extras-windows
-          cp artifacts/kuvpn-windows-x64/target/release/kuvpn-cli.exe extras-windows/kuvpn-windows-x86_64.exe
-          cd extras-windows && zip ../release/kuvpn-extras-windows-x86_64.zip kuvpn-windows-x86_64.exe && cd ..
 
           # macOS CLI  →  kuvpn-macos-<arch>
           # macOS GUI  →  KUVPN-macOS-<arch>.dmg
@@ -384,9 +380,7 @@ jobs:
             ## Installation
 
             ### Windows
-            Download and run **`KUVPN-Setup-windows-x86_64.exe`** — the installer bundles OpenConnect and sets everything up.
-
-            > Need just the raw CLI binary? It's in **`kuvpn-extras-windows-x86_64.zip`**.
+            Download and run **`KUVPN-Setup-windows-x86_64.exe`** — the installer bundles OpenConnect and the CLI, and sets everything up.
 
             ### Linux (GUI — `KUVPN`)
             **Recommended** — one-line installer (also sets up openconnect):
