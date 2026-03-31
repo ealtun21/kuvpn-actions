@@ -20,13 +20,13 @@ Get up and running on any platform
 </td>
 <td align="center" width="33%">
 
-### [GUI Docs](docs/gui.md)
+### [GUI Docs](https://github.com/ealtun21/kuvpn-actions/blob/main/docs/gui.md)
 Graphical app — KUVPN
 
 </td>
 <td align="center" width="33%">
 
-### [CLI Docs](docs/cli.md)
+### [CLI Docs](https://github.com/ealtun21/kuvpn-actions/blob/main/docs/cli.md)
 Command-line tool — kuvpn
 
 </td>

@@ -6,6 +6,7 @@
   <title>KUVPN — VPN Client for Koç University</title>
   <meta name="description" content="KUVPN is a VPN client for Koç University that automates Microsoft Azure AD / MFA login and hands off to OpenConnect." />
   <meta name="color-scheme" content="dark" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -550,7 +551,7 @@
       transition: border-color .15s;
     }
     .platform-card:hover { border-color: rgba(91,141,238,.4); }
-    .platform-card svg, .platform-card .p-icon {
+    .platform-card .p-icon {
       font-size: 36px;
       margin-bottom: 10px;
       display: block;
@@ -662,10 +663,11 @@
       gap: 8px;
     }
     .dual-list li::before {
-      content: "✓";
+      font-family: "Font Awesome 6 Free";
+      content: "\f00c";
+      font-weight: 900;
       color: var(--green);
-      font-weight: 700;
-      font-size: 12px;
+      font-size: 11px;
       flex-shrink: 0;
     }
     .dual-link {
@@ -765,9 +767,9 @@
 
     <!-- OS segmented control -->
     <div class="os-seg">
-      <button class="os-seg-tab" data-os="linux" onclick="switchOS('linux')">🐧 Linux</button>
-      <button class="os-seg-tab" data-os="macos" onclick="switchOS('macos')">🍎 macOS</button>
-      <button class="os-seg-tab" data-os="windows" onclick="switchOS('windows')">🪟 Windows</button>
+      <button class="os-seg-tab" data-os="linux" onclick="switchOS('linux')"><i class="fa-brands fa-linux"></i> Linux</button>
+      <button class="os-seg-tab" data-os="macos" onclick="switchOS('macos')"><i class="fa-brands fa-apple"></i> macOS</button>
+      <button class="os-seg-tab" data-os="windows" onclick="switchOS('windows')"><i class="fa-brands fa-windows"></i> Windows</button>
     </div>
 
     <!-- Single command panel -->
@@ -801,7 +803,7 @@
     <!-- GUI vs CLI hero card -->
     <div class="dual-card">
       <div class="dual-half dual-gui">
-        <div class="dual-icon">🖥️</div>
+        <div class="dual-icon"><i class="fa-solid fa-desktop"></i></div>
         <div class="dual-label">Graphical App</div>
         <h3 class="dual-name">KUVPN</h3>
         <p class="dual-desc">Lives in your system tray. Connect with one click, get notified when MFA is needed, and forget it's even running. Designed for everyday desktop use.</p>
@@ -810,11 +812,11 @@
           <li>Auto-shows when MFA input is required</li>
           <li>Connection history &amp; live status</li>
         </ul>
-        <a class="dual-link" href="gui.md">GUI documentation →</a>
+        <a class="dual-link" href="https://github.com/ealtun21/kuvpn-actions/blob/main/docs/gui.md">GUI documentation →</a>
       </div>
       <div class="dual-divider"></div>
       <div class="dual-half dual-cli">
-        <div class="dual-icon">⌨️</div>
+        <div class="dual-icon"><i class="fa-solid fa-terminal"></i></div>
         <div class="dual-label">Command-line Tool</div>
         <h3 class="dual-name">kuvpn</h3>
         <p class="dual-desc">A single static binary with zero runtime dependencies. Perfect for servers, scripts, SSH sessions, and power users who live in the terminal.</p>
@@ -823,14 +825,14 @@
           <li>Scriptable &amp; CI-friendly flags</li>
           <li>Works over SSH on headless servers</li>
         </ul>
-        <a class="dual-link" href="cli.md">CLI documentation →</a>
+        <a class="dual-link" href="https://github.com/ealtun21/kuvpn-actions/blob/main/docs/cli.md">CLI documentation →</a>
       </div>
     </div>
 
     <!-- OpenConnect + open source trust banner -->
     <div class="trust-banner">
       <div class="trust-item">
-        <span class="trust-icon">🔗</span>
+        <span class="trust-icon"><i class="fa-solid fa-link"></i></span>
         <div>
           <strong>Built on OpenConnect</strong>
           <p>KUVPN uses <a href="https://www.infradead.org/openconnect/" target="_blank" rel="noopener">OpenConnect</a> — the battle-tested, widely-audited open-source VPN client trusted by millions — to establish the actual tunnel. KUVPN handles the Azure AD authentication; OpenConnect does the rest.</p>
@@ -838,7 +840,7 @@
       </div>
       <div class="trust-sep"></div>
       <div class="trust-item">
-        <span class="trust-icon">📖</span>
+        <span class="trust-icon"><i class="fa-solid fa-book-open"></i></span>
         <div>
           <strong>Fully Open Source</strong>
           <p>Every line of KUVPN is public on <a href="https://github.com/ealtun21/kuvpn-actions" target="_blank" rel="noopener">GitHub</a> under the MIT license. Inspect it, fork it, contribute to it — no black boxes.</p>
@@ -849,32 +851,32 @@
     <!-- Feature cards -->
     <div class="features-grid">
       <div class="feature-card">
-        <span class="feature-icon">🔐</span>
+        <span class="feature-icon"><i class="fa-solid fa-lock"></i></span>
         <h3>Automated Azure MFA</h3>
         <p>Headless browser handles the Azure AD login and MFA flow automatically — no manual cookie hunting.</p>
       </div>
       <div class="feature-card">
-        <span class="feature-icon">♻️</span>
+        <span class="feature-icon"><i class="fa-solid fa-arrows-rotate"></i></span>
         <h3>Auto Reconnect</h3>
         <p>Detects tunnel drops (not just the process) and reconnects up to 3 times with smart delays.</p>
       </div>
       <div class="feature-card">
-        <span class="feature-icon">💾</span>
+        <span class="feature-icon"><i class="fa-solid fa-floppy-disk"></i></span>
         <h3>Session Persistence</h3>
         <p>Stays logged in across reconnects so you never have to re-authenticate mid-session.</p>
       </div>
       <div class="feature-card">
-        <span class="feature-icon">🛤️</span>
+        <span class="feature-icon"><i class="fa-solid fa-route"></i></span>
         <h3>Full Tunnel &amp; Custom Script</h3>
         <p>Full tunnel routes all traffic through the university VPN. Power users can supply their own vpnc-script for full control.</p>
       </div>
       <div class="feature-card">
-        <span class="feature-icon">📋</span>
+        <span class="feature-icon"><i class="fa-solid fa-clock-rotate-left"></i></span>
         <h3>Connection History</h3>
         <p>View past sessions with durations, timestamps, and reconnect counts — all stored locally.</p>
       </div>
       <div class="feature-card">
-        <span class="feature-icon">📝</span>
+        <span class="feature-icon"><i class="fa-solid fa-file-lines"></i></span>
         <h3>Rolling Log File</h3>
         <p>Persistent 10 MB rotating log for post-mortem debugging — no lost context after a crash.</p>
       </div>
@@ -1003,21 +1005,21 @@
     <p class="sub">Native packages for all major platforms. No virtual machine needed.</p>
     <div class="platform-cards">
       <div class="platform-card">
-        <span class="p-icon">🐧</span>
+        <span class="p-icon"><i class="fa-brands fa-linux"></i></span>
         <h3>Linux</h3>
         <p>AppImage (GUI) and static musl binary (CLI). Runs on any modern distro.</p>
         <span class="badge">x86_64</span>
         <span class="badge">aarch64</span>
       </div>
       <div class="platform-card">
-        <span class="p-icon">🍎</span>
+        <span class="p-icon"><i class="fa-brands fa-apple"></i></span>
         <h3>macOS</h3>
         <p>DMG app bundle (GUI) and universal CLI binary.</p>
         <span class="badge">Intel</span>
         <span class="badge">Apple Silicon</span>
       </div>
       <div class="platform-card">
-        <span class="p-icon">🪟</span>
+        <span class="p-icon"><i class="fa-brands fa-windows"></i></span>
         <h3>Windows</h3>
         <p>Bundled installer — OpenConnect included, no extra setup needed.</p>
         <span class="badge">x86_64</span>
@@ -1034,8 +1036,8 @@
       GitHub
     </a>
     <a href="https://github.com/ealtun21/kuvpn-actions/releases/latest" target="_blank" rel="noopener">Releases</a>
-    <a href="gui.md">GUI Docs</a>
-    <a href="cli.md">CLI Docs</a>
+    <a href="https://github.com/ealtun21/kuvpn-actions/blob/main/docs/gui.md">GUI Docs</a>
+    <a href="https://github.com/ealtun21/kuvpn-actions/blob/main/docs/cli.md">CLI Docs</a>
     <a href="https://github.com/ealtun21/kuvpn-actions/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
     <a href="https://github.com/ealtun21/kuvpn-actions/issues" target="_blank" rel="noopener">Issues</a>
   </div>
