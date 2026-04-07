@@ -68,7 +68,8 @@ impl KuVpnGui {
             .width(Length::Fill)
             .into()
         } else {
-            text_input("username@ku.edu.tr", &self.current_input)
+            let placeholder = if req.is_email { "username@ku.edu.tr" } else { "Enter code" };
+            text_input(placeholder, &self.current_input)
                 .on_input(Message::InputChanged)
                 .on_submit(Message::SubmitInput)
                 .padding(12)

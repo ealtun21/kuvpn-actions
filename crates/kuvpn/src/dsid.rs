@@ -230,8 +230,10 @@ impl BrowserSession {
         // Handle OTP/code entry pages (SMS, email, TOTP from authenticator app).
         // Must run before detect_generic_error, as the code-entry page contains instructional
         // text in aria-live regions that would otherwise trigger a false-positive error.
-        if !handled.contains("otp_entry") && self.tab.handle_otp_entry(provider)? {
-            handled.insert("otp_entry");
+        // Not added to `handled`: if the user enters a wrong code the page stays at the same
+        // URL and we need to re-prompt (the handler itself blocks on user input, so it won't
+        // loop without user interaction).
+        if self.tab.handle_otp_entry(provider)? {
             return Ok((true, false));
         }
 

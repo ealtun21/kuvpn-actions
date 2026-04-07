@@ -81,6 +81,9 @@ impl AuthTab {
     }
 
     /// Handles the verification-code choice page ("Verify your identity").
+    ///
+    /// Prefers the Authenticator app; falls back to SMS, then the first available
+    /// proof button when only telephony options (SMS/voice) are offered.
     pub(crate) fn handle_verification_code_choice(&self) -> anyhow::Result<bool> {
         let is_proof_choice_page = self.eval_bool(
             r#"(function() {
@@ -90,19 +93,32 @@ impl AuthTab {
         )?;
 
         if is_proof_choice_page {
-            self.eval(
+            let selected = self.eval_string(
                 r#"(function() {
+    // Prefer authenticator / mobile app
     var els = document.querySelectorAll('div[role="button"], .table[role="button"], button, input[type="button"]');
-    for(var i=0; i<els.length; i++) {
+    for (var i = 0; i < els.length; i++) {
         var text = els[i].innerText.toLowerCase();
-        if(text.includes('mobile app') || text.includes('authenticator')) {
+        if (text.includes('mobile app') || text.includes('authenticator')) {
             els[i].click();
-            return true;
+            return 'authenticator';
         }
     }
-    return false;
+    // Fall back to SMS
+    var sms = document.querySelector('[data-value="OneWaySMS"]');
+    if (sms) { sms.click(); return 'sms'; }
+    // Fall back to first available proof button
+    var first = document.querySelector('#idDiv_SAOTCS_Proofs .table[role="button"]');
+    if (first) { first.click(); return 'first_proof'; }
+    return null;
 })()"#,
             )?;
+            match selected.as_deref() {
+                Some("authenticator") => log::info!("Proof choice: clicked authenticator"),
+                Some("sms") => log::info!("Proof choice: no authenticator available, selected SMS"),
+                Some("first_proof") => log::info!("Proof choice: selected first available proof"),
+                _ => log::warn!("Proof choice page detected but no proof button found"),
+            }
             sleep(Duration::from_millis(500));
             return Ok(true);
         }
@@ -185,6 +201,17 @@ impl AuthTab {
         )?;
 
         if is_otp_page {
+            let error_text = self.eval_string(
+                r#"(function() {
+    var el = document.getElementById('idSpan_SAOTCC_Error_OTC');
+    if (el && el.offsetParent !== null) {
+        var t = el.innerText.trim();
+        if (t.length > 0) return t;
+    }
+    return null;
+})()"#,
+            )?;
+
             let prompt = self
                 .eval_string(
                     r#"(function() {
@@ -199,6 +226,11 @@ impl AuthTab {
                 )?
                 .map(|s| format!("{}: ", s))
                 .unwrap_or_else(|| "Enter verification code: ".to_string());
+
+            let prompt = match error_text {
+                Some(err) => format!("{}\n\n{}", err, prompt),
+                None => prompt,
+            };
 
             log::info!("OTP entry page detected, requesting code from user");
 
