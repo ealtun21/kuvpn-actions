@@ -79,17 +79,17 @@ curl -sSfL https://raw.githubusercontent.com/ealtun21/kuvpn-actions/main/install
 
 ## Features
 
-- Modern GUI with system tray and status icons
-- Auto-shows the window when input or MFA is required
-- Full Auto, Visual Auto, and Manual login modes
-- Headless (background) browser for seamless authentication
-- Session persistence — stays logged in across reconnects
-- Automatic tunnel reconnect (up to 3 attempts) with a short delay between each attempt
-- Connection history with session durations and reconnect tracking
-- Full and Manual tunnel modes (Full routes all traffic; Manual accepts a custom vpnc-script)
-- Persistent 10 MB rolling log file for post-mortem debugging
-- Broken-tunnel detection: monitors the actual VPN interface, not just the process
-- Static CLI binary, no runtime dependencies
+- **Two ways to connect** — graphical app for everyday desktop use, or a single static CLI binary for terminals, scripts, and SSH sessions. Same VPN, same saved session.
+- **Hands-free Azure AD / MFA login** — automated browser walks through the entire login: email, password, Authenticator push, number matching, and OTP fallback if push isn't available.
+- **Three login modes** — Full Auto (headless), Visual Auto (visible browser, still automated), and Manual (you drive the login). Sessions are saved so the next connect goes straight through.
+- **Number-matching front and centre** — when Microsoft asks you to type a code into Authenticator, KUVPN brings the window forward and shows the code in big, readable text.
+- **System tray with one-click actions** — connect, disconnect, show window, wipe session, or copy logs from the tray menu. The tray icon reflects current state (idle, connecting, connected, error).
+- **Connection history** — past sessions with timestamps, durations, and reconnect counts, in both the GUI History tab and `kuvpn --history`.
+- **Auto-reconnect that watches the tunnel** — detects when the VPN interface itself drops (not just the OpenConnect process) and retries up to 3 times. Stale saved sessions are wiped and re-authenticated automatically.
+- **Conflict detection** — refuses to start if another full-tunnel VPN is already routing your traffic (e.g. a Tailscale exit node), so you don't end up half-connected to two networks.
+- **Routing flexibility** — full tunnel for "everything through KU", or supply your own vpnc-script for split tunneling and custom DNS.
+- **20 themes** — 10 color families (Crimson, Slate, Ocean, Forest, Rose, Violet, Ember, Frost, Sand, Pebble), each with light and dark variants, plus rounding and shadow controls.
+- **Cross-platform** — Linux (x86_64, aarch64), macOS (Intel and Apple Silicon), and Windows (x86_64). OpenConnect and the Wintun driver are bundled in the Windows installer.
 
 ---
 

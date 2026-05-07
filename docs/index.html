@@ -806,11 +806,11 @@
         <div class="dual-icon"><i class="fa-solid fa-desktop"></i></div>
         <div class="dual-label">Graphical App</div>
         <h3 class="dual-name">KUVPN</h3>
-        <p class="dual-desc">Lives in your system tray. Connect with one click, get notified when MFA is needed, and forget it's even running. Designed for everyday desktop use.</p>
+        <p class="dual-desc">Lives in your system tray. Connect with one click, watch the status circle go green, and forget it's even running. Designed for everyday desktop use.</p>
         <ul class="dual-list">
-          <li>System tray icon &amp; status window</li>
-          <li>Auto-shows when MFA input is required</li>
-          <li>Connection history &amp; live status</li>
+          <li>Tray menu &amp; status icons that match your connection state</li>
+          <li>Auto-pops to the front when MFA needs your attention</li>
+          <li>Live console, connection history, and 20 themes built in</li>
         </ul>
         <a class="dual-link" href="https://github.com/ealtun21/kuvpn-actions/blob/main/docs/gui.md">GUI documentation →</a>
       </div>
@@ -819,11 +819,11 @@
         <div class="dual-icon"><i class="fa-solid fa-terminal"></i></div>
         <div class="dual-label">Command-line Tool</div>
         <h3 class="dual-name">kuvpn</h3>
-        <p class="dual-desc">A single static binary with zero runtime dependencies. Perfect for servers, scripts, SSH sessions, and power users who live in the terminal.</p>
+        <p class="dual-desc">A single static binary with zero runtime dependencies. Perfect for SSH sessions, scripts, and power users who live in the terminal.</p>
         <ul class="dual-list">
           <li>Static binary — no runtime, no install friction</li>
-          <li>Scriptable &amp; CI-friendly flags</li>
-          <li>Works over SSH on headless servers</li>
+          <li>Scriptable flags including <code>--dsid</code> to print the cookie for piping</li>
+          <li>Same auto-reconnect, history, and saved sessions as the GUI</li>
         </ul>
         <a class="dual-link" href="https://github.com/ealtun21/kuvpn-actions/blob/main/docs/cli.md">CLI documentation →</a>
       </div>
@@ -852,33 +852,43 @@
     <div class="features-grid">
       <div class="feature-card">
         <span class="feature-icon"><i class="fa-solid fa-lock"></i></span>
-        <h3>Automated Azure MFA</h3>
-        <p>Headless browser handles the Azure AD login and MFA flow automatically — no manual cookie hunting.</p>
+        <h3>Hands-Free Sign-In</h3>
+        <p>Automated browser walks through the full Azure AD flow — email, password, Authenticator push, number matching, and OTP fallback when push isn't available.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon"><i class="fa-solid fa-mobile-screen-button"></i></span>
+        <h3>Number Matching, Front and Centre</h3>
+        <p>When Microsoft asks you to type a code into Authenticator, KUVPN brings the window forward and shows the code in big, readable text — no scrambling for your phone.</p>
       </div>
       <div class="feature-card">
         <span class="feature-icon"><i class="fa-solid fa-arrows-rotate"></i></span>
         <h3>Auto Reconnect</h3>
-        <p>Detects tunnel drops (not just the process) and reconnects up to 3 times with smart delays.</p>
+        <p>Watches the VPN interface itself, not just the OpenConnect process. Reconnects up to 3 times if the tunnel drops, and quietly clears stale sessions when the gateway rejects them.</p>
       </div>
       <div class="feature-card">
-        <span class="feature-icon"><i class="fa-solid fa-floppy-disk"></i></span>
-        <h3>Session Persistence</h3>
-        <p>Stays logged in across reconnects so you never have to re-authenticate mid-session.</p>
+        <span class="feature-icon"><i class="fa-solid fa-shield-halved"></i></span>
+        <h3>Conflict Detection</h3>
+        <p>Refuses to start if another full-tunnel VPN is already routing your traffic (e.g. a Tailscale exit node) — no more confusing half-connected states.</p>
       </div>
       <div class="feature-card">
         <span class="feature-icon"><i class="fa-solid fa-route"></i></span>
-        <h3>Full Tunnel &amp; Custom Script</h3>
-        <p>Full tunnel routes all traffic through the university VPN. Power users can supply their own vpnc-script for full control.</p>
+        <h3>Tunnel Modes</h3>
+        <p>Full tunnel routes everything through the university VPN. Manual mode accepts your own vpnc-script for split tunneling and custom DNS.</p>
       </div>
       <div class="feature-card">
         <span class="feature-icon"><i class="fa-solid fa-clock-rotate-left"></i></span>
         <h3>Connection History</h3>
-        <p>View past sessions with durations, timestamps, and reconnect counts — all stored locally.</p>
+        <p>Past sessions with timestamps, durations, and reconnect counts — visible in the GUI History tab or via <code>kuvpn --history</code>.</p>
       </div>
       <div class="feature-card">
-        <span class="feature-icon"><i class="fa-solid fa-file-lines"></i></span>
-        <h3>Rolling Log File</h3>
-        <p>Persistent 10 MB rotating log for post-mortem debugging — no lost context after a crash.</p>
+        <span class="feature-icon"><i class="fa-solid fa-palette"></i></span>
+        <h3>20 Themes</h3>
+        <p>Ten color families — Crimson, Slate, Ocean, Forest, Rose, Violet, Ember, Frost, Sand, Pebble — each with light and dark variants, plus rounding and shadow controls.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon"><i class="fa-solid fa-bell"></i></span>
+        <h3>System Tray Access</h3>
+        <p>One-click connect, disconnect, wipe session, or copy logs from the tray menu. The icon updates with your current connection state.</p>
       </div>
     </div>
   </div>

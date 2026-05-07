@@ -4,6 +4,17 @@
 
 `kuvpn` is the command-line frontend for KUVPN. It automates the Microsoft Azure AD / MFA login flow in a headless browser, retrieves the DSID cookie, and launches OpenConnect to establish the VPN tunnel.
 
+It is a single static binary with no runtime dependencies, making it well-suited to headless servers, SSH sessions, and shell scripts. It shares its session cache and connection history with the graphical app, so you can switch between the two without re-authenticating.
+
+**Highlights**
+
+- Hands-free Azure AD / MFA login (push, number matching, OTP fallback)
+- Three login modes — full-auto, visual, and manual — selectable per run
+- Auto-reconnects up to 3 times when the tunnel drops, with stale-session recovery
+- `--history` for past sessions with durations and reconnect counts
+- `--dsid` mode prints the DSID cookie so you can pipe it into other tools
+- Conflict detection — refuses to start if another full-tunnel VPN is active
+
 ---
 
 ## Installation
@@ -118,7 +129,7 @@ Press **Ctrl+C** to disconnect.
 | `--openconnect-path` | | `openconnect` | Path or command name for the OpenConnect binary |
 | `--interface-name` | | `kuvpn0` | Name for the TUN interface created by OpenConnect |
 | `--tunnel-mode` | | `full` | Tunnel mode: `full` (all traffic via VPN) or `manual` (custom vpnc-script) |
-| `--vpnc-script` | | *(none)* | Path to a custom vpnc-script. Required when `--tunnel-mode manual` is set. |
+| `--vpnc-script` | | *(none)* | Path to a custom vpnc-script. Only used when `--tunnel-mode manual` is set; if omitted, OpenConnect's built-in default script is used. |
 
 ---
 

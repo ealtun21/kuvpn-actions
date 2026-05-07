@@ -4,6 +4,17 @@
 
 **KUVPN** is the graphical frontend. It lives in your system tray and automatically brings itself to focus when it needs your input.
 
+**Highlights**
+
+- Hands-free Azure AD / MFA login (push, number matching, OTP fallback)
+- MFA number-matching codes shown prominently in the window
+- Tray menu with one-click connect, disconnect, wipe session, and copy logs
+- Auto-reconnect up to 3 times on tunnel drops, with stale-session recovery
+- Live console tab and a connection history tab with durations
+- 10 color families × light/dark variants — 20 themes total
+- Conflict detection — refuses to start if a Tailscale exit node or other full-tunnel VPN is active
+- Tunnel modes: full traffic through VPN, or supply your own vpnc-script
+
 ---
 
 ## Installation
@@ -88,7 +99,7 @@ Download and run **`KUVPN-Setup-windows-x86_64.exe`** from the [Releases](https:
 
 ## First Launch
 
-When KUVPN opens you will see four tabs: **Connection**, **History**, **Console**, and **Settings**.
+When KUVPN opens you will see four tabs: **Connection**, **Settings**, **History**, and **Console**.
 
 You can connect right away — just switch to the **Connection** tab and click **Join Network**. On the first run KUVPN will ask for your university email during login and save it automatically for future connections.
 
