@@ -66,12 +66,16 @@ mkdir -p "$APPDIR/usr/share/icons/hicolor/256x256/apps"
 cp target/release/kuvpn-gui "$APPDIR/usr/bin/"
 
 # Create desktop file
+# StartupWMClass must match the application_id set in window_settings()
+# (crates/kuvpn-gui/src/app.rs) so GNOME/Ubuntu groups the running window
+# with this desktop entry instead of showing a generic gear icon.
 cat > "$APPDIR/usr/share/applications/kuvpn.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=KUVPN
 Exec=kuvpn-gui
 Icon=kuvpn
+StartupWMClass=kuvpn
 Categories=Network;
 Comment=Connect to Koç University Network
 Terminal=false

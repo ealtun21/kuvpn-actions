@@ -52,6 +52,7 @@ pub fn create_browser(
         // --new-window on Windows causes Chrome to open a window that is not
         // attached to the CDP session; headless_chrome then controls a blank
         // internal tab while the visible window is unreachable.
+        #[allow(unused_mut)]
         let mut args: Vec<&OsStr> = vec![
             user_agent.as_os_str(),
             OsStr::new("--no-first-run"),

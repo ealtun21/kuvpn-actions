@@ -17,6 +17,15 @@ use std::time::Duration;
 
 /// Returns the window settings used for every window open call.
 pub(super) fn window_settings(use_csd: bool) -> iced::window::Settings {
+    // The application_id must match the basename of our .desktop file
+    // (kuvpn.desktop) so GNOME/Ubuntu can associate the running window with
+    // the desktop entry — otherwise the taskbar shows a generic gear icon.
+    #[cfg(target_os = "linux")]
+    let platform_specific = iced::window::settings::PlatformSpecific {
+        application_id: "kuvpn".to_string(),
+        ..Default::default()
+    };
+
     iced::window::Settings {
         exit_on_close_request: false,
         size: iced::Size::new(580.0, 650.0),
@@ -26,6 +35,8 @@ pub(super) fn window_settings(use_csd: bool) -> iced::window::Settings {
         decorations: !use_csd,
         transparent: use_csd,
         icon: crate::load_window_icon(),
+        #[cfg(target_os = "linux")]
+        platform_specific,
         ..Default::default()
     }
 }
