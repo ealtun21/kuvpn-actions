@@ -47,7 +47,7 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Build CLI for aarch64
-        uses: houseabsolute/actions-rust-cross@v0
+        uses: houseabsolute/actions-rust-cross@v1
         with:
           target: aarch64-unknown-linux-musl
           args: "--release -p kuvpn-cli"
